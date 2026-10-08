@@ -28,6 +28,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "gl_planet_tex.h"
 #include "gl_scene.h"
 
 /* Words. Detailed planets (Earth's hand-made continents) have long lists;
@@ -42,6 +43,17 @@ typedef struct
 	int32_t obj_col;   /* rgb444 surface colour (D6) */
 	int32_t light_col; /* rgb444 light colour  (D1) */
 	float rot[9];      /* planet orientation, column-major 3x3 */
+	/* The planet's matrix as the game turns its surface points with it:
+	 * game view = A * planet, A column-major (columns: the planet's axes) */
+	float axes[9];
+
+	/* Its surface features, for the native texture (gl_planet_tex.h) */
+	PlanetSurface surface;
+	bool surface_ok;
+	/* rgb444 by code / 4: dark side 0-7, lit side 8-15 (the game's own
+	 * colour table from its 2D shape, whose terminator toggles the lit
+	 * half in; else the unlit colours) */
+	uint16_t palette[16];
 
 	/* Raw emulator context at capture time, for decoding extra features */
 	struct

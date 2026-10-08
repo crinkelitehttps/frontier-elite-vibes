@@ -97,6 +97,68 @@ static void capture_list(PlanetDesc *p, int n)
 	p->list_ok = (i == n && fills > 0);
 }
 
+/* The planet command's data (gl_planet_tex.h). Called at the end of the
+ * planet routine (fuck_planet), whose frame (A3) has been given back: its
+ * first words still hold the colours and the data's size, and A5 has gone
+ * just past the data. */
+static void capture_surface(PlanetDesc *p)
+{
+	PlanetSurface *s = &p->surface;
+	p->surface_ok = false;
+	uint32_t a3 = (uint32_t)GetReg(REG_A3), a5 = (uint32_t)GetReg(REG_A5), a6 = (uint32_t)GetReg(REG_A6);
+	int len = (uint16_t)STMemory_ReadWord(a3 + 32);
+	if (len <= 0 || len > PLANET_DATA_MAX || a5 < (uint32_t)len + 6)
+		return;
+	uint32_t start = a5 - (uint32_t)len;
+	for (int i = 0; i < len; i++)
+		s->data[i] = (uint8_t)STMemory_ReadByte(start + (uint32_t)i);
+	s->len = len;
+	s->radius_word = (uint16_t)STMemory_ReadWord(start - 4);
+	uint32_t obj = (uint32_t)STMemory_ReadLong(a6 - 212);
+	s->seed = (uint32_t)STMemory_ReadLong(obj + 118);
+	for (int i = 0; i < 8; i++)
+		s->colours[i] = (uint16_t)(STMemory_ReadWord(a3 + 2 * (uint32_t)i) & 0xfff);
+	p->surface_ok = planet_surface_valid(s);
+}
+
+/* The colours the game fills this planet with (its 2D shape's first colour
+ * table, rgb444 by now), else the unlit ones */
+static void capture_palette(PlanetDesc *p)
+{
+	for (int i = 0; i < 8; i++)
+	{
+		int c = p->surface.colours[i];
+		p->palette[i] = (uint16_t)((c >> 2) & 0x333);
+		p->palette[i + 8] = (uint16_t)c;
+	}
+	if (!p->list_ok)
+		return;
+	for (int i = 0; i < p->list_len;)
+	{
+		switch (p->list[i])
+		{
+		case PL_START:
+			i += 1;
+			break;
+		case PL_LINE:
+			i += 6;
+			break;
+		case PL_BEZIER:
+			i += 10;
+			break;
+		case PL_ROW:
+			i += 3;
+			break;
+		case PL_COLOURS:
+			for (int k = 0; k < 16; k++)
+				p->palette[k] = (uint16_t)(p->list[i + 1 + k] & 0xfff);
+			return;
+		default:
+			return;
+		}
+	}
+}
+
 void Nu_PutPlanet(void)
 {
 	int words = list_words((uint32_t)GetReg(REG_A6));
@@ -119,9 +181,14 @@ void Nu_PutPlanet(void)
 	/* 3x3 rotation matrix of signed 1.15 fixed point words, stored at A6-36 */
 	uint32_t m = GetReg(REG_A6) - 36;
 	for (int i = 0; i < 9; i++)
+	{
 		p->rot[i] = STMemory_ReadWord(m + i * 2) / -32768.0f;
+		p->axes[i] = STMemory_ReadWord(m + i * 2) / 32768.0f;
+	}
 
 	capture_list(p, words);
+	capture_surface(p);
+	capture_palette(p);
 
 	float centre[3];
 	vec3i_to_f(p->pos, centre);
@@ -141,7 +208,7 @@ void Nu_PutPlanet(void)
 static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
-	GLint rect, proj, centre, c, light_dir, diffuse, ambient;
+	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette;
 } us;
 static struct
 {
@@ -167,7 +234,18 @@ static const char *FS_SPHERE =
 	"uniform vec3 uLightDir;\n"
 	"uniform vec3 uDiffuse;\n"
 	"uniform vec3 uAmbient;\n"
+	"uniform sampler2D uSurface;\n" /* the surface, equirectangular in the planet's axes */
+	"uniform int uTextured;\n"
+	"uniform mat3 uToLocal;\n" /* eye space -> the planet's axes */
+	"uniform vec3 uPalette[16];\n" /* by code / 4: dark 0-7, lit 8-15 */
 	"out vec4 fragColor;\n"
+	/* a texel's colour: the code through the palette (dark half, lit half) */
+	"vec3 texel(ivec2 c, ivec2 size, float lit){\n"
+	"  c.x = ((c.x % size.x) + size.x) % size.x;\n"
+	"  c.y = clamp(c.y, 0, size.y - 1);\n"
+	"  int k = (int(texelFetch(uSurface, c, 0).r * 255.0 + 0.5) >> 2) & 7;\n"
+	"  return mix(uPalette[k], uPalette[k + 8], lit);\n"
+	"}\n"
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
 	"  float b = dot(d, uCentre);\n"
@@ -181,7 +259,20 @@ static const char *FS_SPHERE =
 	"  if (t <= 0.0) discard;\n"
 	"  vec3 n = t * d - uCentre;\n"
 	"  float l = max(dot(normalize(n), uLightDir), 0.0);\n"
-	"  fragColor = vec4(clamp(uAmbient + l * uDiffuse, 0.0, 1.0), 1.0);\n"
+	"  if (uTextured != 0) {\n"
+	"    vec3 p = normalize(uToLocal * n);\n"
+	"    vec2 uv = vec2(atan(p.x, p.z) / 6.2831853 + 0.5, acos(clamp(p.y, -1.0, 1.0)) / 3.14159265);\n"
+	"    float lit = smoothstep(-0.03, 0.03, dot(normalize(n), uLightDir));\n"
+	/* codes can't be blended: blend the four nearest texels' colours */
+	"    ivec2 size = textureSize(uSurface, 0);\n"
+	"    vec2 t = uv * vec2(size) - 0.5;\n"
+	"    ivec2 i = ivec2(floor(t));\n"
+	"    vec2 f = t - floor(t);\n"
+	"    vec3 a = mix(texel(i, size, lit), texel(i + ivec2(1, 0), size, lit), f.x);\n"
+	"    vec3 b = mix(texel(i + ivec2(0, 1), size, lit), texel(i + ivec2(1, 1), size, lit), f.x);\n"
+	"    fragColor = vec4(mix(a, b, f.y), 1.0);\n"
+	"  } else\n"
+	"    fragColor = vec4(clamp(uAmbient + l * uDiffuse, 0.0, 1.0), 1.0);\n"
 	"}\n";
 
 /* An atmosphere band: the directions between two angles from the planet's */
@@ -214,6 +305,10 @@ void gl_planet_init(void)
 	us.light_dir = glGetUniformLocation(sphere_prog, "uLightDir");
 	us.diffuse = glGetUniformLocation(sphere_prog, "uDiffuse");
 	us.ambient = glGetUniformLocation(sphere_prog, "uAmbient");
+	us.surface = glGetUniformLocation(sphere_prog, "uSurface");
+	us.textured = glGetUniformLocation(sphere_prog, "uTextured");
+	us.to_local = glGetUniformLocation(sphere_prog, "uToLocal");
+	us.palette = glGetUniformLocation(sphere_prog, "uPalette");
 
 	static const float quad[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
 	glGenVertexArrays(1, &quad_vao);
@@ -232,6 +327,7 @@ void gl_planet_shutdown(void)
 	glDeleteVertexArrays(1, &quad_vao);
 	glDeleteProgram(sphere_prog);
 	glDeleteProgram(shell_prog);
+	planet_tex_shutdown();
 }
 
 /* =========================================================================
@@ -244,6 +340,9 @@ typedef struct
 	float centre[3];
 	float c;
 	float light[3], diffuse[3], ambient[3];
+	GLuint surface; /* 0: plain */
+	float to_local[9];
+	float palette[16][3];
 } SpherePass;
 
 static void planet_sphere_pass(const void *data)
@@ -257,6 +356,15 @@ static void planet_sphere_pass(const void *data)
 	glUniform3fv(us.light_dir, 1, p->light);
 	glUniform3fv(us.diffuse, 1, p->diffuse);
 	glUniform3fv(us.ambient, 1, p->ambient);
+	glUniform1i(us.textured, p->surface != 0);
+	if (p->surface)
+	{
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, p->surface);
+		glUniform1i(us.surface, 0);
+		glUniformMatrix3fv(us.to_local, 1, GL_FALSE, p->to_local);
+		glUniform3fv(us.palette, 16, &p->palette[0][0]);
+	}
 	glBindVertexArray(quad_vao);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
@@ -345,7 +453,10 @@ void draw_planet(const void *payload)
 	/* The game's shape only fits the view it was made for: the cockpit's
 	 * turned passes would each draw a slightly different one, so there the
 	 * planet is the sphere, which every pass draws the same. */
-	if (p->list_ok && !cockpit_active())
+	static int native = -1;
+	if (native < 0)
+		native = getenv("GLF_NATIVE_PLANETS") && atoi(getenv("GLF_NATIVE_PLANETS")) > 0;
+	if (p->list_ok && !cockpit_active() && !(native && p->surface_ok))
 	{
 		draw_list(p);
 		return;
@@ -388,9 +499,20 @@ void draw_planet(const void *payload)
 	gl_rgb444_to_f(p->light_col, pass->diffuse);
 	gl_rgb444_to_f(p->obj_col, pass->ambient);
 
-	/* Further planet passes (features) go here, in draw order. The sphere
-	 * shader has the surface point n = t*d - centre; rotating it by p->rot
-	 * gives planet-local coordinates for texturing. */
+	/* The surface: eye space -> view space (H^T) -> the game's view (z
+	 * flipped, S) -> the planet's axes (A^T) */
+	pass->surface = p->surface_ok ? planet_surface_texture(&p->surface) : 0;
+	for (int i = 0; i < 16; i++)
+		gl_rgb444_to_f(p->palette[i], pass->palette[i]);
+	static const float s[3] = {1, 1, -1};
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+		{
+			float v = 0;
+			for (int j = 0; j < 3; j++)
+				v += p->axes[3 * i + j] * s[j] * head.m[j * 4 + k];
+			pass->to_local[k * 3 + i] = v;
+		}
 }
 
 typedef struct
