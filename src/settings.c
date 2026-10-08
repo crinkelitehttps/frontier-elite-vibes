@@ -21,6 +21,7 @@
 #include "renderer.h"
 #include "settings.h"
 #include "touch_input.h"
+#include "vr.h"
 
 #define FILE_NAME "glfrontier.cfg"
 
@@ -38,6 +39,8 @@ typedef struct
 	int cockpit_fov;
 	int headtrack;
 	int headtrack_port;
+	int vr;
+	int vr_resolution;
 } Settings;
 
 static const struct
@@ -57,6 +60,8 @@ static const struct
 	{"cockpit_fov", offsetof(Settings, cockpit_fov)},
 	{"headtrack", offsetof(Settings, headtrack)},
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
+	{"vr", offsetof(Settings, vr)},
+	{"vr_resolution", offsetof(Settings, vr_resolution)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -96,6 +101,8 @@ static Settings current(void)
 	s.cockpit_fov = cockpit_fov;
 	s.headtrack = headtrack_enabled;
 	s.headtrack_port = headtrack_port;
+	s.vr = vr_enabled;
+	s.vr_resolution = vr_resolution;
 	return s;
 }
 
@@ -121,6 +128,9 @@ static void apply(const Settings *s)
 	headtrack_enabled = s->headtrack != 0;
 	if (s->headtrack_port > 0 && s->headtrack_port < 65536)
 		headtrack_port = s->headtrack_port;
+	vr_enabled = vr_enabled || s->vr != 0; /* (--vr) */
+	if (s->vr_resolution >= 25 && s->vr_resolution <= 200)
+		vr_resolution = s->vr_resolution;
 }
 
 void settings_load(void)

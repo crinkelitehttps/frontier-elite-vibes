@@ -2,6 +2,8 @@
  * input.c - keyboard queue and mouse state, read by the game through host
  * calls.
  */
+#include <math.h>
+
 #include <SDL.h>
 
 #include "input.h"
@@ -10,6 +12,51 @@
 #include "renderer.h"
 
 CINPUT input;
+
+/* The gamepad's pointer, and where the game's pointer last was */
+static bool pad_on;
+static float pad_x, pad_y;
+static int click_polls; /* clicking: polls left with the button down, then released */
+static bool have_last;
+static int last_x, last_y;
+
+#define CLICK_POLLS 3
+
+void Input_PadPointerBegin(void)
+{
+	if (pad_on)
+		return;
+	pad_on = true;
+	click_polls = 0;
+	/* where the game's pointer is, else the middle of the control panel */
+	pad_x = have_last ? (float)last_x : 160.0f;
+	pad_y = have_last ? (float)last_y : 184.0f;
+}
+
+void Input_PadPointerMove(float dx, float dy)
+{
+	if (!pad_on || click_polls)
+		return;
+	pad_x = fminf(fmaxf(pad_x + dx, 0.0f), 319.0f);
+	pad_y = fminf(fmaxf(pad_y + dy, 0.0f), 199.0f);
+}
+
+void Input_PadPointerClick(void)
+{
+	if (!pad_on || click_polls)
+		return;
+	click_polls = CLICK_POLLS;
+	input.cur_mousebut_state |= 0x2;
+}
+
+bool Input_PadPointer(int *x, int *y)
+{
+	if (!pad_on)
+		return false;
+	*x = (int)pad_x;
+	*y = (int)pad_y;
+	return true;
+}
 
 /* Host call: fills the game's mouse structures (big endian words)
  *   A7+2: motion x, motion y, buttons
@@ -28,15 +75,27 @@ void Call_GetMouseInput(void)
 	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y);
 	mouse_mov[2] = SDL_SwapBE16(0xf8 | input.cur_mousebut_state);
 
-	/* window pixels -> game screen (letterboxed game area, or the cockpit) */
+	/* window pixels -> game screen (letterboxed game area, or the cockpit),
+	 * or the gamepad's pointer */
 	int gx, gy;
-	if (Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy))
+	if (Input_PadPointer(&gx, &gy) || Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy))
 	{
 		mouse_abs[0] = SDL_SwapBE16(gx);
 		mouse_abs[1] = SDL_SwapBE16(gy);
+		last_x = gx;
+		last_y = gy;
+		have_last = true;
 	}
 
 	input.motion_x = input.motion_y = 0;
+
+	/* the gamepad's click: the button held for a few polls, then released
+	 * and the pointer put away */
+	if (click_polls && --click_polls == 0)
+	{
+		input.cur_mousebut_state &= ~0x2;
+		pad_on = false;
+	}
 }
 
 /* Host call: next queued ST scancode in D0, or 0 */

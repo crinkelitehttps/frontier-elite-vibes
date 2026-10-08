@@ -31,5 +31,8 @@ void gl_prims_init(void);
 void gl_prims_shutdown(void);
 /* Closes any complex polygon left open at the end of the scene. */
 void gl_prims_finish(void);
+/* A new scene is being recorded: forgets the tessellations kept from the
+ * last one (gl_scene.c, scene_reset) */
+void gl_prims_new_scene(void);
 
 #endif /* GL_PRIMS_H */

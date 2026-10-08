@@ -13,9 +13,11 @@
 #include "gl/gl_cockpit.h"
 #include "headtrack.h"
 #include "host.h"
+#include "input.h"
 #include "keymap.h"
 #include "main.h"
 #include "strafe.h"
+#include "vr.h"
 
 /* The built-in bindings, also written out as gamepad.cfg */
 static const char DEFAULT_CFG[] =
@@ -57,6 +59,11 @@ static const char DEFAULT_CFG[] =
 	"#   shift1, shift2             hold for that shift layer\n"
 	"#   recenter                   head tracking: the current pose is ahead\n"
 	"#   cockpit                    cockpit view on / off (also Ctrl-K)\n"
+	"#   pointer                    a mouse pointer for the control panel and\n"
+	"#                              menus: press for it, press again to click\n"
+	"#                              there (left button) and put it away\n"
+	"#   pointer-x, pointer-y [invert] move it (full axes); while it is out,\n"
+	"#                              these axes do nothing else\n"
 	"#   Key names as SDL spells them: a-z 0-9 f1-f10 = - , . / ; return space\n"
 	"#   escape tab backspace up down left right home end pageup pagedown\n"
 	"#   insert delete \"left shift\" \"right shift\" (aliases: enter esc lshift\n"
@@ -67,11 +74,13 @@ static const char DEFAULT_CFG[] =
 	"#   threshold 0.5              how far an axis must go to act as a button\n"
 	"#   look-yaw 100               look-around range, degrees\n"
 	"#   look-pitch 60\n"
+	"#   pointer-speed 200          pointer speed, screen pixels (of 320) a second\n"
 	"\n"
 	"deadzone   0.15\n"
 	"threshold  0.5\n"
 	"look-yaw   100\n"
 	"look-pitch 60\n"
+	"pointer-speed 200\n"
 	"\n"
 	"# ---- Flying\n"
 	"leftx          strafe-x            # thrust left / right\n"
@@ -85,7 +94,9 @@ static const char DEFAULT_CFG[] =
 	"b              key f1              # flight view: front, rear, turrets, external\n"
 	"y              cockpit             # cockpit view on / off\n"
 	"start          key escape          # pause\n"
-	"rightstick     recenter            # head tracking: this pose is straight ahead\n"
+	"rightstick     pointer             # pointer for the panel: press, aim, press to click\n"
+	"rightx         pointer-x\n"
+	"righty         pointer-y\n"
 	"dpup           key =               # zoom in (maps, external view)\n"
 	"dpdown         key -               # zoom out\n"
 	"\n"
@@ -102,6 +113,7 @@ static const char DEFAULT_CFG[] =
 	"shift1 b       key f8\n"
 	"shift1 a       key f9\n"
 	"shift1 start   key f10\n"
+	"shift1 rightstick recenter         # head tracking / VR: this pose is straight ahead\n"
 	"\n"
 	"# ---- Right shoulder held: yaw (above) and time acceleration\n"
 	"rightshoulder  shift2\n"
@@ -142,7 +154,10 @@ typedef enum
 	ACT_CYCLE,
 	ACT_SHIFT,
 	ACT_RECENTER,
-	ACT_COCKPIT
+	ACT_COCKPIT,
+	ACT_POINTER,   /* a button: pointer on, or click and off */
+	ACT_POINTER_X, /* axes moving it while it is on */
+	ACT_POINTER_Y
 } Action;
 
 #define MAX_CHORDS 8
@@ -165,6 +180,7 @@ typedef struct
 	int step;  /* cycle: the next key */
 	int layer; /* key, cycle, recenter, cockpit, steer, look, strafe: shift layer (0 none, 1, 2); shift: which */
 	int axis_shadowed; /* axis actions without a layer: bit n set if shift n has its own binding */
+	bool pointer_axis; /* other axis actions: the control moves the pointer while it is on */
 
 	bool was_down;  /* the control, last update */
 	bool held;      /* key: sent down */
@@ -177,6 +193,9 @@ static Binding bindings[MAX_BINDINGS];
 static int n_bindings;
 static float deadzone = 0.15f, threshold = 0.5f;
 static float look_yaw = 100.0f, look_pitch = 60.0f;
+static float pointer_speed = 200.0f; /* screen pixels a second, stick right over */
+static bool pointer_on;
+static Uint64 pointer_ticks;
 
 static SDL_GameController *pad;
 static float look[2];
@@ -278,7 +297,7 @@ static int split(char *line, char **words, int max)
 static bool is_axis_action(Action a)
 {
 	return a == ACT_STEER_X || a == ACT_STEER_Y || a == ACT_ROLL || a == ACT_YAW || a == ACT_LOOK_X ||
-		   a == ACT_LOOK_Y || a == ACT_STRAFE_X || a == ACT_STRAFE_Y;
+		   a == ACT_LOOK_Y || a == ACT_STRAFE_X || a == ACT_STRAFE_Y || a == ACT_POINTER_X || a == ACT_POINTER_Y;
 }
 
 static bool parse_line(char *line, const char *source, int line_no)
@@ -298,6 +317,7 @@ static bool parse_line(char *line, const char *source, int line_no)
 						 : !strcmp(w[0], "threshold")  ? &threshold
 						 : !strcmp(w[0], "look-yaw")   ? &look_yaw
 						 : !strcmp(w[0], "look-pitch") ? &look_pitch
+						 : !strcmp(w[0], "pointer-speed") ? &pointer_speed
 													   : NULL;
 		if (setting)
 		{
@@ -324,7 +344,8 @@ static bool parse_line(char *line, const char *source, int line_no)
 	bool full_axis = b.control.source == SRC_AXIS && b.control.half == 0;
 
 	if (!strcmp(act, "steer-x") || !strcmp(act, "steer-y") || !strcmp(act, "roll") || !strcmp(act, "yaw") ||
-		!strcmp(act, "look-x") || !strcmp(act, "look-y") || !strcmp(act, "strafe-x") || !strcmp(act, "strafe-y"))
+		!strcmp(act, "look-x") || !strcmp(act, "look-y") || !strcmp(act, "strafe-x") || !strcmp(act, "strafe-y") ||
+		!strcmp(act, "pointer-x") || !strcmp(act, "pointer-y"))
 	{
 		b.action = !strcmp(act, "steer-x")	  ? ACT_STEER_X
 				   : !strcmp(act, "steer-y")  ? ACT_STEER_Y
@@ -333,7 +354,9 @@ static bool parse_line(char *line, const char *source, int line_no)
 				   : !strcmp(act, "look-x")	  ? ACT_LOOK_X
 				   : !strcmp(act, "look-y")	  ? ACT_LOOK_Y
 				   : !strcmp(act, "strafe-x") ? ACT_STRAFE_X
-											  : ACT_STRAFE_Y;
+				   : !strcmp(act, "strafe-y") ? ACT_STRAFE_Y
+				   : !strcmp(act, "pointer-x") ? ACT_POINTER_X
+											  : ACT_POINTER_Y;
 		if (!full_axis)
 		{
 			log_printf("%s:%d: %s needs a full axis\n", source, line_no, act);
@@ -384,9 +407,9 @@ static bool parse_line(char *line, const char *source, int line_no)
 		b.action = ACT_SHIFT;
 		b.layer = act[5] - '0';
 	}
-	else if (!strcmp(act, "recenter") || !strcmp(act, "cockpit"))
+	else if (!strcmp(act, "recenter") || !strcmp(act, "cockpit") || !strcmp(act, "pointer"))
 	{
-		b.action = act[0] == 'r' ? ACT_RECENTER : ACT_COCKPIT;
+		b.action = act[0] == 'r' ? ACT_RECENTER : act[0] == 'c' ? ACT_COCKPIT : ACT_POINTER;
 	}
 	else
 	{
@@ -408,7 +431,17 @@ static void mark_shadowed(void)
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
-		if (!is_axis_action(b->action) || b->layer)
+		if (!is_axis_action(b->action))
+			continue;
+		if (b->action != ACT_POINTER_X && b->action != ACT_POINTER_Y)
+			for (int j = 0; j < n_bindings; j++)
+			{
+				const Binding *o = &bindings[j];
+				if ((o->action == ACT_POINTER_X || o->action == ACT_POINTER_Y) &&
+					o->control.index == b->control.index && o->control.source == b->control.source)
+					b->pointer_axis = true;
+			}
+		if (b->layer)
 			continue;
 		for (int j = 0; j < n_bindings; j++)
 		{
@@ -649,8 +682,14 @@ static void write_steering(float x, float y)
 
 void gamepad_update(void)
 {
-	float steer[2] = {0, 0}, strafe[2] = {0, 0}, roll = 0, yaw = 0;
+	float steer[2] = {0, 0}, strafe[2] = {0, 0}, roll = 0, yaw = 0, point[2] = {0, 0};
 	look[0] = look[1] = 0;
+	/* the click ends the pointer (input.c) */
+	int px, py;
+	pointer_on = pointer_on && Input_PadPointer(&px, &py);
+	Uint64 now = SDL_GetTicks64();
+	float dt = pointer_ticks ? fminf((float)(now - pointer_ticks) / 1000.0f, 0.1f) : 0.0f;
+	pointer_ticks = now;
 	if (!pad)
 	{
 		release_all();
@@ -667,7 +706,8 @@ void gamepad_update(void)
 		if (is_axis_action(b->action))
 		{
 			bool acts = b->layer ? b->layer == layer : !(layer > 0 && (b->axis_shadowed & (1 << layer)));
-			if (!acts)
+			bool pointing = b->action == ACT_POINTER_X || b->action == ACT_POINTER_Y;
+			if (!acts || pointing != pointer_on || (pointer_on && b->pointer_axis))
 				continue;
 			float v = axis_value(&b->control);
 			if (b->invert)
@@ -694,6 +734,12 @@ void gamepad_update(void)
 				break;
 			case ACT_STRAFE_Y:
 				strafe[1] += v;
+				break;
+			case ACT_POINTER_X:
+				point[0] += v;
+				break;
+			case ACT_POINTER_Y:
+				point[1] += v;
 				break;
 			default:
 				look[1] += v;
@@ -733,13 +779,28 @@ void gamepad_update(void)
 			break;
 		case ACT_RECENTER:
 			headtrack_recenter();
+			vr_recenter();
 			break;
 		case ACT_COCKPIT:
 			cockpit_enabled = !cockpit_enabled;
 			break;
+		case ACT_POINTER:
+			if (pointer_on)
+				Input_PadPointerClick();
+			else
+				Input_PadPointerBegin();
+			pointer_on = true;
+			break;
 		default:
 			break;
 		}
+	}
+
+	/* the pointer: squared for fine aim near the middle of the stick */
+	if (pointer_on)
+	{
+		float px2 = fmaxf(-1.0f, fminf(1.0f, point[0])), py2 = fmaxf(-1.0f, fminf(1.0f, point[1]));
+		Input_PadPointerMove(px2 * fabsf(px2) * pointer_speed * dt, py2 * fabsf(py2) * pointer_speed * dt);
 	}
 
 	steer[0] += roll + yaw;

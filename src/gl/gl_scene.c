@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "gl_cockpit.h"
+#include "gl_prims.h"
 #include "gl_scene.h"
 #include "main.h"
 #include "m68000.h"
@@ -102,6 +103,7 @@ void scene_reset(void)
 	n_soft_pending = 0;
 	cur_soft = NULL;
 	soft_nodes_reset();
+	gl_prims_new_scene();
 }
 
 static void close_current(void)

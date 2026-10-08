@@ -25,6 +25,14 @@ void Input_PressSTKey(unsigned char scancode, BOOL press);
 void Input_MousePress(int sdl_button);
 void Input_MouseRelease(int sdl_button);
 
+/* The gamepad's pointer (gamepad.c). While it is on, the game's pointer is
+ * here (320x200 screen pixels) rather than where the mouse is, and the
+ * host draws it (gl_screen.c). */
+void Input_PadPointerBegin(void); /* starts where the game's pointer is */
+void Input_PadPointerMove(float dx, float dy);
+void Input_PadPointerClick(void); /* clicks the left button there, then ends */
+bool Input_PadPointer(int *x, int *y); /* on: where it is */
+
 /* Host calls: the game polls the mouse and keyboard */
 void Call_GetMouseInput(void);
 void Call_GetKeyboardEvent(void);

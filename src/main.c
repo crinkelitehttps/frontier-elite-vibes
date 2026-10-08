@@ -19,6 +19,7 @@
 #include "renderer.h"
 #include "touch_input.h"
 #include "ui/ui.h"
+#include "vr.h"
 
 #ifdef ANDROID
 #include <android/log.h>
@@ -300,12 +301,17 @@ static void read_parameters(int argc, char *argv[])
 				   "  --help or -h          Print this help text and exit.\n"
 				   "  --fullscreen or -f    Try to use fullscreen mode.\n"
 				   "  --nosound             Disable sound (faster!).\n"
-				   "  --size w h            Start at specified window size.\n");
+				   "  --size w h            Start at specified window size.\n"
+				   "  --vr                  Use a VR headset (OpenXR).\n");
 			exit(0);
 		}
 		else if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-f"))
 		{
 			use_fullscreen = true;
+		}
+		else if (!strcmp(argv[i], "--vr"))
+		{
+			vr_enabled = true;
 		}
 		else if (!strcmp(argv[i], "--nosound"))
 		{

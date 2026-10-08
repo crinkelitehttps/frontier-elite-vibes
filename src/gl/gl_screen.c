@@ -12,6 +12,10 @@
  *                     (in the cockpit view: HUD, cockpit and panel, gl_cockpit.c)
  *   3. overlays       touch controls / settings cog
  *   4. emulator menu  Dear ImGui, drawn after the batch is flushed
+ *
+ * With a VR headset (vr.h) the frame is drawn for it first: the cockpit
+ * once per eye, anything else on its virtual screen. The window follows,
+ * as without one (the cockpit turned by the headset).
  */
 #include <SDL.h>
 
@@ -23,12 +27,14 @@
 #include "gl_prims.h"
 #include "gl_scene.h"
 
+#include "input.h"
 #include "main.h"
 #include "m68000.h"
 #include "renderer.h"
 #include "screen_text.h"
 #include "touch_input.h"
 #include "ui/ui.h"
+#include "vr.h"
 
 /* =========================================================================
  * Public globals (declared extern in renderer.h)
@@ -69,25 +75,33 @@ int screen_h = 480;
 static int lb_x, lb_y, lb_w = 640, lb_h = 480;
 static bool lb_mode = true; /* keep 4:3 aspect */
 
+/* The game area (x, y, w, h) in a w x h framebuffer */
+static void letterbox(int w, int h, int r[4])
+{
+	r[0] = r[1] = 0;
+	r[2] = w;
+	r[3] = h;
+	if (!lb_mode)
+		return;
+	float aspect = (float)GAME_W / (float)GAME_H;
+	r[3] = (int)(w / aspect + 0.5f);
+	if (r[3] > h)
+	{
+		r[3] = h;
+		r[2] = (int)(h * aspect + 0.5f);
+	}
+	r[0] = (w - r[2]) / 2;
+	r[1] = (h - r[3]) / 2;
+}
+
 static void update_letterbox(void)
 {
-	if (!lb_mode)
-	{
-		lb_x = lb_y = 0;
-		lb_w = screen_w;
-		lb_h = screen_h;
-		return;
-	}
-	float aspect = (float)GAME_W / (float)GAME_H;
-	lb_w = screen_w;
-	lb_h = (int)(screen_w / aspect + 0.5f);
-	if (lb_h > screen_h)
-	{
-		lb_h = screen_h;
-		lb_w = (int)(screen_h * aspect + 0.5f);
-	}
-	lb_x = (screen_w - lb_w) / 2;
-	lb_y = (screen_h - lb_h) / 2;
+	int r[4];
+	letterbox(screen_w, screen_h, r);
+	lb_x = r[0];
+	lb_y = r[1];
+	lb_w = r[2];
+	lb_h = r[3];
 }
 
 bool Screen_GetLetterboxMode(void)
@@ -136,12 +150,13 @@ int Screen_GetGameWidth(void)
 	return lb_w;
 }
 
-static void layout_rects(int r[GD_VP_COUNT][4])
+static void layout_rects(int w, int h, int r[GD_VP_COUNT][4])
 {
-	int panel_h = lb_h * PANEL_LINES / GAME_H;
-	int win[4] = {0, 0, screen_w, screen_h};
-	int game[4] = {lb_x, lb_y, lb_w, lb_h};
-	int view[4] = {lb_x, lb_y + panel_h, lb_w, lb_h - panel_h};
+	int game[4];
+	letterbox(w, h, game);
+	int panel_h = game[3] * PANEL_LINES / GAME_H;
+	int win[4] = {0, 0, w, h};
+	int view[4] = {game[0], game[1] + panel_h, game[2], game[3] - panel_h};
 	memcpy(r[GD_VP_WINDOW], win, sizeof(win));
 	memcpy(r[GD_VP_GAME], game, sizeof(game));
 	memcpy(r[GD_VP_VIEW3D], view, sizeof(view));
@@ -313,6 +328,32 @@ static void init_screen_blit(void)
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+/* The gamepad's pointer (input.h) is drawn into the screen, on the panel,
+ * the HUD or the headset's virtual screen. So is the mouse's in the
+ * headset, where the window's pointer can't be seen; where it points is
+ * worked out in the window, as for clicks. */
+static bool vr_pointer;
+
+static void draw_pointer(void)
+{
+	static const char *const ARROW[] = {
+		"X",       "XX",      "XWX",     "XWWX",     "XWWWX",   "XWWWWX",
+		"XWWWWWX", "XWWWWWWX", "XWWWWXXX", "XWXWWX",  "XX XWWX", "    XWX", "     X",
+	};
+	int gx, gy;
+	if (!Input_PadPointer(&gx, &gy) &&
+		!(vr_pointer && mouse_shown && Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
+		return;
+	for (int j = 0; j < (int)(sizeof ARROW / sizeof ARROW[0]); j++)
+		for (int i = 0; ARROW[j][i]; i++)
+		{
+			int x = gx + i, y = gy + j;
+			if (ARROW[j][i] == ' ' || x < 0 || x >= SCR_W || y < 0 || y >= SCR_H)
+				continue;
+			framebuf[y * SCR_W + x] = ARROW[j][i] == 'X' ? 0xff000000u : 0xffffffffu;
+		}
+}
+
 void gl_screen_upload(void)
 {
 	const uint8_t *src = VideoRaster;
@@ -324,6 +365,7 @@ void gl_screen_upload(void)
 		for (int x = 0; x < SCR_W; x++)
 			out[x] = (row[x] == 255) ? 0 : pal[row[x]];
 	}
+	draw_pointer();
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, screen_tex);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
@@ -381,6 +423,7 @@ void Screen_Init(void)
 
 void Screen_UnInit(void)
 {
+	vr_shutdown();
 	ui_shutdown();
 	cockpit_shutdown();
 	glDeleteTextures(1, &screen_tex);
@@ -499,22 +542,18 @@ static void update_cursor(void)
 	}
 }
 
-void Nu_DrawScreen(void)
+/* Draws the frame into the bound framebuffer, w x h pixels: the window's,
+ * or a headset's (no touch overlays there) */
+static void draw_frame(int w, int h, bool cockpit, bool window)
 {
 	int rects[GD_VP_COUNT][4];
-
-	build_rgb_palette(MainRGBPalette, MainPalette, len_main_palette);
-	build_rgb_palette(CtrlRGBPalette, CtrlPalette, 16);
-
-	Screen_SyncSize(); /* a DPI change (browser zoom, other monitor) may come without a resize event */
-	bool cockpit = cockpit_begin_frame(screen_w, screen_h);
-	layout_rects(rects);
+	layout_rects(w, h, rects);
 	if (cockpit) /* the 3D view fills the window */
 	{
 		memcpy(rects[GD_VP_GAME], rects[GD_VP_WINDOW], sizeof(rects[0]));
 		memcpy(rects[GD_VP_VIEW3D], rects[GD_VP_WINDOW], sizeof(rects[0]));
 	}
-	glViewport(0, 0, screen_w, screen_h);
+	glViewport(0, 0, w, h);
 	glClearColor(0, 0, 0, 1);
 	glStencilMask(0xff);
 	glClearStencil(0);
@@ -534,9 +573,7 @@ void Nu_DrawScreen(void)
 	gl_prims_finish();
 	gd_set_wireframe(false);
 
-	/* 2. emulated screen, with the text the game queued during the frame */
-	screen_text_draw_queue();
-
+	/* 2. emulated screen */
 	if (cockpit)
 	{
 		cockpit_draw(); /* HUD, cockpit and panel */
@@ -556,9 +593,102 @@ void Nu_DrawScreen(void)
 	}
 
 	/* 3. overlays */
-	gl_overlay_draw();
+	if (window)
+		gl_overlay_draw();
 
 	gd_flush();
+}
+
+/* The headset paces the frames while it runs: the window must not wait
+ * for its own vsync as well */
+static void update_swap_interval(bool vr)
+{
+	static bool was_vr;
+	static int saved = 1;
+	if (vr == was_vr)
+		return;
+	if (vr)
+	{
+		saved = SDL_GL_GetSwapInterval();
+		SDL_GL_SetSwapInterval(0);
+	}
+	else
+	{
+		SDL_GL_SetSwapInterval(saved);
+	}
+	was_vr = vr;
+}
+
+/* The frame for the headset, if it wants one: the cockpit per eye, or
+ * the classic picture on the virtual screen. Before the window's: the
+ * window's cockpit is turned by the same head pose. */
+static bool draw_vr(void)
+{
+	vr_update();
+	update_swap_interval(vr_running());
+	if (!vr_running())
+	{
+		cockpit_set_headset(NULL, NULL);
+		return cockpit_begin_frame(screen_w, screen_h);
+	}
+
+	bool render = vr_begin_frame();
+	VrView eyes[2], centre;
+	bool tracked = render && vr_tracking();
+	if (tracked)
+	{
+		vr_view(0, &eyes[0]);
+		vr_view(1, &eyes[1]);
+		vr_centre_view(&centre);
+		cockpit_set_headset(&centre, eyes);
+	}
+	else
+	{
+		cockpit_set_headset(NULL, NULL);
+	}
+	bool cockpit = cockpit_begin_frame(screen_w, screen_h);
+
+	if (render)
+	{
+		vr_pointer = true;
+		if (cockpit && tracked)
+		{
+			for (int i = 0; i < 2; i++)
+			{
+				int w, h;
+				vr_eye_size(i, &w, &h);
+				glBindFramebuffer(GL_FRAMEBUFFER, vr_acquire_eye(i));
+				cockpit_use_eye(&eyes[i]);
+				draw_frame(w, h, true, false);
+				vr_release_eye(i);
+			}
+			cockpit_use_eye(NULL);
+		}
+		else
+		{
+			glBindFramebuffer(GL_FRAMEBUFFER, vr_acquire_screen());
+			draw_frame(VR_SCREEN_W, VR_SCREEN_H, cockpit, false);
+			vr_release_screen();
+		}
+		vr_pointer = false;
+	}
+	vr_end_frame();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	return cockpit;
+}
+
+void Nu_DrawScreen(void)
+{
+	build_rgb_palette(MainRGBPalette, MainPalette, len_main_palette);
+	build_rgb_palette(CtrlRGBPalette, CtrlPalette, 16);
+
+	Screen_SyncSize(); /* a DPI change (browser zoom, other monitor) may come without a resize event */
+
+	/* the text the game queued during the frame, into the emulated screen */
+	screen_text_draw_queue();
+
+	bool cockpit = draw_vr();
+	draw_frame(screen_w, screen_h, cockpit, true);
 
 	/* 4. emulator menu */
 	ui_render();

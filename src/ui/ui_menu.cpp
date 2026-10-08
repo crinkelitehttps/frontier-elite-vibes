@@ -28,6 +28,7 @@ extern "C"
 #include "gamepad.h"
 #include "gl/gl_cockpit.h"
 #include "headtrack.h"
+#include "vr.h"
 }
 
 namespace
@@ -221,6 +222,17 @@ void page_settings()
 	ImGui::TextWrapped("%s", !headtrack_enabled ? "Off" : headtrack_receiving() ? "Receiving" : "Waiting for data");
 	if (ui_button("Recentre (Ctrl-C)"))
 		headtrack_recenter();
+
+#ifdef GLF_VR
+	ui_heading("VR headset (OpenXR)");
+	wrapped_checkbox("Use the headset", &vr_enabled);
+	ImGui::TextWrapped("Resolution (from the next start)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##vrres", &vr_resolution, 50, 150, "%d%%");
+	ImGui::TextWrapped("%s", vr_status());
+	if (vr_running() && ui_button("Recentre headset (Ctrl-C)"))
+		vr_recenter();
+#endif
 
 	ui_heading("Gamepad");
 	ImGui::TextWrapped("%s", gamepad_connected() ? "Connected" : "None connected");

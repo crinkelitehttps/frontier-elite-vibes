@@ -1,6 +1,6 @@
 # GLFrontier Extended
 
-> **This is a fork of [GLFrontier Extended](https://github.com/BrettWilsonDev/glfrontier-extended) by Brett Wilson**, which descends from Tom Morton's GLFrontier (see Acknowledgments). It adds a 3D cockpit view (the world drawn all round you, planets and haze in 3D), OpenTrack head tracking, gamepad support and sideways/vertical thrust. Everything else, and the description below, is Brett Wilson's work.
+> **This is a fork of [GLFrontier Extended](https://github.com/BrettWilsonDev/glfrontier-extended) by Brett Wilson**, which descends from Tom Morton's GLFrontier (see Acknowledgments). It adds a 3D cockpit view (the world drawn all round you, planets and haze in 3D), OpenTrack head tracking, VR headsets (OpenXR), gamepad support and sideways/vertical thrust. Everything else, and the description below, is Brett Wilson's work.
 
 A fork of GLFrontier (OpenGL Frontier Elite 2) that modernizes the build system, adds cross-platform support (including WebAssembly and Android) and mods the game itself.
 
@@ -14,9 +14,9 @@ A fork of GLFrontier (OpenGL Frontier Elite 2) that modernizes the build system,
 * Ctrl-V	- Toggle the free camera (in the flight view).
 * F	        - Toggles fps readout.
 * Ctrl-K	- Toggle the 3D cockpit view.
-* Ctrl-C	- Recentre head tracking.
+* Ctrl-C	- Recentre head tracking and the VR headset.
 
-### Cockpit view, head tracking and gamepads
+### Cockpit view, head tracking, VR and gamepads
 
 In the front flight view the game is shown from a seat in the ship: the world fills the window, the game's HUD is drawn at infinity so it stays on what it marks when you look around, and the control panel and scanner float below the view (they still take mouse clicks). Ctrl-K or the SETTINGS page turns it off and sets the field of view. Other views and screens keep the classic layout.
 
@@ -26,11 +26,13 @@ In the front flight view the game is shown from a seat in the ship: the world fi
   * Right stick - pitch and roll; hold RB to yaw instead of roll.
   * LB / LT - speed up / down (or main / retro thrust when held, with the engines off).
   * RT - fire. B - flight view (front, rear, turrets, external). Y - cockpit view on / off.
-  * D-pad up / down - zoom in / out. Start - pause. Right stick click - recentre head tracking.
+  * D-pad up / down - zoom in / out. Start - pause. Back + right stick click - recentre head tracking / VR.
+  * Right stick click - a mouse pointer for the control panel and menus: the right stick moves it (and stops steering meanwhile), click the right stick again to click there and put it away. Works in the cockpit, the classic view and VR.
   * Hold Back for the console's F1-F10: F1-F4 on the D-pad (left, up, right, down), F5 on left stick click, F6-F9 on X, Y, B, A, F10 on Start.
   * Hold RB for time acceleration: D-pad down is normal time, left / up / right faster, Y fastest.
 
   The bindings are in `gamepad.cfg` beside the saves, written on the first run with the format explained at the top; edit it to change them (delete it to get the defaults back).
+* **VR headsets:** any headset with an OpenXR runtime (SteamVR, Oculus / Meta, Windows Mixed Reality, Monado on Linux). Start the runtime, then run with `--vr` or tick "Use the headset" on the SETTINGS page (remembered in `glfrontier.cfg`). In the cockpit the world is drawn for each eye with the headset's lens and pose, the control panel floats below in stereo; everything else (menus, maps, other views) shows on a big screen floating ahead. The game's mouse pointer is drawn into the picture, since the window's can't be seen; the window keeps showing the game as usual, so the mouse works on it as before. Ctrl-C recentres. The resolution slider (percent of what the runtime recommends) applies when VR next starts: lower it if the frame rate drops. On Windows the game draws with OpenGL and hands the frames to the runtime through Direct3D 11 (`WGL_NV_DX_interop2`, supported by NVIDIA, AMD and Intel drivers); on a laptop, set GLFrontier to the high-performance GPU in Windows graphics settings. The headset gets a new frame each time the game draws one (the runtime's reprojection smooths head turning in between).
 
 ### Free camera
 

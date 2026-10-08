@@ -27,6 +27,12 @@
  *
  *   Only in the front flight view, when the cockpit is enabled and the free
  *   camera is off; everything else keeps the classic letterboxed layout.
+ *
+ *   With a VR headset (vr.h) the head pose is the headset's, and the
+ *   frame is drawn again for each eye (cockpit_use_eye: its off-centre
+ *   lens and position). The world and the HUD are at infinity, so the
+ *   same in both eyes; the panel is near, in stereo. The passes are chosen
+ *   to cover the eyes as well as the window.
  */
 #ifndef GL_COCKPIT_H
 #define GL_COCKPIT_H
@@ -35,6 +41,7 @@
 
 #include "gl_api.h"
 #include "gl_math.h"
+#include "vr.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -68,6 +75,14 @@ void cockpit_shutdown(void);
 bool cockpit_begin_frame(int window_w, int window_h);
 /* What the last cockpit_begin_frame decided */
 bool cockpit_active(void);
+
+/* A VR headset (vr.h), before cockpit_begin_frame: this frame's head pose
+ * is `centre`'s instead of the head tracker's, and the turned passes
+ * cover `eyes` too. NULL: no headset this frame. */
+void cockpit_set_headset(const VrView *centre, const VrView eyes[2]);
+/* Draws what follows (projections, cockpit_draw, the passes) as seen by a
+ * headset's eye, with its lens; NULL: back to the window */
+void cockpit_use_eye(const VrView *eye);
 
 /* Projection for the 3D scene: lens * head rotation */
 mat4 cockpit_world_projection(void);

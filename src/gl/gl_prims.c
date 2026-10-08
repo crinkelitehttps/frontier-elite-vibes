@@ -7,6 +7,10 @@
  *   draw_xxx()    runs at present time: turns the payload into geometry
  *                 for the gl_draw batch.
  */
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "gl_api.h"
 #include "glutess.h"
 
@@ -688,6 +692,64 @@ void Nu_ComplexEnd(void)
  * its separate blobs got joined into one outline and filled between. The
  * triangles still go to the GPU in 3D (each screen point lifted back onto
  * its 3D position), so depth and draw order are unchanged. */
+/* Tessellating is slow, and a frame's scene can be drawn several times (the
+ * window and each eye of a VR headset): each polygon's triangles are kept
+ * until the next scene, keyed by its START record. They are in the view
+ * space of the pass that recorded them, so whoever looks at them later
+ * gets the same ones. */
+#define TCACHE_SLOTS 32768 /* a power of two */
+typedef struct
+{
+	const void *key;
+	uint32_t scene; /* the slot is only valid in this scene */
+	uint32_t first, count;
+} TessEntry;
+static TessEntry tcache[TCACHE_SLOTS];
+static int tcache_used;
+static uint32_t tcache_scene = 1;
+static float (*tcache_verts)[3];
+static uint32_t tcache_n, tcache_cap;
+
+void gl_prims_new_scene(void)
+{
+	tcache_scene++;
+	tcache_used = 0;
+	tcache_n = 0;
+}
+
+/* The slot for key: its triangles, or empty to fill in (NULL if full) */
+static TessEntry *tcache_slot(const void *key)
+{
+	uint32_t h = (uint32_t)(((uintptr_t)key >> 3) * 2654435761u) & (TCACHE_SLOTS - 1);
+	for (int i = 0; i < TCACHE_SLOTS; i++, h = (h + 1) & (TCACHE_SLOTS - 1))
+	{
+		TessEntry *e = &tcache[h];
+		if (e->scene != tcache_scene)
+		{
+			if (tcache_used >= TCACHE_SLOTS / 2)
+				return NULL;
+			return e;
+		}
+		if (e->key == key)
+			return e;
+	}
+	return NULL;
+}
+
+static void tcache_add(const float v[3])
+{
+	if (tcache_n >= tcache_cap)
+	{
+		uint32_t cap = tcache_cap ? tcache_cap * 2 : 65536;
+		float(*p)[3] = realloc(tcache_verts, cap * sizeof *p);
+		if (!p)
+			return;
+		tcache_verts = p;
+		tcache_cap = cap;
+	}
+	memcpy(tcache_verts[tcache_n++], v, sizeof tcache_verts[0]);
+}
+
 #define TESS_MAX_VERTS   8192
 #define TESS_MAX_COMBINE 8192
 #define CONTOUR_MAX      2048
@@ -719,6 +781,11 @@ static struct
 	int n_tri;
 	float prev[3];
 	bool have_prev;
+	/* keeping the triangles: the START record, where they start */
+	const void *keep_key;
+	uint32_t keep_first;
+	/* the triangles were kept from an earlier drawing: draw them at END */
+	const TessEntry *kept;
 	/* the outline being collected, 3D view space */
 	float contour[CONTOUR_MAX][3];
 	int n_contour;
@@ -748,6 +815,12 @@ static void tess_vertex_cb(void *vertex)
 		float b[3] = {(float)tp.tri[1]->x, (float)tp.tri[1]->y, (float)tp.tri[1]->z};
 		float c[3] = {(float)tp.tri[2]->x, (float)tp.tri[2]->y, (float)tp.tri[2]->z};
 		gd_tri(a, b, c);
+		if (tp.keep_key)
+		{
+			tcache_add(a);
+			tcache_add(b);
+			tcache_add(c);
+		}
 		tp.n_tri = 0;
 	}
 }
@@ -883,6 +956,15 @@ static void complex_add_vertex(const float v[3])
 
 void gl_prims_finish(void)
 {
+	if (tp.kept)
+	{
+		const TessEntry *e = tp.kept;
+		tp.kept = NULL;
+		set_rgb8(tp.col);
+		for (uint32_t i = 0; i + 2 < e->count; i += 3)
+			gd_tri(tcache_verts[e->first + i], tcache_verts[e->first + i + 1], tcache_verts[e->first + i + 2]);
+		return;
+	}
 	if (!tp.active)
 		return;
 	tp.active = false;
@@ -893,6 +975,19 @@ void gl_prims_finish(void)
 	}
 	flush_contour();
 	gluTessEndPolygon(tess);
+	if (tp.keep_key)
+	{
+		TessEntry *e = tcache_slot(tp.keep_key);
+		if (e && e->scene != tcache_scene && tcache_n > tp.keep_first)
+		{
+			e->key = tp.keep_key;
+			e->scene = tcache_scene;
+			e->first = tp.keep_first;
+			e->count = tcache_n - tp.keep_first;
+			tcache_used++;
+		}
+		tp.keep_key = NULL;
+	}
 }
 
 void draw_complex_start(const void *payload)
@@ -900,6 +995,21 @@ void draw_complex_start(const void *payload)
 	const Rgb8 *c = payload;
 	gl_prims_finish(); /* previous polygon never got its END record */
 	tp.col = *c;
+	tp.keep_key = NULL;
+	if (!gd_wireframe())
+	{
+		const TessEntry *e = tcache_slot(payload);
+		if (e && e->scene == tcache_scene)
+		{
+			tp.kept = e; /* the rest of its records are skipped */
+			return;
+		}
+		if (e)
+		{
+			tp.keep_key = payload;
+			tp.keep_first = tcache_n;
+		}
+	}
 	tp.active = true;
 	tp.have_prev = false;
 	tp.n_verts = tp.n_combine = tp.n_contour = 0;

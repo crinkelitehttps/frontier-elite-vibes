@@ -152,6 +152,40 @@ if(ANDROID)
 endif()
 
 ##########################################################################################
+# OpenXR (VR headsets, src/vr.cpp): the loader is built in, linked statically
+##########################################################################################
+
+if(ANDROID OR PLATFORM STREQUAL "Web")
+    set(GLF_VR_DEFAULT OFF)
+else()
+    set(GLF_VR_DEFAULT ON)
+endif()
+option(GLF_VR "VR headsets through OpenXR" ${GLF_VR_DEFAULT})
+
+if(GLF_VR)
+    set(DYNAMIC_LOADER OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(BUILD_API_LAYERS OFF CACHE BOOL "" FORCE)
+    set(BUILD_CONFORMANCE_TESTS OFF CACHE BOOL "" FORCE)
+    set(BUILD_WITH_SYSTEM_JSONCPP OFF CACHE BOOL "" FORCE) # (its own, built in)
+    FetchContent_Declare(OpenXR
+        URL https://github.com/KhronosGroup/OpenXR-SDK/archive/refs/tags/release-1.1.60.tar.gz)
+    FetchContent_MakeAvailable(OpenXR)
+    if(MINGW)
+        # MinGW's headers trip the loader's -Werror=undef
+        target_compile_options(openxr_loader PRIVATE -Wno-undef -Wno-error=undef)
+    endif()
+    list(APPEND LIBRARIES openxr_loader)
+    add_compile_definitions(GLF_VR)
+    if(WIN32)
+        list(APPEND LIBRARIES d3d11 dxgi opengl32)
+    else()
+        find_package(X11 REQUIRED)
+        list(APPEND LIBRARIES ${X11_LIBRARIES} OpenGL::GLX ${CMAKE_DL_LIBS})
+    endif()
+endif()
+
+##########################################################################################
 # Dear ImGui (emulator menu)
 ##########################################################################################
 
