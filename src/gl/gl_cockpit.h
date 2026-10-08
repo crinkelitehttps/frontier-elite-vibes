@@ -115,6 +115,8 @@ void Call_CockpitPass(void);
 void Call_CockpitBackground(void);
 /* Host call: places the sky model for the pass (Lcockpit_sky) */
 void Call_CockpitSky(void);
+/* Host call: a type $d / $e vertex in a turned pass (Lcockpit_vertex_d) */
+void Call_CockpitVertexD(void);
 /* True while the game draws a pass other than straight ahead */
 bool cockpit_turned_pass(void);
 /* A direction in the view space of the pass the game is drawing -> view

@@ -703,6 +703,32 @@ void Call_CockpitSky(void)
 		wrlong(obj + 20 + 4 * c, (int)lroundf(SKY_AHEAD * pass_axes[drawing_pass][c][2]));
 }
 
+/* A vertex of type $d / $e in a turned pass (Lcockpit_vertex_d): between
+ * vertices a0 and a1 (their camera coordinates at +4: x, y, z ahead), x and
+ * y averaged and the nearer z, worked out in the game's own camera axes as
+ * the straight ahead pass has it, and returned in the pass's (d2-d4). Pass
+ * k's axis c is pass_axes[k][c] in the game's camera. */
+void Call_CockpitVertexD(void)
+{
+	if (drawing_pass <= 0)
+		return;
+	const float(*a)[3] = pass_axes[drawing_pass];
+	const uint32_t v[2] = {(uint32_t)GetReg(REG_A0), (uint32_t)GetReg(REG_A1)};
+	double cam[2][3];
+	for (int i = 0; i < 2; i++)
+	{
+		double p[3];
+		for (int c = 0; c < 3; c++)
+			p[c] = (double)rdlong(v[i] + 4 + 4 * c);
+		for (int k = 0; k < 3; k++)
+			cam[i][k] = p[0] * a[0][k] + p[1] * a[1][k] + p[2] * a[2][k];
+	}
+	const double q[3] = {(cam[0][0] + cam[1][0]) * 0.5, (cam[0][1] + cam[1][1]) * 0.5, fmin(cam[0][2], cam[1][2])};
+	static const int reg[3] = {REG_D2, REG_D3, REG_D4};
+	for (int c = 0; c < 3; c++)
+		SetReg(reg[c], (int)lround(a[c][0] * q[0] + a[c][1] * q[1] + a[c][2] * q[2]));
+}
+
 static mat4 pass_matrix(int id);
 
 void cockpit_pass_to_view(const float v[3], float out[3])

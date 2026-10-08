@@ -36,7 +36,7 @@
 * CALLING THE HOST (C code in src/)
 *   'hcall #Call_Name' calls hcalls[n] in src/hostcall.c, which reads the
 *   68k registers with GetReg/SetReg and RAM with rdbyte etc.
-*   Free numbers: $2a-$5f and $80 upwards ($7a-$7d, $7f: cockpit view, $7e: strafing) ($28-$29: mods framework). To add one: an equ below, an
+*   Free numbers: $2a-$5f and $81 upwards ($7a-$7d, $7f-$80: cockpit view, $7e: strafing) ($28-$29: mods framework). To add one: an equ below, an
 *   entry in hcalls[] and the C function. This is the easy way to write
 *   big features (cameras, new UI) in C while the game logic stays here.
 *
@@ -146,6 +146,8 @@ Call_CockpitBackground	equ	$7d
 Call_Strafe		equ	$7e
 * Cockpit view: where the sky model goes in a pass (src/gl/gl_cockpit.c)
 Call_CockpitSky		equ	$7f
+* Cockpit view: a type $d/$e vertex in a turned pass (src/gl/gl_cockpit.c)
+Call_CockpitVertexD	equ	$80
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -11900,10 +11902,11 @@ L39be0_TransformModelCoords_Td_e:
 		add.l	d7,d3
 		asr.l	#1,d2
 		asr.l	#1,d3
-		move.l	12(a1),d5
-		cmp.l	d4,d5
-		bgt.s	l39c36
-		exg	d4,d5
+* Cockpit view: hook, same size as the code it replaced (10 bytes). See
+* Lcockpit_vertex_d at the end of the file.
+		jsr	Lcockpit_vertex_d
+		nop
+		nop
 	l39c36:	movem.l	(a7)+,d6-7/a0-1
 		movem.w	d0-1,(a0)
 		movem.l	d2-4,4(a0)
@@ -67335,4 +67338,31 @@ Lcockpit_sky:
 		beq.s	lcockpit_sky_done
 		hcall	#Call_CockpitSky
 lcockpit_sky_done:
+		rts
+
+******************************************************************************
+* Cockpit view: vertices of type $d and $e in the passes.
+*
+* L39be0_TransformModelCoords_Td_e places such a vertex between two others:
+* x and y averaged in the camera's axes, and the nearer z of the two. That
+* depends on the way the camera looks, so each of the cockpit's turned
+* passes put it somewhere else; the Milky Way's edges (made of them) stepped
+* where the passes meet. In a turned pass the host works it out in the axes
+* of the game's own camera, as the straight ahead view does, and turns the
+* result into the pass's.
+*
+* In place of "move.l 12(a1),d5 / cmp.l d4,d5 / bgt.s / exg d4,d5": a0, a1
+* the two vertices, d2, d3 their averaged x, y, d4 a0's z. Out: d2-d4 the
+* vertex's x, y, z (d5 as the code it replaced leaves it).
+******************************************************************************
+Lcockpit_vertex_d:
+		move.l	12(a1),d5
+		cmp.l	d4,d5
+		bgt.s	lcockpit_vertex_d_min
+		exg	d4,d5
+lcockpit_vertex_d_min:
+		tst.w	Lcockpit_passes
+		beq.s	lcockpit_vertex_d_done
+		hcall	#Call_CockpitVertexD
+lcockpit_vertex_d_done:
 		rts

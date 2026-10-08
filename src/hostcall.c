@@ -145,5 +145,6 @@ HOSTCALL hcalls[] = {
 	[0x7d] = Call_CockpitBackground,
 	[0x7e] = Call_Strafe,
 	[0x7f] = Call_CockpitSky,
+	[0x80] = Call_CockpitVertexD,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
