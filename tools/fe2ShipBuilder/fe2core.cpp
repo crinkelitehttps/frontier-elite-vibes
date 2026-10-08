@@ -1143,6 +1143,77 @@ Vec3 display_rgb(int colour, int base, bool shaded)
 	return {std::min(15, r) / 15.0, std::min(15, g) / 15.0, std::min(15, b) / 15.0};
 }
 
+/* -- polygons ---------------------------------------------------------------- */
+
+std::vector<std::array<int, 3>> triangulate(const std::vector<Vec3> &pts, const Vec3 &normal)
+{
+	int n = (int)pts.size();
+	std::vector<std::array<int, 3>> tris;
+	if (n < 3)
+		return tris;
+	if (n == 3)
+		return {{0, 1, 2}};
+	int ax = 0;
+	if (std::fabs(normal.y) > std::fabs(normal[ax]))
+		ax = 1;
+	if (std::fabs(normal.z) > std::fabs(normal[ax]))
+		ax = 2;
+	int u = (ax + 1) % 3, v = (ax + 2) % 3;
+	std::vector<std::pair<double, double>> p2;
+	for (auto &p : pts)
+		p2.push_back({p[u], p[v]});
+	double area = 0;
+	for (int i = 0; i < n; i++)
+		area += p2[i].first * p2[(i + 1) % n].second - p2[(i + 1) % n].first * p2[i].second;
+	int sign = area > 0 ? 1 : -1;
+	std::vector<int> idx(n);
+	for (int i = 0; i < n; i++)
+		idx[i] = i;
+	auto inside = [](std::pair<double, double> p, std::pair<double, double> a, std::pair<double, double> b,
+					 std::pair<double, double> c) {
+		double d1 = (p.first - b.first) * (a.second - b.second) - (a.first - b.first) * (p.second - b.second);
+		double d2 = (p.first - c.first) * (b.second - c.second) - (b.first - c.first) * (p.second - c.second);
+		double d3 = (p.first - a.first) * (c.second - a.second) - (c.first - a.first) * (p.second - a.second);
+		bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;
+		return !(neg && pos);
+	};
+	int guard = 0;
+	while (idx.size() > 3 && guard++ < 10000)
+	{
+		int m = (int)idx.size();
+		bool clipped = false;
+		for (int k = 0; k < m; k++)
+		{
+			int i0 = idx[(k + m - 1) % m], i1 = idx[k], i2 = idx[(k + 1) % m];
+			auto a = p2[i0], b = p2[i1], c = p2[i2];
+			double cr = (b.first - a.first) * (c.second - a.second) - (b.second - a.second) * (c.first - a.first);
+			if (cr * sign <= 0)
+				continue;
+			bool blocked = false;
+			for (int j : idx)
+				if (j != i0 && j != i1 && j != i2 && inside(p2[j], a, b, c))
+				{
+					blocked = true;
+					break;
+				}
+			if (blocked)
+				continue;
+			tris.push_back({i0, i1, i2});
+			idx.erase(idx.begin() + k);
+			clipped = true;
+			break;
+		}
+		if (!clipped)
+		{
+			for (size_t k = 1; k + 1 < idx.size(); k++)
+				tris.push_back({idx[0], idx[k], idx[k + 1]});
+			return tris;
+		}
+	}
+	tris.push_back({idx[0], idx[1], idx[2]});
+	return tris;
+}
+
 /* -- ship data --------------------------------------------------------------- */
 
 const ShipField SHIP_FIELDS[] = {

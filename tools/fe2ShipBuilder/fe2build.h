@@ -79,8 +79,6 @@ BuildResult build_model(const BuildMesh &mesh, const Model *tmpl, const Image &i
 /* colour value of a material name (fe2_XXX, *paint*, *glow*, else Kd) */
 int material_colour(const std::string &name, const Vec3 *kd, bool emissive);
 bool two_sided(const std::string &name);
-/* ear clipping in the polygon's plane: index triples */
-std::vector<std::array<int, 3>> triangulate(const std::vector<Vec3> &pts, const Vec3 &normal);
 
 /* .fe2m files */
 struct Fe2mMeta

@@ -12,6 +12,7 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -40,6 +41,8 @@ Vec3 cross(const Vec3 &a, const Vec3 &b);
 double length(const Vec3 &a);
 Vec3 normalize(const Vec3 &a);
 Vec3 newell(const std::vector<Vec3> &pts);
+/* ear clipping in the polygon's plane: index triples */
+std::vector<std::array<int, 3>> triangulate(const std::vector<Vec3> &pts, const Vec3 &normal);
 
 inline int s8(int v)
 {

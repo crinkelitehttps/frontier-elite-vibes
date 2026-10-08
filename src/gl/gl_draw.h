@@ -62,6 +62,21 @@ void gd_set_wireframe(bool wire); /* triangles become outlines */
 void gd_set_blend(bool blend);
 bool gd_wireframe(void);
 
+/* Depth testing for what follows (the native scene, gl_native.cpp), NULL =
+ * off (the default at the start of every frame; everything else is drawn by
+ * painter's algorithm). Depth is mapped like a perspective projection's
+ * between view distances near and far (clip w), onto lo..hi of the NDC
+ * range -1..1, minus bias: each group of objects gets its own slice with
+ * tight bounds, so depth stays precise at any distance. Linear in clip
+ * space, so interpolation and clipping stay exact. */
+typedef struct
+{
+	float near, far;
+	float lo, hi;
+	float bias;
+} GdDepth;
+void gd_set_depth(const GdDepth *d);
+
 /* Modelview stack */
 void gd_push(void);
 void gd_pop(void);

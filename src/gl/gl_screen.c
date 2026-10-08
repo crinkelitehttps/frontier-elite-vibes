@@ -184,9 +184,10 @@ static void create_window(void)
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #endif
-	/* painter's algorithm only: no depth buffer. The stencil keeps the
-	 * cockpit's turned passes apart (gl_cockpit.c). */
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+	/* Painter's algorithm, but for the native scene (gl_native.h), which
+	 * has the depth buffer. The stencil keeps the cockpit's turned passes
+	 * apart (gl_cockpit.c). */
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
@@ -604,7 +605,8 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	glClearColor(0, 0, 0, 1);
 	glStencilMask(0xff);
 	glClearStencil(0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	glDepthMask(GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	if (scr_show.renderer != R_GLWIRE)
 		clear_rect(rects[GD_VP_GAME], scr_show.main_rgb[scr_show.bgcol & 0xff]);
 

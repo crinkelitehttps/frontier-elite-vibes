@@ -29,6 +29,7 @@ typedef struct
 	uint8_t vp;
 	uint8_t cull;
 	uint8_t blend;
+	uint8_t depth;
 	int first; /* vertex index, or data offset for GD_CUSTOM */
 	int count;
 	gd_custom_fn fn;
@@ -54,6 +55,8 @@ static uint8_t cur_col[4] = {255, 255, 255, 255};
 static uint8_t cur_vp = GD_VP_VIEW3D;
 static uint8_t cur_cull;
 static uint8_t cur_blend;
+static uint8_t cur_depth;
+static float depth_a, depth_b; /* z_clip = a * w + b */
 static bool wireframe;
 static int vp_rects[GD_VP_COUNT][4];
 
@@ -197,6 +200,7 @@ void gd_begin_frame(const int rects[GD_VP_COUNT][4])
 	cur_vp = GD_VP_VIEW3D;
 	cur_cull = 0;
 	cur_blend = 0;
+	cur_depth = 0;
 	wireframe = false;
 	gd_color3ub(255, 255, 255);
 }
@@ -237,6 +241,17 @@ void gd_set_wireframe(bool w)
 bool gd_wireframe(void)
 {
 	return wireframe;
+}
+void gd_set_depth(const GdDepth *d)
+{
+	cur_depth = d != NULL;
+	if (!d)
+		return;
+	/* ndc(w) = lo + (hi - lo) * far * (w - near) / (w * (far - near)) - bias,
+	 * times w */
+	float k = (d->hi - d->lo) * d->far / (d->far - d->near);
+	depth_a = d->lo - d->bias + k;
+	depth_b = -k * d->near;
 }
 
 void gd_push(void)
@@ -338,7 +353,7 @@ static GdVert *reserve(enum GdKind kind, int n)
 
 	GdCmd *last = n_cmds ? &cmds[n_cmds - 1] : NULL;
 	if (last && last->kind == kind && last->vp == cur_vp && last->cull == cur_cull &&
-		last->blend == cur_blend && last->first + last->count == n_verts)
+		last->blend == cur_blend && last->depth == cur_depth && last->first + last->count == n_verts)
 	{
 		last->count += n;
 	}
@@ -356,6 +371,7 @@ static GdVert *reserve(enum GdKind kind, int n)
 		c->vp = cur_vp;
 		c->cull = cur_cull;
 		c->blend = cur_blend;
+		c->depth = cur_depth;
 		c->first = n_verts;
 		c->count = n;
 		c->fn = NULL;
@@ -368,6 +384,8 @@ static GdVert *reserve(enum GdKind kind, int n)
 static inline void put(GdVert *v, const float p[3], const uint8_t col[4], float size)
 {
 	mat4_xform(get_xf(), p[0], p[1], p[2], v->pos);
+	if (cur_depth)
+		v->pos[2] = depth_a * v->pos[3] + depth_b;
 	memcpy(v->col, col, 4);
 	v->size = size;
 }
@@ -524,6 +542,7 @@ void *gd_custom(gd_custom_fn fn, size_t size)
 	c->vp = cur_vp;
 	c->cull = cur_cull;
 	c->blend = 0;
+	c->depth = 0;
 	c->first = (int)custom_used;
 	c->count = 0;
 	c->fn = fn;
@@ -557,13 +576,15 @@ void gd_flush(void)
 	}
 
 	glDisable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable(GL_CULL_FACE);
 	glCullFace(GL_BACK);
 	bind_flat();
 
-	int vp = -1, cull = 0, blend = 0;
+	int vp = -1, cull = 0, blend = 0, depth = 0;
 	for (int i = 0; i < n_cmds; i++)
 	{
 		const GdCmd *c = &cmds[i];
@@ -586,6 +607,14 @@ void gd_flush(void)
 					glEnable(GL_CULL_FACE);
 				else
 					glDisable(GL_CULL_FACE);
+			}
+			if (c->depth != depth)
+			{
+				depth = c->depth;
+				if (depth)
+					glEnable(GL_DEPTH_TEST);
+				else
+					glDisable(GL_DEPTH_TEST);
 			}
 			if (c->blend != blend)
 			{
@@ -615,12 +644,15 @@ void gd_flush(void)
 		case GD_CUSTOM:
 			if (blend)
 				glDisable(GL_BLEND); /* custom commands start without blending */
+			if (depth)
+				glDisable(GL_DEPTH_TEST); /* or depth testing */
 			c->fn(custom_data + c->first);
 			/* callback may have touched any state: re-apply ours */
 			bind_flat();
 			vp = -1;
 			cull = -1;
 			blend = 0;
+			depth = 0;
 			break;
 		}
 	}
@@ -628,6 +660,7 @@ void gd_flush(void)
 	glBindVertexArray(0);
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_BLEND);
+	glDisable(GL_DEPTH_TEST);
 	n_verts = n_cmds = 0;
 	custom_used = 0;
 }
