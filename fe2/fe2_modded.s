@@ -36,7 +36,7 @@
 * CALLING THE HOST (C code in src/)
 *   'hcall #Call_Name' calls hcalls[n] in src/hostcall.c, which reads the
 *   68k registers with GetReg/SetReg and RAM with rdbyte etc.
-*   Free numbers: $2a-$5f and $7f upwards ($7a-$7d: cockpit view, $7e: strafing) ($28-$29: mods framework). To add one: an equ below, an
+*   Free numbers: $2a-$5f and $80 upwards ($7a-$7d, $7f: cockpit view, $7e: strafing) ($28-$29: mods framework). To add one: an equ below, an
 *   entry in hcalls[] and the C function. This is the easy way to write
 *   big features (cameras, new UI) in C while the game logic stays here.
 *
@@ -144,6 +144,8 @@ Nu_ComplexNearCurve	equ	$7c
 Call_CockpitBackground	equ	$7d
 * Strafing: the player's sideways / vertical thrust (src/strafe.c)
 Call_Strafe		equ	$7e
+* Cockpit view: where the sky model goes in a pass (src/gl/gl_cockpit.c)
+Call_CockpitSky		equ	$7f
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -26390,9 +26392,14 @@ L44200_DrawBGStars:
 		jsr	L38d66_MatrixMulWTF
 		movem.w	70(a3),d0-7/a0
 	l44226:	movem.w	d0-7/a0,0(a6)
-		clr.l	20(a6)
-		clr.l	24(a6)
-		move.l	#$200,28(a6)
+* Cockpit view: hook, same size as the code it replaced (16 bytes). See
+* Lcockpit_sky at the end of the file.
+		jsr	Lcockpit_sky
+		nop
+		nop
+		nop
+		nop
+		nop
 		move.w	#$b0,90(a6)
 		jsr	L39426_PutGameData3DObj
 		lea	286(a7),a7
@@ -67308,4 +67315,24 @@ lstrafe_set:
 		movem.w	140(a0),d0-2
 		or.w	d1,d0
 		or.w	d2,d0
+		rts
+
+******************************************************************************
+* Cockpit view: the sky in the passes.
+*
+* L44200_DrawBGStars puts the sky model (stars, Milky Way) 512 ahead of the
+* camera. The cockpit's passes turn the camera, so each pass would put it
+* 512 ahead of its own direction: the model is not far enough away for that
+* not to show, and the Milky Way stepped at the seams between passes.
+* During the passes the host puts it 512 ahead of the camera the game
+* really has, in the turned camera's axes (a6: the model's object).
+******************************************************************************
+Lcockpit_sky:
+		clr.l	20(a6)
+		clr.l	24(a6)
+		move.l	#$200,28(a6)
+		tst.w	Lcockpit_passes
+		beq.s	lcockpit_sky_done
+		hcall	#Call_CockpitSky
+lcockpit_sky_done:
 		rts

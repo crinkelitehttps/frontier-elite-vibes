@@ -366,5 +366,6 @@
 #define FE2_Lcockpit_discard                         0xa9034 /* Lcockpit_discard */
 #define FE2_Lstrafe_speed                            0xa904c /* Lstrafe_speed */
 #define FE2_Lstrafe_manual                           0xa905c /* Lstrafe_manual */
+#define FE2_Lcockpit_sky                             0xa908e /* Lcockpit_sky */
 
 #endif /* FE2_LABELS_H */

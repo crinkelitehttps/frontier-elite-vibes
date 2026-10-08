@@ -691,6 +691,18 @@ void Call_CockpitBackground(void)
 		scene_insert_after_background(PRIM_ATMOS);
 }
 
+/* The sky model's place in the pass (Lcockpit_sky): 512 ahead of the
+ * game's own camera, in the turned camera's axes. */
+#define SKY_AHEAD 512.0f
+void Call_CockpitSky(void)
+{
+	if (drawing_pass < 0)
+		return;
+	uint32_t obj = (uint32_t)GetReg(REG_A6);
+	for (int c = 0; c < 3; c++)
+		wrlong(obj + 20 + 4 * c, (int)lroundf(SKY_AHEAD * pass_axes[drawing_pass][c][2]));
+}
+
 static mat4 pass_matrix(int id);
 
 void cockpit_pass_to_view(const float v[3], float out[3])

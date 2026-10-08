@@ -113,6 +113,8 @@ void cockpit_draw(void);
 void Call_CockpitPass(void);
 /* Host call: the game has drawn the background of the pass (Lcockpit_world) */
 void Call_CockpitBackground(void);
+/* Host call: places the sky model for the pass (Lcockpit_sky) */
+void Call_CockpitSky(void);
 /* True while the game draws a pass other than straight ahead */
 bool cockpit_turned_pass(void);
 /* A direction in the view space of the pass the game is drawing -> view
