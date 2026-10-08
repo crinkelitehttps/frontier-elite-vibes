@@ -48,6 +48,7 @@
  * same close up, a thin rim far away.
  */
 #include <math.h>
+#include <string.h>
 
 #include "gl_cockpit.h"
 #include "gl_fill2d.h"
@@ -73,8 +74,6 @@
 #define BANDS_MAX    256      /* a frame's, all passes */
 #define PLANETS_MAX  16
 
-static int16_t arena[ARENA_WORDS];
-static int arena_used;
 
 /* This frame's bands in 3D (cockpit only). Not every pass the game draws
  * makes them (it only does when the planet's horizon is in that pass's
@@ -94,17 +93,45 @@ typedef struct
 	float radius;
 } AtmosPlanet;
 
-static AtmosBand bands[BANDS_MAX];
-static int n_bands, first_pending;
-static AtmosPlanet planets[PLANETS_MAX];
-static int n_planets;
+/* A frame's bands and copied soft nodes: recorded into `rec`, drawn from
+ * `show` (see scene_publish / scene_acquire in gl_scene.h) */
+typedef struct
+{
+	int n_bands, n_planets, arena_used;
+	AtmosBand bands[BANDS_MAX];
+	AtmosPlanet planets[PLANETS_MAX];
+	int16_t arena[ARENA_WORDS];
+} AtmosBuf;
+
+static AtmosBuf rec, pub, show;
+static int first_pending;
 static float scale_so_far = 1.0f;
 
 void soft_nodes_reset(void)
 {
-	arena_used = 0;
-	n_bands = first_pending = n_planets = 0;
+	rec.arena_used = 0;
+	rec.n_bands = first_pending = rec.n_planets = 0;
 	scale_so_far = 1.0f;
+}
+
+static void copy_atmos(AtmosBuf *dst, const AtmosBuf *src)
+{
+	dst->n_bands = src->n_bands;
+	dst->n_planets = src->n_planets;
+	dst->arena_used = src->arena_used;
+	memcpy(dst->bands, src->bands, sizeof(AtmosBand) * (size_t)src->n_bands);
+	memcpy(dst->planets, src->planets, sizeof(AtmosPlanet) * (size_t)src->n_planets);
+	memcpy(dst->arena, src->arena, sizeof(int16_t) * (size_t)src->arena_used);
+}
+
+void atmos_publish(void)
+{
+	copy_atmos(&pub, &rec);
+}
+
+void atmos_acquire(void)
+{
+	copy_atmos(&show, &pub);
 }
 
 static int dyn_colour(int id)
@@ -115,9 +142,10 @@ static int dyn_colour(int id)
 void Nu_AtmosBand(void)
 {
 	float scale = (int16_t)STMemory_ReadWord(GetReg(REG_A3) + 202) / SCALE_ONE;
-	if (n_bands >= BANDS_MAX)
+	if (rec.n_bands >= BANDS_MAX)
 		return;
-	AtmosBand *b = &bands[n_bands++];
+	int id = rec.n_bands++;
+	AtmosBand *b = &rec.bands[id];
 	b->inner = scale_so_far;
 	scale_so_far *= scale;
 	b->outer = scale_so_far;
@@ -126,32 +154,32 @@ void Nu_AtmosBand(void)
 	b->draw = false;
 	SoftNode *s = scene_current_soft_node();
 	if (s)
-		s->shell = b;
+		s->shell = id;
 }
 
 void atmos_place_bands(const float centre[3], float radius)
 {
-	if (first_pending < n_bands && radius > 0.0f)
+	if (first_pending < rec.n_bands && radius > 0.0f)
 	{
 		/* the same planet seen by an earlier pass has the same radius */
 		int p = 0;
-		while (p < n_planets && planets[p].radius != radius)
+		while (p < rec.n_planets && rec.planets[p].radius != radius)
 			p++;
-		bool known = p < n_planets;
-		if (!known && n_planets < PLANETS_MAX)
+		bool known = p < rec.n_planets;
+		if (!known && rec.n_planets < PLANETS_MAX)
 		{
-			cockpit_pass_to_view(centre, planets[p].centre);
-			planets[p].radius = radius;
-			n_planets++;
+			cockpit_pass_to_view(centre, rec.planets[p].centre);
+			rec.planets[p].radius = radius;
+			rec.n_planets++;
 		}
-		if (p < n_planets)
-			for (int i = first_pending; i < n_bands; i++)
+		if (p < rec.n_planets)
+			for (int i = first_pending; i < rec.n_bands; i++)
 			{
-				bands[i].planet = p;
-				bands[i].draw = !known;
+				rec.bands[i].planet = p;
+				rec.bands[i].draw = !known;
 			}
 	}
-	first_pending = n_bands;
+	first_pending = rec.n_bands;
 	scale_so_far = 1.0f;
 }
 
@@ -161,12 +189,12 @@ void draw_atmos(const void *payload)
 	if (!cockpit_active())
 		return;
 	double f = FILL2D_VIEW_H * 0.5 / tan(CLASSIC_FOV * GLM_PI / 360.0);
-	for (int i = 0; i < n_bands; i++)
+	for (int i = 0; i < show.n_bands; i++)
 	{
-		const AtmosBand *b = &bands[i];
+		const AtmosBand *b = &show.bands[i];
 		if (!b->draw)
 			continue;
-		const AtmosPlanet *p = &planets[b->planet];
+		const AtmosPlanet *p = &show.planets[b->planet];
 		double c[3] = {p->centre[0], p->centre[1], p->centre[2]};
 		double dist = sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
 		if (dist <= 0.0)
@@ -185,21 +213,21 @@ void draw_atmos(const void *payload)
 /* Copies the band at p (just past its start word); false if it is not one */
 static bool copy_band(uint32_t p, SoftNode *s)
 {
-	int start = arena_used, n = arena_used;
+	int start = rec.arena_used, n = rec.arena_used;
 	for (int guard = 0; guard < BAND_OPS_MAX; guard++)
 	{
 		int op = STMemory_ReadWord(p);
 		int args = op == OP_BEZIER ? 8 : op == OP_LINE ? 4 : op == OP_FILL ? 1 : -1;
 		if (args < 0 || n + 1 + args > ARENA_WORDS)
 			return false;
-		arena[n++] = (int16_t)op;
+		rec.arena[n++] = (int16_t)op;
 		for (int i = 0; i < args; i++)
-			arena[n++] = (int16_t)STMemory_ReadWord(p + 2 + i * 2);
+			rec.arena[n++] = (int16_t)STMemory_ReadWord(p + 2 + i * 2);
 		p += 2 + args * 2;
 		if (op == OP_FILL)
 		{
-			arena[n - 1] = (int16_t)dyn_colour(arena[n - 1]);
-			arena_used = n;
+			rec.arena[n - 1] = (int16_t)dyn_colour(rec.arena[n - 1]);
+			rec.arena_used = n;
 			s->band = start;
 			return true;
 		}
@@ -223,10 +251,10 @@ void draw_soft_node(const void *payload)
 	if (s->band < 0)
 		return;
 	/* drawn in 3D instead (draw_atmos) */
-	if (s->shell && ((const AtmosBand *)s->shell)->planet >= 0 && cockpit_active())
+	if (s->shell >= 0 && s->shell < show.n_bands && show.bands[s->shell].planet >= 0 && cockpit_active())
 		return;
 
-	const int16_t *w = &arena[s->band];
+	const int16_t *w = &show.arena[s->band];
 	fill2d_begin();
 	for (;;)
 	{

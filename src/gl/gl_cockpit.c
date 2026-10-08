@@ -15,6 +15,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <SDL.h>
+
 #include "gl_api.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
@@ -53,7 +55,8 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
 #define PANEL_DOWN  24.5f
 #define PANEL_ROW0  168 /* first screen row of the panel */
 
-static bool active;
+static bool active;      /* the frame being drawn is the cockpit */
+static bool game_active; /* the game's frames are (game thread) */
 static float aspect = 16.0f / 9.0f;
 static HeadPose pose;
 static float look_yaw, look_pitch; /* the controller's look-around, radians */
@@ -67,6 +70,31 @@ static VrView hs_centre, hs_eyes[2], cur_eye_view;
 static const VrView *cur_eye;
 static mat4 win_head_view;
 static float win_eye[3];
+
+/* The view as last drawn, for the game thread: its passes cover it
+ * (choose_passes) and the mouse is mapped through it. The drawing may be
+ * on another thread (gl_screen.c), hence the copy and the lock. */
+typedef struct
+{
+	bool active;
+	mat4 head_view; /* the window's */
+	float eye[3];
+	float aspect;
+	int n_eyes; /* a headset's, last drawn */
+	mat4 eye_view[2];
+	float eye_tan[2][4]; /* left, right, down, up */
+} SharedView;
+static SharedView shared = {.head_view = {{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}}, .aspect = 16.0f / 9.0f};
+static SDL_mutex *shared_lock;
+
+static void get_shared(SharedView *out)
+{
+	if (shared_lock)
+		SDL_LockMutex(shared_lock);
+	*out = shared;
+	if (shared_lock)
+		SDL_UnlockMutex(shared_lock);
+}
 
 /* Panel corners in view space: top left, top right, bottom left, bottom right */
 static float panel[4][3];
@@ -238,12 +266,48 @@ static void build_panel(void)
 	}
 }
 
-bool cockpit_begin_frame(int window_w, int window_h)
+bool cockpit_game_frame(void)
+{
+	game_active = cockpit_enabled && use_renderer != R_OLD && game_screen() == SCREEN_FLIGHT &&
+				  game_flight_view() == VIEW_FRONT && !freecam_active();
+	return game_active;
+}
+
+static void publish_view(void)
+{
+	SharedView v;
+	v.active = active;
+	v.head_view = head_view;
+	memcpy(v.eye, eye, sizeof v.eye);
+	v.aspect = aspect;
+	v.n_eyes = headset_eyes ? 2 : 0;
+	for (int i = 0; i < v.n_eyes; i++)
+	{
+		headset_view(&hs_eyes[i], &v.eye_view[i], NULL);
+		v.eye_tan[i][0] = hs_eyes[i].tan_left;
+		v.eye_tan[i][1] = hs_eyes[i].tan_right;
+		v.eye_tan[i][2] = hs_eyes[i].tan_down;
+		v.eye_tan[i][3] = hs_eyes[i].tan_up;
+	}
+	if (shared_lock)
+		SDL_LockMutex(shared_lock);
+	shared = v;
+	if (shared_lock)
+		SDL_UnlockMutex(shared_lock);
+}
+
+bool cockpit_shown(void)
+{
+	SharedView v;
+	get_shared(&v);
+	return v.active;
+}
+
+bool cockpit_begin_frame(int window_w, int window_h, bool cockpit)
 {
 	update_tracker();
 
-	active = cockpit_enabled && use_renderer != R_OLD && game_screen() == SCREEN_FLIGHT &&
-			 game_flight_view() == VIEW_FRONT && !freecam_active();
+	active = cockpit;
 	if (window_w > 0 && window_h > 0)
 		aspect = (float)window_w / (float)window_h;
 
@@ -261,6 +325,7 @@ bool cockpit_begin_frame(int window_w, int window_h)
 	}
 
 	build_panel();
+	publish_view();
 	return active;
 }
 
@@ -369,6 +434,9 @@ static const char *FS_QUAD = "in vec2 vUV;\n"
 
 void cockpit_init(void)
 {
+	if (!shared_lock)
+		shared_lock = SDL_CreateMutex();
+	build_panel();
 	static const char *const attribs[] = {"aPos", "aUV"};
 	prog = gd_build_program(VS_QUAD, FS_QUAD, attribs, 2);
 	u_tex = glGetUniformLocation(prog, "uTex");
@@ -514,18 +582,17 @@ static void choose_passes(void)
 {
 	if (!passes_built)
 		build_passes();
+	SharedView sv;
+	get_shared(&sv);
 	bool want[COCKPIT_MAX_PASSES] = {false};
 	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f) * 1.1f;
-	sample_view(&head_view, -aspect * t, aspect * t, -t, t, want);
-	if (headset_eyes)
-		for (int i = 0; i < 2; i++)
-		{
-			const float m = 1.25f;
-			const VrView *v = &hs_eyes[i];
-			mat4 V;
-			headset_view(v, &V, NULL);
-			sample_view(&V, v->tan_left * m, v->tan_right * m, v->tan_down * m, v->tan_up * m, want);
-		}
+	sample_view(&sv.head_view, -sv.aspect * t, sv.aspect * t, -t, t, want);
+	for (int i = 0; i < sv.n_eyes; i++)
+	{
+		const float m = 1.25f;
+		const float *e = sv.eye_tan[i];
+		sample_view(&sv.eye_view[i], e[0] * m, e[1] * m, e[2] * m, e[3] * m, want);
+	}
 	n_pass_order = 0;
 	for (int k = 1; k < COCKPIT_MAX_PASSES; k++)
 		if (want[k])
@@ -568,7 +635,7 @@ void Call_CockpitPass(void)
 	{
 		pass_step = 0;
 		n_pass_order = 0;
-		if (active && scene_active())
+		if (game_active && scene_active())
 			choose_passes();
 		/* the game draws some things differently for the passes
 		 * (Lcockpit_passes in fe2.s) */
@@ -787,15 +854,18 @@ void cockpit_pass_draw_end(void)
  * ========================================================================= */
 bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 {
-	if (!active || screen_w <= 0 || screen_h <= 0)
+	SharedView sv;
+	get_shared(&sv);
+	if (!sv.active || screen_w <= 0 || screen_h <= 0)
 		return false;
+	const float *eye = sv.eye;
 
 	/* the ray through the pixel, in view space */
 	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
 	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
 	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
-	float e[3] = {nx * aspect * t, ny * t, -1.0f}, d[3];
-	eye_to_view_of(&head_view, e, d);
+	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3];
+	eye_to_view_of(&sv.head_view, e, d);
 
 	/* the panel, from the eye's position */
 	float u_axis[3], v_axis[3], n[3], to[3];

@@ -55,6 +55,11 @@ extern int mouse_shown; /* set by the game when the pointer should show */
 
 void Screen_Init(void);
 void Screen_UnInit(void);
+/* Stops the render thread, if any (see "Frames" in gl_screen.c); before
+ * SDL_Quit when quitting in a hurry */
+void Screen_StopRenderThread(void);
+/* Draw on a thread of its own (default where there are threads) */
+extern bool render_thread_enabled;
 void Screen_ToggleFullScreen(void);
 void Screen_SetLetterboxMode(bool keep_aspect);
 bool Screen_GetLetterboxMode(void);

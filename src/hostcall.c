@@ -39,9 +39,11 @@ static void Call_HostUpdate(void)
 	freecam_update();
 }
 
+/* The game waiting for its next 20 ms tick: sleep rather than spin (a
+ * spinning CPU takes power the GPU of a laptop's APU could use) */
 static void Call_Idle(void)
 {
-	SDL_Delay(0);
+	SDL_Delay(1);
 }
 
 /* The game used to warp the ST mouse pointer here; the host pointer is

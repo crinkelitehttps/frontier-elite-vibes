@@ -229,6 +229,7 @@ void Main_EventHandler(void)
 		{
 		case SDL_QUIT:
 			bQuitProgram = TRUE;
+			Screen_StopRenderThread();
 			SDL_Quit();
 			exit(0);
 			break;

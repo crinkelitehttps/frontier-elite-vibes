@@ -34,6 +34,7 @@ void ShortCut_CheckKeys(void)
 		break;
 	case SDLK_q:
 		bQuitProgram = TRUE;
+		Screen_StopRenderThread();
 		SDL_Quit();
 		exit(0);
 	case SDLK_d:

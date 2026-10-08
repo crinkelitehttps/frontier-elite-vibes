@@ -2,9 +2,11 @@
  * gl_screen.c - OpenGL 3.3 / GLES 3.0 front end of the renderer.
  *
  * Owns the window and GL context, the letterboxed layout, the 320x200
- * emulated screen (2D UI, text, control panel) and the per-frame sequence in
- * Nu_DrawScreen. The 3D view itself is recorded by gl_scene / gl_prims /
- * gl_planet and drawn through the gl_draw batch.
+ * emulated screen (2D UI, text, control panel), the hand over of the frames
+ * the game flips (Nu_DrawScreen) to the render thread that draws them (see
+ * "Frames" below) and what is drawn per picture. The 3D view itself is
+ * recorded by gl_scene / gl_prims / gl_planet and drawn through the gl_draw
+ * batch.
  *
  * Frame layout (bottom to top):
  *   1. 3D view        scene_draw() into GD_VP_VIEW3D
@@ -17,6 +19,8 @@
  * once per eye, anything else on its virtual screen. The window follows,
  * as without one (the cockpit turned by the headset).
  */
+#include <stdlib.h>
+
 #include <SDL.h>
 
 #include "gl_api.h"
@@ -132,7 +136,7 @@ int Screen_GetGameOffsetY(void)
 }
 bool Screen_WindowToGame(int wx, int wy, int *gx, int *gy)
 {
-	if (cockpit_active())
+	if (cockpit_shown())
 		return cockpit_window_to_screen(wx, wy, gx, gy);
 	if (lb_w <= 0 || lb_h <= 0)
 		return false;
@@ -276,6 +280,40 @@ static GLuint blit_prog, blit_vao, blit_vbo, screen_tex;
 static GLint u_blit_tex, u_blit_discard;
 static uint32_t framebuf[SCR_W * SCR_H];
 
+/* What the drawing needs of a frame the game finished, besides its 3D
+ * scene (gl_scene.c): its screen and palettes, as they were at the flip.
+ * The game fills `scr_pub`; drawing takes it into `scr_show`. */
+typedef struct
+{
+	uint8_t screen[SCR_W * SCR_H];
+	unsigned int main_rgb[256];
+	unsigned int ctrl_rgb[16];
+	int bgcol;
+	int renderer; /* enum RENDERERS */
+	bool cockpit;
+	bool mouse_shown;
+} ScreenFrame;
+static ScreenFrame scr_pub, scr_show;
+
+/* The render thread and the hand over of frames, see "Frames" below */
+#if defined(__EMSCRIPTEN__) || defined(ANDROID)
+#define USE_RENDER_THREAD 0
+#else
+#define USE_RENDER_THREAD 1
+#endif
+
+bool render_thread_enabled = USE_RENDER_THREAD;
+
+static SDL_mutex *frame_lock;  /* scr_pub and the scene's published copy */
+static bool frame_new;         /* published since the drawing last took one */
+
+static SDL_Thread *render_thread;
+static SDL_mutex *ctx_lock;     /* the fields below */
+static SDL_cond *ctx_cond;
+static bool ctx_on_render;      /* the render thread has (or is to take) the context */
+static bool render_parked;      /* it has let go of it and waits */
+static bool render_quit;
+
 static const char *VS_BLIT = "in vec2 aPos;\n"
 							 "in vec2 aUV;\n"
 							 "out vec2 vUV;\n"
@@ -342,7 +380,7 @@ static void draw_pointer(void)
 	};
 	int gx, gy;
 	if (!Input_PadPointer(&gx, &gy) &&
-		!(vr_pointer && mouse_shown && Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
+		!(vr_pointer && scr_show.mouse_shown && Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
 		return;
 	for (int j = 0; j < (int)(sizeof ARROW / sizeof ARROW[0]); j++)
 		for (int i = 0; ARROW[j][i]; i++)
@@ -356,10 +394,10 @@ static void draw_pointer(void)
 
 void gl_screen_upload(void)
 {
-	const uint8_t *src = VideoRaster;
+	const uint8_t *src = scr_show.screen;
 	for (int y = 0; y < SCR_H; y++)
 	{
-		const unsigned int *pal = (y < 168) ? MainRGBPalette : CtrlRGBPalette;
+		const unsigned int *pal = (y < 168) ? scr_show.main_rgb : scr_show.ctrl_rgb;
 		const uint8_t *row = src + y * SCR_W;
 		uint32_t *out = framebuf + y * SCR_W;
 		for (int x = 0; x < SCR_W; x++)
@@ -399,6 +437,12 @@ static void screen_blit_pass(const void *data)
  * ========================================================================= */
 void Screen_Init(void)
 {
+	frame_lock = SDL_CreateMutex();
+	ctx_lock = SDL_CreateMutex();
+	ctx_cond = SDL_CreateCond();
+	const char *rt = SDL_getenv("GLF_RENDER_THREAD"); /* 0: draw with the game, as before */
+	if (rt && !atoi(rt))
+		render_thread_enabled = false;
 	create_window();
 	Screen_SyncSize();
 	update_letterbox();
@@ -423,6 +467,7 @@ void Screen_Init(void)
 
 void Screen_UnInit(void)
 {
+	Screen_StopRenderThread();
 	vr_shutdown();
 	ui_shutdown();
 	cockpit_shutdown();
@@ -476,6 +521,7 @@ void Nu_InsertZNode(void)
 	{
 		soft->node = (uint32_t)GetReg(REG_A1);
 		soft->band = -1;
+		soft->shell = -1;
 	}
 }
 
@@ -558,8 +604,8 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	glStencilMask(0xff);
 	glClearStencil(0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-	if (use_renderer != R_GLWIRE)
-		clear_rect(rects[GD_VP_GAME], MainRGBPalette[fe2_bgcol]);
+	if (scr_show.renderer != R_GLWIRE)
+		clear_rect(rects[GD_VP_GAME], scr_show.main_rgb[scr_show.bgcol & 0xff]);
 
 	gd_begin_frame(rects);
 
@@ -568,7 +614,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 						 : mat4_perspective(CLASSIC_FOV, CLASSIC_ASPECT, 1.0f, 10000000000.0f);
 	gd_set_viewport(GD_VP_VIEW3D);
 	gd_set_projection(&persp);
-	gd_set_wireframe(use_renderer == R_GLWIRE);
+	gd_set_wireframe(scr_show.renderer == R_GLWIRE);
 	scene_draw();
 	gl_prims_finish();
 	gd_set_wireframe(false);
@@ -589,7 +635,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 
 		BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
 		if (blit)
-			blit->transparent = (use_renderer != R_OLD);
+			blit->transparent = (scr_show.renderer != R_OLD);
 	}
 
 	/* 3. overlays */
@@ -599,24 +645,18 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gd_flush();
 }
 
-/* The headset paces the frames while it runs: the window must not wait
- * for its own vsync as well */
+/* The window waits for its vsync, which paces the drawing, except while
+ * a headset runs: then the headset paces it and the window must not wait
+ * as well */
 static void update_swap_interval(bool vr)
 {
-	static bool was_vr;
-	static int saved = 1;
-	if (vr == was_vr)
+	static int current = -1;
+	int want = vr ? 0 : 1;
+	if (want == current)
 		return;
-	if (vr)
-	{
-		saved = SDL_GL_GetSwapInterval();
-		SDL_GL_SetSwapInterval(0);
-	}
-	else
-	{
-		SDL_GL_SetSwapInterval(saved);
-	}
-	was_vr = vr;
+	if (SDL_GL_SetSwapInterval(want) != 0 && want == 1)
+		log_printf("No vsync for the window: %s\n", SDL_GetError());
+	current = want;
 }
 
 /* The frame for the headset, if it wants one: the cockpit per eye, or
@@ -629,7 +669,7 @@ static bool draw_vr(void)
 	if (!vr_running())
 	{
 		cockpit_set_headset(NULL, NULL);
-		return cockpit_begin_frame(screen_w, screen_h);
+		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
 	}
 
 	bool render = vr_begin_frame();
@@ -646,7 +686,7 @@ static bool draw_vr(void)
 	{
 		cockpit_set_headset(NULL, NULL);
 	}
-	bool cockpit = cockpit_begin_frame(screen_w, screen_h);
+	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
 
 	if (render)
 	{
@@ -677,22 +717,210 @@ static bool draw_vr(void)
 	return cockpit;
 }
 
+/* =========================================================================
+ * Frames: the game and the drawing
+ *
+ * The game draws a frame (records it, gl_scene.c) and flips it at
+ * Nu_DrawScreen, at most 50 times a second. The drawing shows the latest
+ * finished one as often as the display (the window's vsync, or a VR
+ * headset) wants a picture, each time with the newest head pose, so
+ * looking around is as smooth as the display allows and the game never
+ * waits for the drawing.
+ *
+ * The drawing runs on a thread of its own (the render thread), which owns
+ * the GL context. The game, the window and SDL's events stay on the main
+ * thread. While the menu (or the galaxy atlas, or the free camera's help)
+ * is open, the render thread hands the context back and the game draws
+ * each frame itself as it flips, with the menu on top, as it always did:
+ * the menu works on the game's memory and the window, which only the main
+ * thread may touch. Without threads (the web build, Android) it always
+ * draws that way.
+ * ========================================================================= */
+static SDL_atomic_t published; /* frames, for GLF_FRAME_LOG */
+
+/* Game thread: makes the frame the game just flipped the latest */
+static void publish_frame(void)
+{
+	scr_pub.cockpit = cockpit_game_frame();
+	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
+	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
+	scr_pub.bgcol = fe2_bgcol;
+	scr_pub.renderer = use_renderer;
+	scr_pub.mouse_shown = mouse_shown != 0;
+
+	SDL_LockMutex(frame_lock);
+	memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+	scene_publish();
+	frame_new = true;
+	SDL_UnlockMutex(frame_lock);
+	SDL_AtomicIncRef(&published);
+}
+
+/* Whoever draws: takes the latest frame, if there is a new one */
+static bool acquire_frame(void)
+{
+	SDL_LockMutex(frame_lock);
+	bool got = frame_new;
+	if (frame_new)
+	{
+		scr_show = scr_pub;
+		scene_acquire();
+		frame_new = false;
+	}
+	SDL_UnlockMutex(frame_lock);
+	return got;
+}
+
+/* GLF_FRAME_LOG=1: pictures drawn and game frames per second, every two
+ * seconds */
+static void log_rates(bool new_frame)
+{
+	static int log = -1, pictures, frames;
+	static Uint32 since;
+	if (log < 0)
+		log = SDL_getenv("GLF_FRAME_LOG") != NULL;
+	if (!log)
+		return;
+	pictures++;
+	frames += new_frame;
+	Uint32 now = SDL_GetTicks();
+	if (now - since >= 2000)
+	{
+		if (since)
+			log_printf("frames: %.1f pictures/s, %.1f game frames/s (%.1f shown)\n",
+					   pictures * 1000.0f / (now - since), SDL_AtomicGet(&published) * 1000.0f / (now - since),
+					   frames * 1000.0f / (now - since));
+		SDL_AtomicSet(&published, 0);
+		pictures = frames = 0;
+		since = now;
+	}
+}
+
+/* One picture: the headset's (if any), then the window's */
+static void draw_picture(bool with_menu)
+{
+	log_rates(acquire_frame());
+	bool cockpit = draw_vr();
+	draw_frame(screen_w, screen_h, cockpit, true);
+	if (with_menu)
+		ui_render(); /* 4. emulator menu */
+	SDL_GL_SwapWindow(window);
+}
+
+static int render_main(void *arg)
+{
+	(void)arg;
+	SDL_LockMutex(ctx_lock);
+	for (;;)
+	{
+		while (!ctx_on_render && !render_quit)
+		{
+			render_parked = true;
+			SDL_CondBroadcast(ctx_cond);
+			SDL_CondWait(ctx_cond, ctx_lock);
+		}
+		if (render_quit)
+			break;
+		if (render_parked)
+		{
+			render_parked = false;
+			SDL_GL_MakeCurrent(window, gl_context);
+		}
+		SDL_UnlockMutex(ctx_lock);
+
+		Uint64 t0 = SDL_GetPerformanceCounter();
+		draw_picture(false);
+		/* no vsync (and no headset): don't draw much faster than a fast
+		 * display would show */
+		if (!vr_running() && SDL_GL_GetSwapInterval() == 0)
+		{
+			double ms = (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency();
+			if (ms < 4.0)
+				SDL_Delay((Uint32)(4.0 - ms) + 1);
+		}
+
+		SDL_LockMutex(ctx_lock);
+		if (!ctx_on_render || render_quit)
+			SDL_GL_MakeCurrent(window, NULL);
+	}
+	render_parked = true;
+	SDL_CondBroadcast(ctx_cond);
+	SDL_UnlockMutex(ctx_lock);
+	return 0;
+}
+
+/* Main thread: the context to the render thread (starting it), or back */
+static void context_to_render(void)
+{
+	if (!render_thread)
+	{
+		SDL_GL_MakeCurrent(window, NULL);
+		ctx_on_render = true;
+		render_parked = true;
+		render_thread = SDL_CreateThread(render_main, "render", NULL);
+		if (!render_thread)
+		{
+			log_printf("No render thread (%s): drawing with the game\n", SDL_GetError());
+			ctx_on_render = false;
+			render_thread_enabled = false;
+			SDL_GL_MakeCurrent(window, gl_context);
+		}
+		return;
+	}
+	SDL_LockMutex(ctx_lock);
+	if (!ctx_on_render)
+	{
+		SDL_GL_MakeCurrent(window, NULL);
+		ctx_on_render = true;
+		SDL_CondBroadcast(ctx_cond);
+	}
+	SDL_UnlockMutex(ctx_lock);
+}
+
+static void context_to_main(void)
+{
+	if (!render_thread)
+		return;
+	SDL_LockMutex(ctx_lock);
+	if (ctx_on_render)
+	{
+		ctx_on_render = false;
+		SDL_CondBroadcast(ctx_cond);
+		while (!render_parked)
+			SDL_CondWait(ctx_cond, ctx_lock);
+		SDL_GL_MakeCurrent(window, gl_context);
+	}
+	SDL_UnlockMutex(ctx_lock);
+}
+
+void Screen_StopRenderThread(void)
+{
+	if (!render_thread)
+		return;
+	context_to_main();
+	SDL_LockMutex(ctx_lock);
+	render_quit = true;
+	SDL_CondBroadcast(ctx_cond);
+	SDL_UnlockMutex(ctx_lock);
+	SDL_WaitThread(render_thread, NULL);
+	render_thread = NULL;
+}
+
 void Nu_DrawScreen(void)
 {
-	build_rgb_palette(MainRGBPalette, MainPalette, len_main_palette);
-	build_rgb_palette(CtrlRGBPalette, CtrlPalette, 16);
-
 	Screen_SyncSize(); /* a DPI change (browser zoom, other monitor) may come without a resize event */
 
 	/* the text the game queued during the frame, into the emulated screen */
 	screen_text_draw_queue();
 
-	bool cockpit = draw_vr();
-	draw_frame(screen_w, screen_h, cockpit, true);
-
-	/* 4. emulator menu */
-	ui_render();
-
+	publish_frame();
 	update_cursor();
-	SDL_GL_SwapWindow(window);
+
+	if (render_thread_enabled && !ui_visible())
+	{
+		context_to_render();
+		return;
+	}
+	context_to_main();
+	draw_picture(true);
 }

@@ -129,7 +129,7 @@ typedef struct
 {
 	uint32_t node;       /* address in emulated RAM */
 	int32_t band;        /* the copy, -1 if none */
-	const void *shell;   /* its 3D version (gl_atmos.c), if any */
+	int32_t shell;       /* its 3D version (gl_atmos.c), -1 if none */
 } SoftNode;
 /* The current node's soft node, NULL if it has none */
 SoftNode *scene_current_soft_node(void);
@@ -137,9 +137,20 @@ SoftNode *scene_current_soft_node(void);
 void scene_capture_soft_nodes(void);
 void soft_node_capture(SoftNode *s); /* gl_atmos.c */
 void soft_nodes_reset(void);         /* gl_atmos.c, with scene_reset */
+void atmos_publish(void);            /* gl_atmos.c, with scene_publish */
+void atmos_acquire(void);            /* gl_atmos.c, with scene_acquire */
+
+/* ---- hand over --------------------------------------------------------- *
+ * The game records a frame while the last one it finished is drawn (on the
+ * render thread, gl_screen.c). scene_publish (game thread, at the end of
+ * the frame) makes the recorded frame the latest; scene_acquire (whoever
+ * draws) takes the latest to draw. gl_screen.c holds a lock around both. */
+void scene_publish(void);
+void scene_acquire(void);
 
 /* ---- replay (called from Nu_DrawScreen) -------------------------------- */
-/* Pass 0, then the further passes (each set up by cockpit_pass_draw_begin) */
+/* The acquired frame: pass 0, then the further passes (each set up by
+ * cockpit_pass_draw_begin) */
 void scene_draw(void);
 
 #endif /* GL_SCENE_H */

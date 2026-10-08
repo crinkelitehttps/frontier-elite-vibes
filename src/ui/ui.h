@@ -26,6 +26,9 @@ bool ui_handle_event(const SDL_Event *event);
 
 /* Draws the menu, if it is open, on top of the current frame. */
 void ui_render(void);
+/* Whether ui_render has anything to draw (the menu, the galaxy atlas or
+ * the free camera's help) */
+bool ui_visible(void);
 
 #ifdef __cplusplus
 }

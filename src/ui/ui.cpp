@@ -181,9 +181,14 @@ static void touch_drag_scroll(void)
 		ImGui::SetScrollX(target, target->Scroll.x - io.MouseDelta.x);
 }
 
+extern "C" bool ui_visible(void)
+{
+	return initialised && (toggle_m68k_menu || ui_galaxy_open() || (freecam_active() && freecam_show_help));
+}
+
 extern "C" void ui_render(void)
 {
-	if (!initialised || (!toggle_m68k_menu && !ui_galaxy_open() && !(freecam_active() && freecam_show_help)))
+	if (!ui_visible())
 		return;
 
 	update_style();

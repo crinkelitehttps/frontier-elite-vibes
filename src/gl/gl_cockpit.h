@@ -70,11 +70,18 @@ extern int headtrack_port;
 void cockpit_init(void);
 void cockpit_shutdown(void);
 
-/* Once per frame, before drawing: polls the head tracker and decides
- * whether this frame is drawn as the cockpit. */
-bool cockpit_begin_frame(int window_w, int window_h);
-/* What the last cockpit_begin_frame decided */
+/* Game thread, at the end of each frame the game draws: whether it is
+ * drawn as the cockpit (and the next one gets the turned passes) */
+bool cockpit_game_frame(void);
+
+/* Once per drawing, before it: polls the head tracker and sets up the
+ * view for a frame the game drew as the cockpit (`cockpit`) or not.
+ * Returns `cockpit`. */
+bool cockpit_begin_frame(int window_w, int window_h, bool cockpit);
+/* What the last cockpit_begin_frame was told */
 bool cockpit_active(void);
+/* Whether the frame last shown is the cockpit; any thread */
+bool cockpit_shown(void);
 
 /* A VR headset (vr.h), before cockpit_begin_frame: this frame's head pose
  * is `centre`'s instead of the head tracker's, and the turned passes
