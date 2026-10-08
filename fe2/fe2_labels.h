@@ -368,5 +368,6 @@
 #define FE2_Lstrafe_manual                           0xa905c /* Lstrafe_manual */
 #define FE2_Lcockpit_sky                             0xa908e /* Lcockpit_sky */
 #define FE2_Lcockpit_vertex_d                        0xa90ac /* Lcockpit_vertex_d */
+#define FE2_Lnative_object                           0xa90c4 /* Lnative_object */
 
 #endif /* FE2_LABELS_H */

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "gl_cockpit.h"
+#include "gl_native.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
 #include "main.h"
@@ -102,6 +103,7 @@ bool scene_active(void)
  * ========================================================================= */
 void scene_reset(void)
 {
+	native_reset();
 	rec.data_pos = 0;
 	rec.n_nodes = 0;
 	cur_node = -1;
@@ -303,12 +305,14 @@ void scene_publish(void)
 	scene_capture_soft_nodes();
 	copy_scene(&pub, &rec);
 	atmos_publish();
+	native_publish();
 }
 
 void scene_acquire(void)
 {
 	copy_scene(&show, &pub);
 	atmos_acquire();
+	native_acquire();
 	gl_prims_new_scene();
 }
 

@@ -75,6 +75,8 @@ Call_Strafe		equ	$7e
 Call_CockpitSky		equ	$7f
 * Cockpit view: a type $d/$e vertex in a turned pass (src/gl/gl_cockpit.c)
 Call_CockpitVertexD	equ	$80
+* Native scene: an object's pose (src/gl/gl_native.cpp)
+Nu_NativeObject		equ	$81
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -10952,8 +10954,10 @@ L39290:
 		movem.w	d4-6,-24(a6)
 
 L393de:
-		clr.w	-64(a6)
-		bsr.w	L39546_CalcRotViewNLight
+* Native scene: hook, same size as the code it replaced (8 bytes). See
+* Lnative_object at the end of the file.
+		jsr	Lnative_object
+		nop
 		bsr.w	L3e14e_SetupNProjectObj
 		tst.w	L385e4_3dview_word1
 		beq.w	l394ae
@@ -66483,3 +66487,16 @@ lcockpit_vertex_d_min:
 		hcall	#Call_CockpitVertexD
 lcockpit_vertex_d_done:
 		rts
+
+******************************************************************************
+* Native scene: every object the game draws, with its pose.
+*
+* At L393de (in L390f2) an object's view position (A6-16), its model -> view
+* matrix (A6-36) and its scale (A6-208) are ready, and the object is at
+* A6-212. The host keeps them to draw the object itself (src/gl/gl_native.cpp).
+* In place of "clr.w -64(a6) / bsr.w L39546_CalcRotViewNLight".
+******************************************************************************
+Lnative_object:
+		clr.w	-64(a6)
+		hcall	#Nu_NativeObject
+		jmp	L39546_CalcRotViewNLight

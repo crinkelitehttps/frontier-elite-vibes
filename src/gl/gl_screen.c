@@ -25,6 +25,7 @@
 
 #include "gl_api.h"
 #include "gl_cockpit.h"
+#include "gl_native.h"
 #include "gl_draw.h"
 #include "gl_overlay.h"
 #include "gl_planet.h"
@@ -617,6 +618,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gd_set_wireframe(scr_show.renderer == R_GLWIRE);
 	scene_draw();
 	gl_prims_finish();
+	native_draw();
 	gd_set_wireframe(false);
 
 	/* 2. emulated screen */

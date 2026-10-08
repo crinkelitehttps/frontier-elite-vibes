@@ -11,8 +11,11 @@
 #include <cstdio>
 #include <cstring>
 
+/* The game (src/gl/gl_native.cpp) builds the image from its own memory */
+#ifndef FE2CORE_EXTERNAL_IMAGE
 #include "fe2_bin.h"
 #include "fe2_labels.h"
+#endif
 
 namespace fe2
 {
@@ -45,6 +48,7 @@ Vec3 newell(const std::vector<Vec3> &pts)
 /* Image                                                                    */
 /* ======================================================================== */
 
+#ifndef FE2CORE_EXTERNAL_IMAGE
 const Image &Image::game()
 {
 	static Image img;
@@ -69,6 +73,7 @@ const Image &Image::game()
 	}
 	return img;
 }
+#endif
 
 Image Image::with_models(const std::vector<std::pair<int, std::vector<uint8_t>>> &models) const
 {

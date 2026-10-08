@@ -13,6 +13,7 @@
 #include "audio.h"
 #include "freecam.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_native.h"
 #include "host.h"
 #include "hostcall.h"
 #include "input.h"
@@ -146,5 +147,6 @@ HOSTCALL hcalls[] = {
 	[0x7e] = Call_Strafe,
 	[0x7f] = Call_CockpitSky,
 	[0x80] = Call_CockpitVertexD,
+	[0x81] = Nu_NativeObject,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

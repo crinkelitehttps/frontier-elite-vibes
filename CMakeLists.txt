@@ -372,12 +372,19 @@ if(WIN32)
     list(APPEND PROJECT_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/glfrontier.rc")
 endif()
 
+# The native scene (src/gl/gl_native.cpp) reads the game's models with the
+# ship builder's decoder, run on the game's own memory
+set(FE2CORE_CPP "${CMAKE_CURRENT_LIST_DIR}/tools/fe2ShipBuilder/fe2core.cpp")
+list(APPEND PROJECT_SOURCES "${FE2CORE_CPP}")
+set_source_files_properties("${FE2CORE_CPP}" PROPERTIES COMPILE_DEFINITIONS FE2CORE_EXTERNAL_IMAGE)
+
 if(ANDROID)
     add_library(${PROJECT_NAME} SHARED ${PROJECT_SOURCES})
 else()
     add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 endif()
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src
+    ${CMAKE_CURRENT_LIST_DIR}/tools/fe2ShipBuilder)
 
 if(NOT MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall)
