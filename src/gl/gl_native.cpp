@@ -281,6 +281,11 @@ struct Node
 	float key; /* the game's depth key (zkey); the farthest is drawn first */
 	std::vector<Tri> tris;
 	std::vector<Seg> segs;
+	/* Keyed farther back than it is (a batch pushed back by a depth): an
+	 * underlay, ground plates, a starport's ground, cloud shadows. The game
+	 * paints these under whatever is nearer, and they need not lie under it
+	 * in 3D (a cloud's shadow hangs below the cloud, above the ground) */
+	bool under = false;
 };
 struct Drawn
 {
@@ -315,7 +320,7 @@ struct Runner
 	{
 		if (batch >= 0)
 			return out.nodes[(size_t)batch];
-		out.nodes.push_back({zkey(at), {}, {}});
+		out.nodes.push_back({zkey(at), {}, {}, false});
 		return out.nodes.back();
 	}
 
@@ -357,7 +362,8 @@ struct Runner
 		}
 		else
 			key = dist(v);
-		out.nodes.push_back({key, {}, {}});
+		bool under = v == 0x7fe || v == 0x7fd || ((v & 0x700) == 0x700 && v != 0x7ff && w.size() > 1 && (int16_t)w[1] > 0);
+		out.nodes.push_back({key, {}, {}, under});
 		batch = (int)out.nodes.size() - 1;
 	}
 
@@ -851,6 +857,23 @@ extern "C" void native_draw(void)
 		}
 		group_far = std::max(group_far, placed[i]->far);
 	}
+	/* Underlays first, all objects', farthest first, under everything */
+	std::vector<const Node *> unders;
+	for (const Drawn *d : placed)
+		for (const Node &n : d->nodes)
+			if (n.under)
+				unders.push_back(&n);
+	std::stable_sort(unders.begin(), unders.end(), [](const Node *a, const Node *b) { return a->key > b->key; });
+	for (const Node *n : unders)
+	{
+		for (const Tri &t : n->tris)
+		{
+			set_colour(t.colour);
+			gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+		}
+		draw_segs(n->segs);
+	}
+
 	float slice = groups.empty() ? 0 : 2.0f / (float)groups.size();
 	for (size_t g = groups.size(); g-- > 0;)
 	{
@@ -874,6 +897,8 @@ extern "C" void native_draw(void)
 			gd_set_depth(&depth);
 			for (const Node &n : d.nodes)
 			{
+				if (n.under)
+					continue;
 				for (const Tri &t : n.tris)
 				{
 					set_colour(t.colour);
@@ -886,8 +911,9 @@ extern "C" void native_draw(void)
 			depth.depth_only = true;
 			gd_set_depth(&depth);
 			for (const Node &n : d.nodes)
-				for (const Tri &t : n.tris)
-					gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+				if (!n.under)
+					for (const Tri &t : n.tris)
+						gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
 		}
 	}
 	gd_set_depth(nullptr);
