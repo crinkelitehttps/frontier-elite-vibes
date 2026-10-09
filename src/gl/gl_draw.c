@@ -55,7 +55,7 @@ static uint8_t cur_col[4] = {255, 255, 255, 255};
 static uint8_t cur_vp = GD_VP_VIEW3D;
 static uint8_t cur_cull;
 static uint8_t cur_blend;
-static uint8_t cur_depth;
+static uint8_t cur_depth; /* 0 off, else 1 | 2 write | 4 depth only */
 static float depth_a, depth_b; /* z_clip = a * w + b */
 static bool wireframe;
 static int vp_rects[GD_VP_COUNT][4];
@@ -244,7 +244,7 @@ bool gd_wireframe(void)
 }
 void gd_set_depth(const GdDepth *d)
 {
-	cur_depth = d != NULL;
+	cur_depth = d ? (uint8_t)(1 | (d->write ? 2 : 0) | (d->depth_only ? 4 : 0)) : 0;
 	if (!d)
 		return;
 	/* ndc(w) = lo + (hi - lo) * far * (w - near) / (w * (far - near)) - bias,
@@ -615,6 +615,9 @@ void gd_flush(void)
 					glEnable(GL_DEPTH_TEST);
 				else
 					glDisable(GL_DEPTH_TEST);
+				glDepthMask((depth & 2) ? GL_TRUE : GL_FALSE);
+				bool colour = !(depth & 4);
+				glColorMask(colour, colour, colour, colour);
 			}
 			if (c->blend != blend)
 			{
@@ -645,7 +648,12 @@ void gd_flush(void)
 			if (blend)
 				glDisable(GL_BLEND); /* custom commands start without blending */
 			if (depth)
-				glDisable(GL_DEPTH_TEST); /* or depth testing */
+			{
+				/* or depth testing */
+				glDisable(GL_DEPTH_TEST);
+				glDepthMask(GL_TRUE);
+				glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+			}
 			c->fn(custom_data + c->first);
 			/* callback may have touched any state: re-apply ours */
 			bind_flat();
@@ -661,6 +669,8 @@ void gd_flush(void)
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_BLEND);
 	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_TRUE);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	n_verts = n_cmds = 0;
 	custom_used = 0;
 }

@@ -609,7 +609,9 @@ std::string describe(const Instr &ins)
 	case 0x0D:
 	case 0x1D:
 	{
-		int fn = ((w[0] >> 4) & 15) + (op == 0x1D ? 8 : 0);
+		/* bits 4-7 (L3cc2c), the lowest being the op's own bit 4: $0d has
+		 * the even functions, $1d the odd ones */
+		int fn = (w[0] >> 4) & 15;
 		return fmt("t%d = %s(%s, %s)", (w[0] >> 8) & 7, CALC_OPS[fn & 15], param8(w[1] & 0xFF).c_str(),
 				   param8(w[1] >> 8).c_str());
 	}

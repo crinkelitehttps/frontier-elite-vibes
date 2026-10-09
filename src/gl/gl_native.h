@@ -9,10 +9,20 @@
  *     a hook at L393de in L390f2, where the object's view position and its
  *     model -> view matrix are ready), turned into the game's own camera's
  *     view space when it comes from a turned pass and kept once per object;
- *   - its model's faces come from the model decoder of the ship builder
- *     (tools/fe2ShipBuilder/fe2core.cpp, run on the game's own memory);
- *   - GLF_NATIVE_SCENE=1 draws them as a wireframe over the game's picture,
- *     to check poses and models against it.
+ *   - its model is run natively, like the game's model interpreter: the
+ *     bytecode (decoded by the ship builder's tools/fe2ShipBuilder/fe2core.cpp,
+ *     from the game's own memory) with its conditions on detail and on the
+ *     object's variables, calc ops, sub-models, colours and the game's
+ *     lighting; primitives go into the nodes of the game's depth tree;
+ *   - GLF_NATIVE_SCENE=2 draws the objects filled over the game's picture:
+ *     within an object in the game's depth-tree order (its models are made
+ *     for it), between objects with a depth buffer;
+ *   - GLF_NATIVE_SCENE=1 draws them as a wireframe instead, a colour per
+ *     object, to check against the game's picture.
+ *
+ * Not done yet: mrotate/msetup/mcopy (sub-models turned by their own
+ * matrix, e.g. turrets), vertices moved by variables (landing gear),
+ * ztree sorting within a batch.
  *
  * Placement (the game's L39722 / L3988c): view = pos + R * v * 2^s, v the
  * model's vertex (its signed bytes), R the model -> view matrix (1.15 fixed

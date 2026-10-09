@@ -68,12 +68,14 @@ bool gd_wireframe(void);
  * between view distances near and far (clip w), onto lo..hi of the NDC
  * range -1..1, minus bias: each group of objects gets its own slice with
  * tight bounds, so depth stays precise at any distance. Linear in clip
- * space, so interpolation and clipping stay exact. */
+ * space, so interpolation and clipping stay exact. Tested (LEQUAL) always;
+ * written if `write`; colour drawn unless `depth_only`. */
 typedef struct
 {
 	float near, far;
 	float lo, hi;
 	float bias;
+	bool write, depth_only;
 } GdDepth;
 void gd_set_depth(const GdDepth *d);
 
