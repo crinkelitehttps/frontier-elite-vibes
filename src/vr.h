@@ -16,7 +16,7 @@
  *
  *   Motion controllers are laser pointers (gl_laser.c): where one points,
  *   on the control panel, the HUD or the virtual screen, is the game's
- *   mouse pointer; the trigger is the left button, the grip the right.
+ *   mouse pointer. Their sticks and buttons are a gamepad (gamepad.c).
  *
  *   Linux: the runtime shares the GLX context (OpenGL swapchains).
  *   Windows: Direct3D 11 swapchains, which every Windows runtime supports;
@@ -94,13 +94,20 @@ void vr_end_frame(void);
 /* A motion controller as vr_begin_frame found it, in the play space */
 typedef struct
 {
-	bool active;   /* on, tracked and the session has the input focus */
-	float pos[3];  /* where its aim ray starts, metres */
-	float dir[3];  /* the way it points (unit) */
-	float trigger; /* 0..1 */
-	bool squeeze;  /* the grip button */
+	bool connected; /* on, and the session has the input focus: its controls */
+	bool active;    /* and tracked: its aim */
+	float pos[3];   /* where its aim ray starts, metres */
+	float dir[3];   /* the way it points (unit) */
+	float trigger;  /* 0..1 */
+	bool squeeze;   /* the grip button */
+	float stick[2]; /* thumbstick, -1..1, x right +, y up + */
+	bool stick_click;
+	float pad[2]; /* trackpad (WMR, Vive), as the stick */
+	bool pad_click;
+	bool menu;
+	bool lower, upper; /* face buttons (Touch, Index): A / X, B / Y */
 } VrHand;
-/* 0 left, 1 right. False (and out->active false) if it isn't there. */
+/* 0 left, 1 right. False (and out->connected false) if it isn't there. */
 bool vr_hand(int hand, VrHand *out);
 /* Draws over the virtual screen this frame, from each eye (call between
  * vr_acquire_screen and vr_end_frame): a framebuffer cleared to nothing,

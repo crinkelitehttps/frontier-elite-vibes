@@ -1,6 +1,6 @@
 /*
  * gamepad.c - see gamepad.h. The binding format follows the F-19 project's
- * gamepad.cfg (native/src/host/gamepad.cpp), without its VR controllers.
+ * gamepad.cfg (native/src/host/gamepad.cpp).
  */
 #include <ctype.h>
 #include <math.h>
@@ -44,6 +44,16 @@ static const char DEFAULT_CFG[] =
 	"#   half axes leftx- leftx+ lefty- lefty+ ... (- is left / up), usable as\n"
 	"#             buttons; the triggers work as buttons too\n"
 	"#\n"
+	"# VR motion controllers are read as this pad too. Left hand: thumbstick\n"
+	"# = left stick (click: leftstick), trigger = lefttrigger, grip =\n"
+	"# leftshoulder, trackpad click = the d-pad (by where it is pressed),\n"
+	"# menu = back, X / Y buttons = x / y. Right hand: thumbstick = right\n"
+	"# stick (click: rightstick), trigger = righttrigger, grip =\n"
+	"# rightshoulder, trackpad click = y / a / x / b (top, bottom, left,\n"
+	"# right), menu = start, A / B buttons = a / b. A trigger pulled with its\n"
+	"# beam on the panel or a screen, or with the grip held, is a mouse click\n"
+	"# instead.\n"
+	"#\n"
 	"# Actions:\n"
 	"#   steer-x, steer-y [invert]  the ship's steering (full axes only):\n"
 	"#                              x turns (rolls with Elite controls), y pitches\n"
@@ -61,7 +71,8 @@ static const char DEFAULT_CFG[] =
 	"#   cockpit                    cockpit view on / off (also Ctrl-K)\n"
 	"#   pointer                    a mouse pointer for the control panel and\n"
 	"#                              menus: press for it, press again to click\n"
-	"#                              there (left button) and put it away\n"
+	"#                              there (left button) and put it away (not\n"
+	"#                              with VR motion controllers: they point)\n"
 	"#   pointer-x, pointer-y [invert] move it (full axes); while it is out,\n"
 	"#                              these axes do nothing else\n"
 	"#   Key names as SDL spells them: a-z 0-9 f1-f10 = - , . / ; return space\n"
@@ -198,6 +209,10 @@ static bool pointer_on;
 static Uint64 pointer_ticks;
 
 static SDL_GameController *pad;
+/* The virtual pad: as set, and as this update reads it */
+static SDL_SpinLock virtual_lock;
+static GamepadVirtual virtual_in, vpad;
+static unsigned virtual_pressed;
 static float look[2];
 static bool steering; /* wrote steering last update */
 static int elite_saved = -1; /* the game's Elite controls option while roll / yaw force it, else -1 */
@@ -566,12 +581,37 @@ bool gamepad_handle_event(const SDL_Event *event)
 	return false;
 }
 
+void gamepad_set_virtual(const GamepadVirtual *v)
+{
+	SDL_AtomicLock(&virtual_lock);
+	virtual_pressed |= v->buttons & ~virtual_in.buttons;
+	virtual_in = *v;
+	SDL_AtomicUnlock(&virtual_lock);
+}
+
+static void take_virtual(void)
+{
+	SDL_AtomicLock(&virtual_lock);
+	vpad = virtual_in;
+	vpad.buttons |= virtual_pressed;
+	virtual_pressed = 0;
+	SDL_AtomicUnlock(&virtual_lock);
+}
+
+/* An axis, -1..1: the real pad's or the virtual one's, whichever is
+ * further over */
+static float raw_axis(int index)
+{
+	float p = pad ? SDL_GameControllerGetAxis(pad, (SDL_GameControllerAxis)index) / 32767.0f : 0.0f;
+	float v = vpad.active ? vpad.axes[index] : 0.0f;
+	v = fabsf(v) > fabsf(p) ? v : p;
+	return fmaxf(-1.0f, fminf(1.0f, v));
+}
+
 /* -1..1, with the deadzone taken out (full axes) */
 static float axis_value(const Control *c)
 {
-	float v = SDL_GameControllerGetAxis(pad, (SDL_GameControllerAxis)c->index) / 32767.0f;
-	if (v < -1.0f)
-		v = -1.0f;
+	float v = raw_axis(c->index);
 	float a = fabsf(v);
 	if (a < deadzone)
 		return 0.0f;
@@ -581,8 +621,9 @@ static float axis_value(const Control *c)
 static bool control_down(const Control *c)
 {
 	if (c->source == SRC_BUTTON)
-		return SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)c->index) != 0;
-	float v = SDL_GameControllerGetAxis(pad, (SDL_GameControllerAxis)c->index) / 32767.0f;
+		return (pad && SDL_GameControllerGetButton(pad, (SDL_GameControllerButton)c->index)) ||
+			   (vpad.active && (vpad.buttons >> c->index & 1));
+	float v = raw_axis(c->index);
 	if (c->half < 0)
 		return v < -threshold;
 	return v > threshold; /* + half, or a trigger */
@@ -690,7 +731,8 @@ void gamepad_update(void)
 	Uint64 now = SDL_GetTicks64();
 	float dt = pointer_ticks ? fminf((float)(now - pointer_ticks) / 1000.0f, 0.1f) : 0.0f;
 	pointer_ticks = now;
-	if (!pad)
+	take_virtual();
+	if (!pad && !vpad.active)
 	{
 		release_all();
 		write_steering(0, 0);
@@ -785,6 +827,8 @@ void gamepad_update(void)
 			cockpit_enabled = !cockpit_enabled;
 			break;
 		case ACT_POINTER:
+			if (vpad.active) /* the motion controllers point */
+				break;
 			if (pointer_on)
 				Input_PadPointerClick();
 			else

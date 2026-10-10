@@ -142,7 +142,9 @@ struct Vr
 	bool focused = false;
 	XrActionSet action_set = XR_NULL_HANDLE;
 	XrPath hand_paths[2] = {XR_NULL_PATH, XR_NULL_PATH};
-	XrAction aim = XR_NULL_HANDLE, trigger = XR_NULL_HANDLE, squeeze = XR_NULL_HANDLE;
+	XrAction aim = XR_NULL_HANDLE, trigger = XR_NULL_HANDLE, squeeze = XR_NULL_HANDLE, stick = XR_NULL_HANDLE,
+			 stick_click = XR_NULL_HANDLE, pad = XR_NULL_HANDLE, pad_click = XR_NULL_HANDLE, menu = XR_NULL_HANDLE,
+			 lower = XR_NULL_HANDLE, upper = XR_NULL_HANDLE;
 	XrSpace aim_space[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
 	VrHand hands[2] = {};
 	bool hand_announced[2] = {};
@@ -348,8 +350,8 @@ bool Vr::make_swapchain(Swapchain &sc, int64_t format, int w, int h)
 bool Vr::make_actions()
 {
 	XrActionSetCreateInfo asi{XR_TYPE_ACTION_SET_CREATE_INFO};
-	std::strcpy(asi.actionSetName, "pointer");
-	std::strcpy(asi.localizedActionSetName, "Pointer");
+	std::strcpy(asi.actionSetName, "controls");
+	std::strcpy(asi.localizedActionSetName, "Controls");
 	if (!check(instance, xrCreateActionSet(instance, &asi, &action_set), "xrCreateActionSet"))
 		return false;
 	xrStringToPath(instance, "/user/hand/left", &hand_paths[0]);
@@ -364,42 +366,87 @@ bool Vr::make_actions()
 		return check(instance, xrCreateAction(action_set, &ai, &a), "xrCreateAction");
 	};
 	if (!make(aim, "aim", "Pointer", XR_ACTION_TYPE_POSE_INPUT) ||
-		!make(trigger, "click", "Click (left button)", XR_ACTION_TYPE_FLOAT_INPUT) ||
-		!make(squeeze, "right_button", "Right button", XR_ACTION_TYPE_BOOLEAN_INPUT))
+		!make(trigger, "trigger", "Trigger", XR_ACTION_TYPE_FLOAT_INPUT) ||
+		!make(squeeze, "grip", "Grip", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(stick, "thumbstick", "Thumbstick", XR_ACTION_TYPE_VECTOR2F_INPUT) ||
+		!make(stick_click, "thumbstick_click", "Thumbstick click", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(pad, "trackpad", "Trackpad", XR_ACTION_TYPE_VECTOR2F_INPUT) ||
+		!make(pad_click, "trackpad_click", "Trackpad click", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(menu, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(lower, "lower_button", "Lower face button (A / X)", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(upper, "upper_button", "Upper face button (B / Y)", XR_ACTION_TYPE_BOOLEAN_INPUT))
 		return false;
 
-	/* Inputs on both hands; floats bound to buttons are thresholded by the
-	 * runtime and the other way round give 0 or 1 */
+	/* Inputs: "both/..." on either hand, "left/..." or "right/..." on one.
+	 * Floats bound to buttons are thresholded by the runtime and the other
+	 * way round give 0 or 1. */
+	struct Input
+	{
+		XrAction action;
+		const char *input;
+	};
 	struct Profile
 	{
 		const char *path;
-		const char *trigger, *squeeze;
+		std::vector<Input> inputs;
 	};
 	const Profile profiles[] = {
-		{"microsoft/motion_controller", "trigger/value", "squeeze/click"}, /* WMR */
-		{"oculus/touch_controller", "trigger/value", "squeeze/value"},
-		{"valve/index_controller", "trigger/value", "squeeze/value"},
-		{"htc/vive_controller", "trigger/value", "squeeze/click"},
-		{"khr/simple_controller", "select/click", nullptr},
+		{"microsoft/motion_controller", /* WMR */
+		 {{aim, "both/aim/pose"},
+		  {trigger, "both/trigger/value"},
+		  {squeeze, "both/squeeze/click"},
+		  {stick, "both/thumbstick"},
+		  {stick_click, "both/thumbstick/click"},
+		  {pad, "both/trackpad"},
+		  {pad_click, "both/trackpad/click"},
+		  {menu, "both/menu/click"}}},
+		{"oculus/touch_controller", /* no right menu (the system button) */
+		 {{aim, "both/aim/pose"},
+		  {trigger, "both/trigger/value"},
+		  {squeeze, "both/squeeze/value"},
+		  {stick, "both/thumbstick"},
+		  {stick_click, "both/thumbstick/click"},
+		  {menu, "left/menu/click"},
+		  {lower, "left/x/click"},
+		  {upper, "left/y/click"},
+		  {lower, "right/a/click"},
+		  {upper, "right/b/click"}}},
+		{"valve/index_controller", /* no menu */
+		 {{aim, "both/aim/pose"},
+		  {trigger, "both/trigger/value"},
+		  {squeeze, "both/squeeze/value"},
+		  {stick, "both/thumbstick"},
+		  {stick_click, "both/thumbstick/click"},
+		  {lower, "both/a/click"},
+		  {upper, "both/b/click"}}},
+		{"htc/vive_controller", /* no thumbstick */
+		 {{aim, "both/aim/pose"},
+		  {trigger, "both/trigger/value"},
+		  {squeeze, "both/squeeze/click"},
+		  {pad, "both/trackpad"},
+		  {pad_click, "both/trackpad/click"},
+		  {menu, "both/menu/click"}}},
+		{"khr/simple_controller",
+		 {{aim, "both/aim/pose"}, {trigger, "both/select/click"}, {menu, "both/menu/click"}}},
 	};
 	int suggested = 0;
 	for (const Profile &prof : profiles)
 	{
 		std::vector<XrActionSuggestedBinding> sb;
-		for (const char *hand : {"left", "right"})
+		for (const Input &in : prof.inputs)
 		{
-			auto add = [&](XrAction a, const char *input) {
-				if (!input)
-					return;
+			const char *slash = std::strchr(in.input, '/');
+			bool both = !std::strncmp(in.input, "both/", 5);
+			for (const char *hand : {"left", "right"})
+			{
+				if (!both && std::strncmp(in.input, hand, std::strlen(hand)))
+					continue;
 				char path[128];
-				snprintf(path, sizeof path, "/user/hand/%s/input/%s", hand, input);
+				snprintf(path, sizeof path, "/user/hand/%s/input/%s", hand, slash + 1);
 				XrPath xp;
 				xrStringToPath(instance, path, &xp);
-				sb.push_back({a, xp});
-			};
-			add(aim, "aim/pose");
-			add(trigger, prof.trigger);
-			add(squeeze, prof.squeeze);
+				sb.push_back({in.action, xp});
+			}
 		}
 		XrInteractionProfileSuggestedBinding isb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
 		char path[128];
@@ -442,6 +489,43 @@ void Vr::read_hands()
 			for (int i = 0; i < 2; i++)
 			{
 				VrHand &h = hands[i];
+				XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
+				gi.subactionPath = hand_paths[i];
+				auto get_bool = [&](XrAction a, bool &v) {
+					gi.action = a;
+					XrActionStateBoolean st{XR_TYPE_ACTION_STATE_BOOLEAN};
+					if (XR_SUCCEEDED(xrGetActionStateBoolean(session, &gi, &st)) && st.isActive)
+					{
+						v = st.currentState;
+						h.connected = true;
+					}
+				};
+				auto get_vec = [&](XrAction a, float *v) {
+					gi.action = a;
+					XrActionStateVector2f st{XR_TYPE_ACTION_STATE_VECTOR2F};
+					if (XR_SUCCEEDED(xrGetActionStateVector2f(session, &gi, &st)) && st.isActive)
+					{
+						v[0] = st.currentState.x;
+						v[1] = st.currentState.y;
+						h.connected = true;
+					}
+				};
+				gi.action = trigger;
+				XrActionStateFloat tr{XR_TYPE_ACTION_STATE_FLOAT};
+				if (XR_SUCCEEDED(xrGetActionStateFloat(session, &gi, &tr)) && tr.isActive)
+				{
+					h.trigger = tr.currentState;
+					h.connected = true;
+				}
+				get_bool(squeeze, h.squeeze);
+				get_vec(stick, h.stick);
+				get_bool(stick_click, h.stick_click);
+				get_vec(pad, h.pad);
+				get_bool(pad_click, h.pad_click);
+				get_bool(menu, h.menu);
+				get_bool(lower, h.lower);
+				get_bool(upper, h.upper);
+
 				XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
 				const XrSpaceLocationFlags valid =
 					XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
@@ -457,23 +541,13 @@ void Vr::read_hands()
 				h.dir[1] = -2 * (q.y * q.z - q.x * q.w);
 				h.dir[2] = -(1 - 2 * (q.x * q.x + q.y * q.y));
 				h.active = std::isfinite(h.pos[0] + h.pos[1] + h.pos[2] + h.dir[0] + h.dir[1] + h.dir[2]);
-				XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
-				gi.subactionPath = hand_paths[i];
-				gi.action = trigger;
-				XrActionStateFloat tr{XR_TYPE_ACTION_STATE_FLOAT};
-				if (XR_SUCCEEDED(xrGetActionStateFloat(session, &gi, &tr)) && tr.isActive)
-					h.trigger = tr.currentState;
-				gi.action = squeeze;
-				XrActionStateBoolean sq{XR_TYPE_ACTION_STATE_BOOLEAN};
-				if (XR_SUCCEEDED(xrGetActionStateBoolean(session, &gi, &sq)) && sq.isActive)
-					h.squeeze = sq.currentState;
 			}
 	}
 	for (int i = 0; i < 2; i++)
-		if (hands[i].active != hand_announced[i])
+		if (hands[i].connected != hand_announced[i])
 		{
-			log_printf("openxr: %s controller %s\n", i ? "right" : "left", hands[i].active ? "active" : "gone");
-			hand_announced[i] = hands[i].active;
+			log_printf("openxr: %s controller %s\n", i ? "right" : "left", hands[i].connected ? "active" : "gone");
+			hand_announced[i] = hands[i].connected;
 		}
 }
 
@@ -756,6 +830,19 @@ void Vr::poll()
 				lost = true;
 			}
 		}
+		else if (ev.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED && action_set)
+		{
+			for (int i = 0; i < 2; i++)
+			{
+				XrInteractionProfileState st{XR_TYPE_INTERACTION_PROFILE_STATE};
+				char name[XR_MAX_PATH_LENGTH] = "none";
+				uint32_t len = 0;
+				if (XR_SUCCEEDED(xrGetCurrentInteractionProfile(session, hand_paths[i], &st)) &&
+					st.interactionProfile != XR_NULL_PATH)
+					xrPathToString(instance, st.interactionProfile, sizeof name, &len, name);
+				log_printf("openxr: %s controller: %s\n", i ? "right" : "left", name);
+			}
+		}
 		else if (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING)
 		{
 			running = false;
@@ -832,10 +919,16 @@ bool Vr::begin_frame()
 				   p.position.x, p.position.y, p.position.z, p.orientation.x, p.orientation.y, p.orientation.z,
 				   p.orientation.w, (unsigned long long)vs.viewStateFlags);
 		for (int i = 0; i < 2; i++)
-			if (hands[i].active)
-				log_printf("openxr: %s hand at %+.3f %+.3f %+.3f m, pointing %+.3f %+.3f %+.3f, trigger %.2f%s\n",
-						   i ? "right" : "left", hands[i].pos[0], hands[i].pos[1], hands[i].pos[2], hands[i].dir[0],
-						   hands[i].dir[1], hands[i].dir[2], hands[i].trigger, hands[i].squeeze ? ", grip" : "");
+		{
+			const VrHand &h = hands[i];
+			if (h.connected)
+				log_printf("openxr: %s hand at %+.3f %+.3f %+.3f m, pointing %+.3f %+.3f %+.3f, trigger %.2f, stick "
+						   "%+.2f %+.2f, pad %+.2f %+.2f,%s%s%s%s%s%s\n",
+						   i ? "right" : "left", h.pos[0], h.pos[1], h.pos[2], h.dir[0], h.dir[1], h.dir[2], h.trigger,
+						   h.stick[0], h.stick[1], h.pad[0], h.pad[1], h.squeeze ? " grip" : "",
+						   h.stick_click ? " stick-click" : "", h.pad_click ? " pad-click" : "", h.menu ? " menu" : "",
+						   h.lower ? " lower" : "", h.upper ? " upper" : "");
+		}
 	}
 	return frame.shouldRender;
 }
@@ -1042,7 +1135,7 @@ void vr_release_screen(void)
 bool vr_hand(int hand, VrHand *out)
 {
 	*out = vr && vr->in_frame ? vr->hands[hand & 1] : VrHand{};
-	return out->active;
+	return out->connected;
 }
 
 unsigned vr_acquire_overlay_eye(int eye)

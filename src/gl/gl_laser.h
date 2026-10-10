@@ -6,17 +6,18 @@
  *   clicked with points the game's mouse: where its beam meets what the
  *   game draws on, as the window's mouse is mapped (in the cockpit: the
  *   control panel, else the HUD's directions; otherwise the virtual
- *   screen), is the pointer (input.h). The trigger is the left button,
- *   the grip the right; a button only goes down while the beam is on
- *   something. Moving the beam with the grip held moves the mouse too, for
- *   steering and turning the maps.
+ *   screen), is the pointer (input.h). A trigger pulled with its beam on
+ *   the panel or a screen, or with the grip held (to click on things out
+ *   in space: targets), is the left button there; otherwise it is the
+ *   pad's trigger. The controllers' sticks and buttons are a virtual pad
+ *   in the Xbox layout (gamepad.h), so the gamepad's bindings fly the ship.
  *
  *   The beams are drawn in the cockpit (cockpit_draw) and, over the
  *   virtual screen, in a layer of their own (laser_draw_overlay).
  *
  * Drawing thread, per headset frame:
- *   laser_update(cockpit)   after cockpit_begin_frame, the headset tracked
- *   laser_off()             no headset (or not tracked)
+ *   laser_update(cockpit)   after cockpit_begin_frame (and vr_begin_frame)
+ *   laser_off()             no headset
  */
 #ifndef GL_LASER_H
 #define GL_LASER_H

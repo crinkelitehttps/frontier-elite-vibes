@@ -7,6 +7,9 @@
  * glfrontier.cfg); it is written with the built-in default (gamepad.c,
  * which documents the format) the first time the game runs without one.
  *
+ * A VR headset's motion controllers are a second, virtual pad on the same
+ * bindings (gamepad_set_virtual).
+ *
  * Analog steering goes straight into the game's keyboard / joystick
  * steering words (A6+14508 x, A6+14510 y: what A/Z and ,/. ramp up), so
  * the stick's position is the turn rate.
@@ -37,6 +40,18 @@ void gamepad_update(void);
 void gamepad_look(float *x, float *y);
 /* A controller is connected */
 bool gamepad_connected(void);
+
+/* A pad made of other controls (a VR headset's motion controllers,
+ * gl_laser.c) in the Xbox layout, read with the real one through the same
+ * bindings. Any thread; a button pressed since the last update counts as
+ * down for one. */
+typedef struct
+{
+	bool active;
+	unsigned buttons;                     /* bit n: SDL_GameControllerButton n */
+	float axes[SDL_CONTROLLER_AXIS_MAX]; /* -1..1, SDL's directions (y down +), triggers 0..1 */
+} GamepadVirtual;
+void gamepad_set_virtual(const GamepadVirtual *v);
 
 #ifdef __cplusplus
 }

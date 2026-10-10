@@ -35,13 +35,8 @@ static struct
  * (LASER_TAKE screen pixels) or clicked, until the mouse moves */
 static bool laser_owns;
 static float laser_x, laser_y; /* as the game last had it */
-static int laser_buttons;      /* as the game last had them */
 static int laser_swallowed;    /* held buttons whose press went elsewhere */
-
-/* The laser moving with the right button held moves the mouse, as mouse
- * pixels per screen pixel (steering, turning the maps) */
-#define LASER_MOTION 4.0f
-#define LASER_TAKE   3.0f
+#define LASER_TAKE 3.0f
 
 void Input_PadPointerBegin(void)
 {
@@ -111,8 +106,7 @@ void Input_MouseMoved(void)
 	SDL_AtomicUnlock(&laser_lock);
 }
 
-/* Main thread, at each poll: the laser's buttons for the game, and its
- * movement with the right button held */
+/* Main thread, at each poll: the laser's buttons for the game */
 static int take_laser(void)
 {
 	SDL_AtomicLock(&laser_lock);
@@ -136,17 +130,11 @@ static int take_laser(void)
 	laser_swallowed &= buttons;
 	buttons &= ~laser_swallowed;
 
-	if (laser_owns && (buttons & laser_buttons & 0x1))
-	{
-		input.motion_x += (int)lrintf((x - laser_x) * LASER_MOTION);
-		input.motion_y += (int)lrintf((y - laser_y) * LASER_MOTION);
-	}
 	if (laser_owns || !active)
 	{
 		laser_x = x;
 		laser_y = y;
 	}
-	laser_buttons = buttons;
 	return buttons;
 }
 

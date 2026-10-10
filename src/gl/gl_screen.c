@@ -693,10 +693,7 @@ static bool draw_vr(void)
 		cockpit_set_headset(NULL, NULL);
 	}
 	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
-	if (tracked)
-		laser_update(cockpit);
-	else if (render)
-		laser_off();
+	laser_update(cockpit && tracked);
 
 	if (render)
 	{

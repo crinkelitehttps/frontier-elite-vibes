@@ -9,6 +9,7 @@
 #include "gl_draw.h"
 #include "gl_laser.h"
 
+#include "gamepad.h"
 #include "input.h"
 
 /* Beams this long (m) where they meet nothing near (the HUD is at infinity) */
@@ -26,12 +27,20 @@ typedef struct
 	bool hit_near; /* ends on a surface: a dot there */
 } Beam;
 
+/* What a trigger does, decided as it is pulled: a mouse click where its
+ * beam is, or the pad's trigger */
+typedef enum
+{
+	TRIGGER_OFF,
+	TRIGGER_CLICK,
+	TRIGGER_PAD
+} TriggerUse;
+
 static Beam beams[2];
-static int current = 1;      /* the hand pointing the mouse */
-static bool trigger_on[2], squeeze_on[2];
-static int buttons;          /* bit 0 right, bit 1 left (input.h) */
-static int held;             /* the pointing hand's buttons, on something or not */
-static bool was_active;
+static int current = 1; /* the hand pointing the mouse */
+static bool trigger_on[2];
+static TriggerUse trigger_use[2];
+static bool was_active, was_connected;
 
 static float dot3(const float a[3], const float b[3])
 {
@@ -64,72 +73,135 @@ static bool ray_to_virtual_screen(const float o[3], const float d[3], int *sx, i
 	return true;
 }
 
+/* A hand's controls as the virtual pad (gamepad.h), in the Xbox layout:
+ * left hand on the left half, right on the right, the trackpad as the
+ * d-pad (left) or the face buttons (right) */
+static void add_to_pad(int i, const VrHand *h, GamepadVirtual *v)
+{
+	typedef struct
+	{
+		int x, y, trigger, stick, shoulder, menu, lower, upper;
+		int pad[4]; /* up, down, left, right */
+	} PadMap;
+	static const PadMap MAP[2] = {
+		{SDL_CONTROLLER_AXIS_LEFTX,
+		 SDL_CONTROLLER_AXIS_LEFTY,
+		 SDL_CONTROLLER_AXIS_TRIGGERLEFT,
+		 SDL_CONTROLLER_BUTTON_LEFTSTICK,
+		 SDL_CONTROLLER_BUTTON_LEFTSHOULDER,
+		 SDL_CONTROLLER_BUTTON_BACK,
+		 SDL_CONTROLLER_BUTTON_X,
+		 SDL_CONTROLLER_BUTTON_Y,
+		 {SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_LEFT,
+		  SDL_CONTROLLER_BUTTON_DPAD_RIGHT}},
+		{SDL_CONTROLLER_AXIS_RIGHTX,
+		 SDL_CONTROLLER_AXIS_RIGHTY,
+		 SDL_CONTROLLER_AXIS_TRIGGERRIGHT,
+		 SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+		 SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
+		 SDL_CONTROLLER_BUTTON_START,
+		 SDL_CONTROLLER_BUTTON_A,
+		 SDL_CONTROLLER_BUTTON_B,
+		 {SDL_CONTROLLER_BUTTON_Y, SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_B}},
+	};
+	const PadMap *m = &MAP[i];
+	v->axes[m->x] = h->stick[0];
+	v->axes[m->y] = -h->stick[1]; /* SDL: down + */
+	v->axes[m->trigger] = trigger_use[i] == TRIGGER_PAD ? h->trigger : 0.0f;
+	unsigned b = 0;
+	if (h->stick_click)
+		b |= 1u << m->stick;
+	if (h->squeeze)
+		b |= 1u << m->shoulder;
+	if (h->menu)
+		b |= 1u << m->menu;
+	if (h->lower)
+		b |= 1u << m->lower;
+	if (h->upper)
+		b |= 1u << m->upper;
+	if (h->pad_click)
+	{
+		float x = h->pad[0], y = h->pad[1];
+		b |= 1u << m->pad[fabsf(x) > fabsf(y) ? (x < 0 ? 2 : 3) : (y > 0 ? 0 : 1)];
+	}
+	v->buttons |= b;
+}
+
 void laser_update(bool cockpit)
 {
 	VrHand hands[2];
-	bool any = false;
+	bool connected = false, active = false;
+	bool hit[2] = {false, false}, clickable[2] = {false, false};
+	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
 	{
-		bool was_trigger = trigger_on[i], was_squeeze = squeeze_on[i];
-		any = vr_hand(i, &hands[i]) || any;
-		trigger_on[i] = hands[i].active && hands[i].trigger > (was_trigger ? TRIGGER_UP : TRIGGER_DOWN);
-		squeeze_on[i] = hands[i].active && hands[i].squeeze;
-		/* a click picks the hand that points */
-		if ((trigger_on[i] && !was_trigger) || (squeeze_on[i] && !was_squeeze))
-		{
-			if (i != current)
-				buttons = held = 0;
-			current = i;
-		}
-	}
-	if (!hands[current].active && hands[!current].active)
-	{
-		current = !current;
-		buttons = held = 0;
-	}
-
-	int sx = 0, sy = 0;
-	bool hit = false;
-	for (int i = 0; i < 2; i++)
-	{
-		Beam *b = &beams[i];
+		connected = vr_hand(i, &hands[i]) || connected;
 		const VrHand *h = &hands[i];
+		Beam *b = &beams[i];
 		b->on = h->active;
 		if (!b->on)
 			continue;
-		int x, y;
+		active = true;
 		float dist = -1.0f;
-		bool on = cockpit ? cockpit_ray_to_screen(h->pos, h->dir, &x, &y, &dist)
-						  : ray_to_virtual_screen(h->pos, h->dir, &x, &y, &dist);
-		b->hit_near = on && dist > 0.0f;
+		hit[i] = cockpit ? cockpit_ray_to_screen(h->pos, h->dir, &hx[i], &hy[i], &dist)
+						 : ray_to_virtual_screen(h->pos, h->dir, &hx[i], &hy[i], &dist);
+		b->hit_near = hit[i] && dist > 0.0f;
+		/* on the panel or a screen; the HUD (out into space) only with the grip */
+		clickable[i] = hit[i] && (b->hit_near || h->squeeze);
 		float len = b->hit_near ? dist : BEAM_LENGTH;
 		memcpy(b->pos, h->pos, sizeof b->pos);
 		for (int k = 0; k < 3; k++)
 			b->end[k] = h->pos[k] + h->dir[k] * len;
-		if (i == current && on)
-		{
-			hit = true;
-			sx = x;
-			sy = y;
-		}
 	}
 
-	/* the buttons go down only when pressed on something, and up anywhere */
-	int want = (squeeze_on[current] ? 0x1 : 0) | (trigger_on[current] ? 0x2 : 0);
-	buttons = (buttons & want) | (hit ? want & ~held : 0);
-	held = want;
-	Input_SetLaser(any, hit, (float)sx + 0.5f, (float)sy + 0.5f, buttons);
-	was_active = any;
+	/* the triggers: a click where the beam is, which makes that hand the
+	 * pointing one, or the pad's */
+	for (int i = 0; i < 2; i++)
+	{
+		bool was = trigger_on[i];
+		trigger_on[i] = hands[i].connected && hands[i].trigger > (was ? TRIGGER_UP : TRIGGER_DOWN);
+		if (!trigger_on[i])
+			trigger_use[i] = TRIGGER_OFF;
+		else if (!was)
+		{
+			trigger_use[i] = clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
+			if (clickable[i])
+				current = i;
+		}
+	}
+	if (!hands[current].active && hands[!current].active)
+		current = !current;
+
+	if (active || was_active)
+		Input_SetLaser(active, hit[current], (float)hx[current] + 0.5f, (float)hy[current] + 0.5f,
+					   trigger_use[current] == TRIGGER_CLICK ? 0x2 : 0);
+	was_active = active;
+
+	GamepadVirtual v;
+	memset(&v, 0, sizeof v);
+	v.active = connected;
+	for (int i = 0; i < 2; i++)
+		if (hands[i].connected)
+			add_to_pad(i, &hands[i], &v);
+	if (connected || was_connected)
+		gamepad_set_virtual(&v);
+	was_connected = connected;
 }
 
 void laser_off(void)
 {
 	beams[0].on = beams[1].on = false;
-	trigger_on[0] = trigger_on[1] = squeeze_on[0] = squeeze_on[1] = false;
-	buttons = held = 0;
+	trigger_on[0] = trigger_on[1] = false;
+	trigger_use[0] = trigger_use[1] = TRIGGER_OFF;
 	if (was_active)
 		Input_SetLaser(false, false, 0, 0, 0);
-	was_active = false;
+	if (was_connected)
+	{
+		GamepadVirtual v;
+		memset(&v, 0, sizeof v);
+		gamepad_set_virtual(&v);
+	}
+	was_active = was_connected = false;
 }
 
 bool laser_shown(void)
