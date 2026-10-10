@@ -100,6 +100,14 @@ void cockpit_world_split(mat4 *lens, mat4 *head_rotation);
 /* The head rotation alone, without the pass's turn */
 mat4 cockpit_head_rotation(void);
 
+/* Projection for things in a headset's play space (vr.h: metres, as the
+ * seat is) as the cockpit is being drawn, with the look-around; and
+ * where the eye is, in the play space */
+mat4 cockpit_play_projection(float eye_play[3]);
+/* Projection for the play space as headset eye `v` sees it (not the
+ * cockpit: no look-around) */
+mat4 cockpit_headset_projection(const VrView *v);
+
 /* Projection for 2D drawing in view pixels (x 0..320, y 0..168 down, z 0),
  * cockpit or not, to be used with the GD_VP_VIEW3D viewport */
 mat4 cockpit_view_pixel_projection(void);
@@ -130,6 +138,10 @@ void cockpit_pass_draw_end(void);
 /* Window pixel (drawable pixels, y down) -> emulated screen pixel
  * (320x200). False if it points at nothing the game draws on. */
 bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy);
+/* The same for a ray in a headset's play space (a controller's laser), as
+ * the cockpit is being drawn; *dist: how far along `dir` it hits the panel
+ * (-1: the HUD, at infinity) */
+bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, int *sy, float *dist);
 
 #ifdef __cplusplus
 }

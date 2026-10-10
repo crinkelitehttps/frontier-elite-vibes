@@ -248,6 +248,8 @@ void Main_EventHandler(void)
 			input.motion_y += event.motion.yrel;
 			input.abs_x = event.motion.x;
 			input.abs_y = event.motion.y;
+			if (event.motion.xrel || event.motion.yrel)
+				Input_MouseMoved();
 			break;
 
 		case SDL_MOUSEBUTTONDOWN:

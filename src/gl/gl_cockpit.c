@@ -21,6 +21,7 @@
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_fill2d.h"
+#include "gl_laser.h"
 #include "gl_scene.h"
 
 #include "freecam.h"
@@ -226,6 +227,12 @@ static void headset_view(const VrView *v, mat4 *V, float pos[3])
 		eye_to_view_of(&look, v->pos, pos);
 }
 
+/* The look-around alone: play space -> view space is L^T (eye_to_view_of) */
+static mat4 look_rotation(void)
+{
+	return head_rotation(look_yaw, look_pitch, 0);
+}
+
 void cockpit_set_headset(const VrView *centre, const VrView eyes[2])
 {
 	headset = centre != NULL;
@@ -412,6 +419,30 @@ static mat4 cockpit_projection(void)
 	return mat4_mul(&l, &vt);
 }
 
+mat4 cockpit_play_projection(float eye_play[3])
+{
+	mat4 look = look_rotation();
+	mat4 to_view = mat4_identity();
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			to_view.m[c * 4 + r] = look.m[r * 4 + c];
+	mat4_xform_dir(&look, eye, eye_play);
+	mat4 cp = cockpit_projection();
+	return mat4_mul(&cp, &to_view);
+}
+
+mat4 cockpit_headset_projection(const VrView *v)
+{
+	mat4 l = eye_lens(v, COCKPIT_NEAR, COCKPIT_FAR);
+	mat4 rt = mat4_identity();
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			rt.m[c * 4 + r] = v->rot[c][r];
+	mat4 t = mat4_translate(-v->pos[0], -v->pos[1], -v->pos[2]);
+	mat4 vt = mat4_mul(&rt, &t);
+	return mat4_mul(&l, &vt);
+}
+
 mat4 cockpit_view_pixel_projection(void)
 {
 	if (!active)
@@ -542,6 +573,11 @@ void cockpit_draw(void)
 	gd_set_cull(false);
 	queue_screen_quad(&cp, (const float(*)[3])panel, PANEL_ROW0, GL_SCREEN_H, false, false);
 	gd_pop();
+
+	/* the controllers' lasers (gl_laser.c), in front of it all */
+	float eye_play[3];
+	mat4 pp = cockpit_play_projection(eye_play);
+	laser_queue(&pp, eye_play);
 }
 
 /* =========================================================================
@@ -909,21 +945,11 @@ void cockpit_pass_draw_end(void)
 /* =========================================================================
  * Mouse
  * ========================================================================= */
-bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
+/* The ray from `eye` (view space) along d -> emulated screen pixel: on the
+ * panel (*dist: how far along d), else on the view pixel plane, held to its
+ * edges (*dist -1: at infinity) */
+static bool ray_to_screen(const float eye[3], const float d[3], int *sx, int *sy, float *dist)
 {
-	SharedView sv;
-	get_shared(&sv);
-	if (!sv.active || screen_w <= 0 || screen_h <= 0)
-		return false;
-	const float *eye = sv.eye;
-
-	/* the ray through the pixel, in view space */
-	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
-	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
-	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
-	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3];
-	eye_to_view_of(&sv.head_view, e, d);
-
 	/* the panel, from the eye's position */
 	float u_axis[3], v_axis[3], n[3], to[3];
 	sub3(panel[1], panel[0], u_axis);
@@ -933,12 +959,12 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 	if (fabsf(dn) > 1e-9f)
 	{
 		sub3(panel[0], eye, to);
-		float dist = dot3(to, n) / dn;
-		if (dist > 0.0f)
+		float t = dot3(to, n) / dn;
+		if (t > 0.0f)
 		{
 			float p[3], rel[3];
 			for (int i = 0; i < 3; i++)
-				p[i] = eye[i] + d[i] * dist;
+				p[i] = eye[i] + d[i] * t;
 			sub3(p, panel[0], rel);
 			float u = dot3(rel, u_axis) / dot3(u_axis, u_axis);
 			float v = dot3(rel, v_axis) / dot3(v_axis, v_axis);
@@ -946,6 +972,7 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 			{
 				*sx = (int)(u * GL_SCREEN_W);
 				*sy = PANEL_ROW0 + (int)(v * (GL_SCREEN_H - PANEL_ROW0));
+				*dist = t;
 				return true;
 			}
 		}
@@ -958,5 +985,33 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 	float py = (1.0f - d[1] / -d[2] / classic_ky()) * VIEW_H * 0.5f;
 	*sx = (int)fminf(fmaxf(px, 0.0f), VIEW_W - 1);
 	*sy = (int)fminf(fmaxf(py, 0.0f), VIEW_H - 1);
+	*dist = -1.0f;
 	return true;
+}
+
+bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
+{
+	SharedView sv;
+	get_shared(&sv);
+	if (!sv.active || screen_w <= 0 || screen_h <= 0)
+		return false;
+
+	/* the ray through the pixel, in view space */
+	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
+	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
+	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
+	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], dist;
+	eye_to_view_of(&sv.head_view, e, d);
+	return ray_to_screen(sv.eye, d, sx, sy, &dist);
+}
+
+bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, int *sy, float *dist)
+{
+	if (!active)
+		return false;
+	mat4 look = look_rotation();
+	float o[3], d[3];
+	eye_to_view_of(&look, origin, o);
+	eye_to_view_of(&look, dir, d);
+	return ray_to_screen(o, d, sx, sy, dist);
 }

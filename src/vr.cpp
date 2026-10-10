@@ -86,8 +86,6 @@ template <class T> void com_release(T *&p)
 constexpr int64_t kFormatSrgb = 0x8C43 /* GL_SRGB8_ALPHA8 */, kFormatRgba = 0x8058 /* GL_RGBA8 */;
 #endif
 
-/* Virtual screen: 4:3, this wide (m), this far ahead of the seat */
-constexpr float kScreenWidthM = 1.6f, kScreenDistM = 1.8f;
 /* Head positions farther than this from the seat are tracking failures */
 constexpr float kMaxHeadOffsetM = 1.0f;
 
@@ -140,6 +138,15 @@ struct Vr
 	bool log = std::getenv("GLF_XR_LOG") != nullptr; /* print the eye pose twice a second */
 	XrTime last_log = 0;
 	int frames_since_log = 0;
+	/* Motion controllers: each action has both hands as subaction paths */
+	bool focused = false;
+	XrActionSet action_set = XR_NULL_HANDLE;
+	XrPath hand_paths[2] = {XR_NULL_PATH, XR_NULL_PATH};
+	XrAction aim = XR_NULL_HANDLE, trigger = XR_NULL_HANDLE, squeeze = XR_NULL_HANDLE;
+	XrSpace aim_space[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
+	VrHand hands[2] = {};
+	bool hand_announced[2] = {};
+	bool drew_overlay = false;
 
 #ifdef _WIN32
 	ID3D11Device *device = nullptr;
@@ -154,6 +161,8 @@ struct Vr
 	bool make_swapchain(Swapchain &sc, int64_t format, int w, int h);
 	bool make_play_space(const XrPosef &pose);
 	void try_recenter(XrTime t);
+	bool make_actions();
+	void read_hands();
 	GLuint acquire(Swapchain &sc);
 	void release(Swapchain &sc);
 	void poll();
@@ -334,6 +343,140 @@ bool Vr::make_swapchain(Swapchain &sc, int64_t format, int w, int h)
 #endif
 }
 
+/* The controllers' actions, suggested for the common controllers (the
+ * runtime picks the profile that matches what is in the hands) */
+bool Vr::make_actions()
+{
+	XrActionSetCreateInfo asi{XR_TYPE_ACTION_SET_CREATE_INFO};
+	std::strcpy(asi.actionSetName, "pointer");
+	std::strcpy(asi.localizedActionSetName, "Pointer");
+	if (!check(instance, xrCreateActionSet(instance, &asi, &action_set), "xrCreateActionSet"))
+		return false;
+	xrStringToPath(instance, "/user/hand/left", &hand_paths[0]);
+	xrStringToPath(instance, "/user/hand/right", &hand_paths[1]);
+	auto make = [&](XrAction &a, const char *name, const char *label, XrActionType type) {
+		XrActionCreateInfo ai{XR_TYPE_ACTION_CREATE_INFO};
+		std::strcpy(ai.actionName, name);
+		std::strcpy(ai.localizedActionName, label);
+		ai.actionType = type;
+		ai.countSubactionPaths = 2;
+		ai.subactionPaths = hand_paths;
+		return check(instance, xrCreateAction(action_set, &ai, &a), "xrCreateAction");
+	};
+	if (!make(aim, "aim", "Pointer", XR_ACTION_TYPE_POSE_INPUT) ||
+		!make(trigger, "click", "Click (left button)", XR_ACTION_TYPE_FLOAT_INPUT) ||
+		!make(squeeze, "right_button", "Right button", XR_ACTION_TYPE_BOOLEAN_INPUT))
+		return false;
+
+	/* Inputs on both hands; floats bound to buttons are thresholded by the
+	 * runtime and the other way round give 0 or 1 */
+	struct Profile
+	{
+		const char *path;
+		const char *trigger, *squeeze;
+	};
+	const Profile profiles[] = {
+		{"microsoft/motion_controller", "trigger/value", "squeeze/click"}, /* WMR */
+		{"oculus/touch_controller", "trigger/value", "squeeze/value"},
+		{"valve/index_controller", "trigger/value", "squeeze/value"},
+		{"htc/vive_controller", "trigger/value", "squeeze/click"},
+		{"khr/simple_controller", "select/click", nullptr},
+	};
+	int suggested = 0;
+	for (const Profile &prof : profiles)
+	{
+		std::vector<XrActionSuggestedBinding> sb;
+		for (const char *hand : {"left", "right"})
+		{
+			auto add = [&](XrAction a, const char *input) {
+				if (!input)
+					return;
+				char path[128];
+				snprintf(path, sizeof path, "/user/hand/%s/input/%s", hand, input);
+				XrPath xp;
+				xrStringToPath(instance, path, &xp);
+				sb.push_back({a, xp});
+			};
+			add(aim, "aim/pose");
+			add(trigger, prof.trigger);
+			add(squeeze, prof.squeeze);
+		}
+		XrInteractionProfileSuggestedBinding isb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+		char path[128];
+		snprintf(path, sizeof path, "/interaction_profiles/%s", prof.path);
+		xrStringToPath(instance, path, &isb.interactionProfile);
+		isb.countSuggestedBindings = uint32_t(sb.size());
+		isb.suggestedBindings = sb.data();
+		if (check(instance, xrSuggestInteractionProfileBindings(instance, &isb), prof.path))
+			suggested++;
+	}
+	if (!suggested)
+		return false;
+	for (int h = 0; h < 2; h++)
+	{
+		XrActionSpaceCreateInfo si{XR_TYPE_ACTION_SPACE_CREATE_INFO};
+		si.action = aim;
+		si.subactionPath = hand_paths[h];
+		si.poseInActionSpace.orientation.w = 1;
+		if (!check(instance, xrCreateActionSpace(session, &si, &aim_space[h]), "xrCreateActionSpace"))
+			return false;
+	}
+	XrSessionActionSetsAttachInfo at{XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
+	at.countActionSets = 1;
+	at.actionSets = &action_set;
+	return check(instance, xrAttachSessionActionSets(session, &at), "xrAttachSessionActionSets");
+}
+
+/* The controllers at the frame's display time, in the play space */
+void Vr::read_hands()
+{
+	for (VrHand &h : hands)
+		h = {};
+	if (action_set && focused)
+	{
+		XrActiveActionSet active{action_set, XR_NULL_PATH};
+		XrActionsSyncInfo si{XR_TYPE_ACTIONS_SYNC_INFO};
+		si.countActiveActionSets = 1;
+		si.activeActionSets = &active;
+		if (XR_SUCCEEDED(xrSyncActions(session, &si)))
+			for (int i = 0; i < 2; i++)
+			{
+				VrHand &h = hands[i];
+				XrSpaceLocation loc{XR_TYPE_SPACE_LOCATION};
+				const XrSpaceLocationFlags valid =
+					XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+				if (!XR_SUCCEEDED(xrLocateSpace(aim_space[i], play_space, frame.predictedDisplayTime, &loc)) ||
+					(loc.locationFlags & valid) != valid)
+					continue;
+				const XrQuaternionf &q = loc.pose.orientation;
+				h.pos[0] = loc.pose.position.x;
+				h.pos[1] = loc.pose.position.y;
+				h.pos[2] = loc.pose.position.z;
+				/* its -z */
+				h.dir[0] = -2 * (q.x * q.z + q.y * q.w);
+				h.dir[1] = -2 * (q.y * q.z - q.x * q.w);
+				h.dir[2] = -(1 - 2 * (q.x * q.x + q.y * q.y));
+				h.active = std::isfinite(h.pos[0] + h.pos[1] + h.pos[2] + h.dir[0] + h.dir[1] + h.dir[2]);
+				XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
+				gi.subactionPath = hand_paths[i];
+				gi.action = trigger;
+				XrActionStateFloat tr{XR_TYPE_ACTION_STATE_FLOAT};
+				if (XR_SUCCEEDED(xrGetActionStateFloat(session, &gi, &tr)) && tr.isActive)
+					h.trigger = tr.currentState;
+				gi.action = squeeze;
+				XrActionStateBoolean sq{XR_TYPE_ACTION_STATE_BOOLEAN};
+				if (XR_SUCCEEDED(xrGetActionStateBoolean(session, &gi, &sq)) && sq.isActive)
+					h.squeeze = sq.currentState;
+			}
+	}
+	for (int i = 0; i < 2; i++)
+		if (hands[i].active != hand_announced[i])
+		{
+			log_printf("openxr: %s controller %s\n", i ? "right" : "left", hands[i].active ? "active" : "gone");
+			hand_announced[i] = hands[i].active;
+		}
+}
+
 bool Vr::make_play_space(const XrPosef &pose)
 {
 	if (play_space)
@@ -432,9 +575,11 @@ Vr::~Vr()
 		if (sc->handle)
 			xrDestroySwapchain(sc->handle);
 	}
-	for (XrSpace s : {play_space, base_space, view_space})
+	for (XrSpace s : {play_space, base_space, view_space, aim_space[0], aim_space[1]})
 		if (s)
 			xrDestroySpace(s);
+	if (action_set)
+		xrDestroyActionSet(action_set);
 	if (session)
 		xrDestroySession(session);
 	if (instance)
@@ -528,6 +673,8 @@ bool Vr::init(float resolution_scale)
 		return false;
 	if (!make_play_space(rs.poseInReferenceSpace))
 		return false;
+	if (!make_actions())
+		log_printf("openxr: no motion controllers\n");
 
 	uint32_t nv = 0;
 	xrEnumerateViewConfigurationViews(instance, system, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &nv, nullptr);
@@ -592,10 +739,14 @@ void Vr::poll()
 					snprintf(status, sizeof status, "Running, %d x %d per eye", eyes[0].w, eyes[0].h);
 				}
 			}
+			else if (e.state == XR_SESSION_STATE_FOCUSED || e.state == XR_SESSION_STATE_VISIBLE)
+			{
+				focused = e.state == XR_SESSION_STATE_FOCUSED;
+			}
 			else if (e.state == XR_SESSION_STATE_STOPPING)
 			{
 				xrEndSession(session);
-				running = false;
+				running = focused = false;
 				log_printf("openxr: session stopped\n");
 				snprintf(status, sizeof status, "Paused by the runtime");
 			}
@@ -624,9 +775,10 @@ bool Vr::begin_frame()
 	if (!check(instance, xrBeginFrame(session, &bi), "xrBeginFrame"))
 		return false;
 	in_frame = true;
-	drew_eyes = drew_screen = false;
+	drew_eyes = drew_screen = drew_overlay = false;
 	if (recenter_pending)
 		try_recenter(frame.predictedDisplayTime);
+	read_hands();
 
 	XrViewLocateInfo li{XR_TYPE_VIEW_LOCATE_INFO};
 	li.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -679,6 +831,11 @@ bool Vr::begin_frame()
 		log_printf("openxr: %.1f fps, left eye pos %+.3f %+.3f %+.3f m, quat %+.3f %+.3f %+.3f %+.3f, flags %llx\n", fps,
 				   p.position.x, p.position.y, p.position.z, p.orientation.x, p.orientation.y, p.orientation.z,
 				   p.orientation.w, (unsigned long long)vs.viewStateFlags);
+		for (int i = 0; i < 2; i++)
+			if (hands[i].active)
+				log_printf("openxr: %s hand at %+.3f %+.3f %+.3f m, pointing %+.3f %+.3f %+.3f, trigger %.2f%s\n",
+						   i ? "right" : "left", hands[i].pos[0], hands[i].pos[1], hands[i].pos[2], hands[i].dir[0],
+						   hands[i].dir[1], hands[i].dir[2], hands[i].trigger, hands[i].squeeze ? ", grip" : "");
 	}
 	return frame.shouldRender;
 }
@@ -691,7 +848,7 @@ void Vr::end_frame()
 	XrCompositionLayerProjectionView pv[2];
 	XrCompositionLayerProjection proj{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
 	XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
-	const XrCompositionLayerBaseHeader *layers[1];
+	const XrCompositionLayerBaseHeader *layers[2];
 	uint32_t count = 0;
 	if (drew_eyes)
 	{
@@ -715,9 +872,25 @@ void Vr::end_frame()
 		quad.subImage.swapchain = screen.handle;
 		quad.subImage.imageRect = {{0, 0}, {screen.w, screen.h}};
 		quad.pose.orientation.w = 1;
-		quad.pose.position = {0, -0.1f, -kScreenDistM};
-		quad.size = {kScreenWidthM, kScreenWidthM * 0.75f};
+		quad.pose.position = {0, -VR_SCREEN_DROP_M, -VR_SCREEN_DIST_M};
+		quad.size = {VR_SCREEN_WIDTH_M, VR_SCREEN_WIDTH_M * 0.75f};
 		layers[count++] = reinterpret_cast<const XrCompositionLayerBaseHeader *>(&quad);
+		if (drew_overlay)
+		{
+			for (int i = 0; i < 2; i++)
+			{
+				pv[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
+				pv[i].pose = views[i].pose;
+				pv[i].fov = views[i].fov;
+				pv[i].subImage.swapchain = eyes[i].handle;
+				pv[i].subImage.imageRect = {{0, 0}, {eyes[i].w, eyes[i].h}};
+			}
+			proj.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+			proj.space = play_space;
+			proj.viewCount = 2;
+			proj.views = pv;
+			layers[count++] = reinterpret_cast<const XrCompositionLayerBaseHeader *>(&proj);
+		}
 	}
 	XrFrameEndInfo ei{XR_TYPE_FRAME_END_INFO};
 	ei.displayTime = frame.predictedDisplayTime;
@@ -866,6 +1039,23 @@ void vr_release_screen(void)
 	vr->release(vr->screen);
 }
 
+bool vr_hand(int hand, VrHand *out)
+{
+	*out = vr && vr->in_frame ? vr->hands[hand & 1] : VrHand{};
+	return out->active;
+}
+
+unsigned vr_acquire_overlay_eye(int eye)
+{
+	vr->drew_overlay = true;
+	return vr->acquire(vr->eyes[eye & 1]);
+}
+
+void vr_release_overlay_eye(int eye)
+{
+	vr->release(vr->eyes[eye & 1]);
+}
+
 void vr_end_frame(void)
 {
 	if (vr)
@@ -901,6 +1091,13 @@ void vr_release_eye(int) {}
 unsigned vr_acquire_screen(void) { return 0; }
 void vr_release_screen(void) {}
 void vr_end_frame(void) {}
+bool vr_hand(int, VrHand *out)
+{
+	*out = VrHand{};
+	return false;
+}
+unsigned vr_acquire_overlay_eye(int) { return 0; }
+void vr_release_overlay_eye(int) {}
 void vr_recenter(void) {}
 }
 

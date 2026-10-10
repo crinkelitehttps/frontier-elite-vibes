@@ -27,6 +27,7 @@
 #include "gl_cockpit.h"
 #include "gl_native.h"
 #include "gl_draw.h"
+#include "gl_laser.h"
 #include "gl_overlay.h"
 #include "gl_planet.h"
 #include "gl_prims.h"
@@ -381,7 +382,7 @@ static void draw_pointer(void)
 		"XWWWWWX", "XWWWWWWX", "XWWWWXXX", "XWXWWX",  "XX XWWX", "    XWX", "     X",
 	};
 	int gx, gy;
-	if (!Input_PadPointer(&gx, &gy) &&
+	if (!Input_PadPointer(&gx, &gy) && !(scr_show.mouse_shown && Input_LaserPointer(&gx, &gy)) &&
 		!(vr_pointer && scr_show.mouse_shown && Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
 		return;
 	for (int j = 0; j < (int)(sizeof ARROW / sizeof ARROW[0]); j++)
@@ -672,6 +673,7 @@ static bool draw_vr(void)
 	update_swap_interval(vr_running());
 	if (!vr_running())
 	{
+		laser_off();
 		cockpit_set_headset(NULL, NULL);
 		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
 	}
@@ -691,6 +693,10 @@ static bool draw_vr(void)
 		cockpit_set_headset(NULL, NULL);
 	}
 	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
+	if (tracked)
+		laser_update(cockpit);
+	else if (render)
+		laser_off();
 
 	if (render)
 	{
@@ -713,6 +719,15 @@ static bool draw_vr(void)
 			glBindFramebuffer(GL_FRAMEBUFFER, vr_acquire_screen());
 			draw_frame(VR_SCREEN_W, VR_SCREEN_H, cockpit, false);
 			vr_release_screen();
+			/* the lasers over it */
+			for (int i = 0; tracked && laser_shown() && i < 2; i++)
+			{
+				int w, h;
+				vr_eye_size(i, &w, &h);
+				glBindFramebuffer(GL_FRAMEBUFFER, vr_acquire_overlay_eye(i));
+				laser_draw_overlay(w, h, &eyes[i]);
+				vr_release_overlay_eye(i);
+			}
 		}
 		vr_pointer = false;
 	}

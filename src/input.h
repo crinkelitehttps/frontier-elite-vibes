@@ -33,6 +33,14 @@ void Input_PadPointerMove(float dx, float dy);
 void Input_PadPointerClick(void); /* clicks the left button there, then ends */
 bool Input_PadPointer(int *x, int *y); /* on: where it is */
 
+/* The VR laser pointer (gl_laser.c). Set by the drawing, any thread:
+ * controllers `active`, and if one `hit`s the screen, where (320x200
+ * screen pixels); its buttons (bit 0 right, bit 1 left). Once it moves or
+ * clicks it has the game's pointer, until the mouse moves. */
+void Input_SetLaser(bool active, bool hit, float x, float y, int buttons);
+bool Input_LaserPointer(int *x, int *y); /* it has the pointer: where */
+void Input_MouseMoved(void);             /* the mouse moved (main.c) */
+
 /* Host calls: the game polls the mouse and keyboard */
 void Call_GetMouseInput(void);
 void Call_GetKeyboardEvent(void);
