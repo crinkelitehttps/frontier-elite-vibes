@@ -34,12 +34,17 @@
 
 bool cockpit_enabled = true;
 int cockpit_fov = 60;
+int vr_depth = 100;
 bool headtrack_enabled = true;
 int headtrack_port = HEADTRACK_DEFAULT_PORT;
 
 #define VIEW_W   FILL2D_VIEW_W
 #define VIEW_H   FILL2D_VIEW_H
 #define HUD_DIST 1000.0f /* where the view pixel plane sits: inside the world's near/far */
+
+/* The game's world is in millimetres (an escape capsule is 5 m long, an
+ * Eagle 48 m): the eye's offset in metres times this, scaled by vr_depth */
+#define WORLD_UNITS_PER_METRE 1000.0f
 
 #define WORLD_NEAR   1.0f
 #define WORLD_FAR    10000000000.0f
@@ -365,10 +370,24 @@ static mat4 world_lens(void)
 	return lens(WORLD_NEAR, WORLD_FAR);
 }
 
-mat4 cockpit_world_projection(void)
+/* The world without the eye's offset: for what sits at infinity (the
+ * game's 2D drawing over its view) */
+static mat4 world_rotation_projection(void)
 {
 	mat4 lens = world_lens();
 	mat4 view = mat4_mul(&head_view, &pass_rot);
+	return mat4_mul(&lens, &view);
+}
+
+/* The world seen from the eye: its offset from the centre of the head (and
+ * the head's movement) gives the stereo depth and the parallax */
+mat4 cockpit_world_projection(void)
+{
+	float k = WORLD_UNITS_PER_METRE * vr_depth / 100.0f;
+	mat4 lens = world_lens();
+	mat4 t = mat4_translate(-eye[0] * k, -eye[1] * k, -eye[2] * k);
+	mat4 tr = mat4_mul(&t, &pass_rot);
+	mat4 view = mat4_mul(&head_view, &tr);
 	return mat4_mul(&lens, &view);
 }
 
@@ -407,7 +426,7 @@ mat4 cockpit_view_pixel_projection(void)
 	l.m[12] = -HUD_DIST * kx;
 	l.m[13] = HUD_DIST * ky;
 	l.m[14] = -HUD_DIST;
-	mat4 w = cockpit_world_projection();
+	mat4 w = world_rotation_projection();
 	return mat4_mul(&w, &l);
 }
 

@@ -63,6 +63,7 @@ GLuint gl_screen_texture(void);
 /* Settings */
 extern bool cockpit_enabled;
 extern int cockpit_fov;      /* vertical field of view, degrees */
+extern int vr_depth;         /* stereo depth, percent: 100 = the game's world at life size */
 extern bool headtrack_enabled;
 extern int headtrack_port;
 

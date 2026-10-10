@@ -41,6 +41,7 @@ typedef struct
 	int headtrack_port;
 	int vr;
 	int vr_resolution;
+	int vr_depth;
 } Settings;
 
 static const struct
@@ -62,6 +63,7 @@ static const struct
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
 	{"vr", offsetof(Settings, vr)},
 	{"vr_resolution", offsetof(Settings, vr_resolution)},
+	{"vr_depth", offsetof(Settings, vr_depth)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -103,6 +105,7 @@ static Settings current(void)
 	s.headtrack_port = headtrack_port;
 	s.vr = vr_enabled;
 	s.vr_resolution = vr_resolution;
+	s.vr_depth = vr_depth;
 	return s;
 }
 
@@ -131,6 +134,8 @@ static void apply(const Settings *s)
 	vr_enabled = vr_enabled || s->vr != 0; /* (--vr) */
 	if (s->vr_resolution >= 25 && s->vr_resolution <= 200)
 		vr_resolution = s->vr_resolution;
+	if (s->vr_depth >= 0 && s->vr_depth <= 1000)
+		vr_depth = s->vr_depth;
 }
 
 void settings_load(void)
