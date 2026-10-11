@@ -1,6 +1,6 @@
-# GLFrontier Extended
+# Frontier Elite Vibes
 
-> **This is a fork of [GLFrontier Extended](https://github.com/BrettWilsonDev/glfrontier-extended) by Brett Wilson**, which descends from Tom Morton's GLFrontier (see Acknowledgments). It adds a 3D cockpit view (the world drawn all round you, planets and haze in 3D), OpenTrack head tracking, VR headsets (OpenXR), gamepad support and sideways/vertical thrust. Everything else, and the description below, is Brett Wilson's work.
+> **Frontier Elite Vibes is a fork of [GLFrontier Extended](https://github.com/BrettWilsonDev/glfrontier-extended) by Brett Wilson**, which descends from Tom Morton's GLFrontier (see Acknowledgments). It adds a 3D cockpit view (the world drawn all round you, planets and haze in 3D), OpenTrack head tracking, VR headsets (OpenXR), gamepad support and sideways/vertical thrust. Everything else, and the description below, is Brett Wilson's work.
 
 A fork of GLFrontier (OpenGL Frontier Elite 2) that modernizes the build system, adds cross-platform support (including WebAssembly and Android) and mods the game itself.
 
