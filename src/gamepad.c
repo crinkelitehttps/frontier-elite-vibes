@@ -54,6 +54,10 @@ static const char DEFAULT_CFG[] =
 	"# beam on the panel or a screen, or with the grip held, is a mouse click\n"
 	"# instead.\n"
 	"#\n"
+	"# On the galaxy map the sticks scroll it (the arrow keys) instead of\n"
+	"# doing what they are bound to (the right one not while it moves the\n"
+	"# pointer).\n"
+	"#\n"
 	"# Actions:\n"
 	"#   steer-x, steer-y [invert]  the ship's steering (full axes only):\n"
 	"#                              x turns (rolls with Elite controls), y pitches\n"
@@ -216,6 +220,7 @@ static unsigned virtual_pressed;
 static float look[2];
 static bool steering; /* wrote steering last update */
 static int elite_saved = -1; /* the game's Elite controls option while roll / yaw force it, else -1 */
+static bool arrows[4];       /* scrolling the galaxy map: up, down, left, right held */
 
 /* ---- parsing ------------------------------------------------------------ */
 static bool parse_control(const char *name, Control *c)
@@ -665,8 +670,23 @@ static void chord(const Chord *c, bool down)
 	}
 }
 
+/* The galaxy map scrolls with the arrow keys: held while a stick is over
+ * (x, y: -1..1, y down +) */
+static void scroll_map(float x, float y)
+{
+	static const SDL_Keycode KEYS[4] = {SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT};
+	bool want[4] = {y < -threshold, y > threshold, x < -threshold, x > threshold};
+	for (int i = 0; i < 4; i++)
+		if (want[i] != arrows[i])
+		{
+			send(KEYS[i], 0, want[i]);
+			arrows[i] = want[i];
+		}
+}
+
 static void release_all(void)
 {
+	scroll_map(0, 0);
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
@@ -741,6 +761,19 @@ void gamepad_update(void)
 		return;
 	}
 
+	/* on the galaxy map the sticks scroll it instead of flying (the right
+	 * one unless it moves the pointer) */
+	bool map = game_screen() == SCREEN_GALAXY_MAP;
+	if (map)
+	{
+		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
+		float rx = pointer_on ? 0.0f : raw_axis(SDL_CONTROLLER_AXIS_RIGHTX);
+		float ry = pointer_on ? 0.0f : raw_axis(SDL_CONTROLLER_AXIS_RIGHTY);
+		scroll_map(fabsf(rx) > fabsf(mx) ? rx : mx, fabsf(ry) > fabsf(my) ? ry : my);
+	}
+	else
+		scroll_map(0, 0);
+
 	int layer = current_layer();
 	for (int i = 0; i < n_bindings; i++)
 	{
@@ -749,7 +782,7 @@ void gamepad_update(void)
 		{
 			bool acts = b->layer ? b->layer == layer : !(layer > 0 && (b->axis_shadowed & (1 << layer)));
 			bool pointing = b->action == ACT_POINTER_X || b->action == ACT_POINTER_Y;
-			if (!acts || pointing != pointer_on || (pointer_on && b->pointer_axis))
+			if (!acts || pointing != pointer_on || (pointer_on && b->pointer_axis) || (map && !pointing))
 				continue;
 			float v = axis_value(&b->control);
 			if (b->invert)

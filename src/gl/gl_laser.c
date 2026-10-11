@@ -25,6 +25,7 @@ typedef struct
 	bool on;
 	float pos[3], end[3];
 	bool hit_near; /* ends on a surface: a dot there */
+	bool aiming;   /* out into space with the grip held: its trigger clicks there (targets) */
 } Beam;
 
 /* What a trigger does, decided as it is pulled: a mouse click where its
@@ -148,6 +149,7 @@ void laser_update(bool cockpit)
 		b->hit_near = hit[i] && dist > 0.0f;
 		/* on the panel or a screen; the HUD (out into space) only with the grip */
 		clickable[i] = hit[i] && (b->hit_near || h->squeeze);
+		b->aiming = hit[i] && !b->hit_near && h->squeeze;
 		float len = b->hit_near ? dist : BEAM_LENGTH;
 		memcpy(b->pos, h->pos, sizeof b->pos);
 		for (int k = 0; k < 3; k++)
@@ -252,7 +254,8 @@ void laser_queue(const mat4 *play_to_clip, const float eye[3])
 		/* the pointing hand's bright, fading along the beam */
 		static const float bright[2][3] = {{0.5f, 1.0f, 0.5f}, {0.1f, 0.45f, 0.1f}};
 		static const float dim[2][3] = {{0.35f, 0.4f, 0.35f}, {0.1f, 0.12f, 0.1f}};
-		const float(*c)[3] = i == current ? bright : dim;
+		static const float aim[2][3] = {{1.0f, 0.75f, 0.2f}, {0.5f, 0.3f, 0.05f}};
+		const float(*c)[3] = b->aiming ? aim : i == current ? bright : dim;
 		ribbon(b->pos, b->end, BEAM_WIDTH * 0.5f, eye, c[0], c[1]);
 		if (b->hit_near)
 		{
