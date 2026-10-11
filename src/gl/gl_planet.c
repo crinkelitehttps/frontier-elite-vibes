@@ -3,7 +3,9 @@
  * all its surface detail and shading); a ray traced sphere is the fallback
  * when that shape can't be read.
  */
+#include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "gl_api.h"
 #include "gl_cockpit.h"
@@ -116,20 +118,24 @@ static void capture_surface(PlanetDesc *p)
 	s->radius_word = (uint16_t)STMemory_ReadWord(start - 4);
 	uint32_t obj = (uint32_t)STMemory_ReadLong(a6 - 212);
 	s->seed = (uint32_t)STMemory_ReadLong(obj + 118);
-	for (int i = 0; i < 8; i++)
-		s->colours[i] = (uint16_t)(STMemory_ReadWord(a3 + 2 * (uint32_t)i) & 0xfff);
+	/* the second table, with the sunlight added, is only made when the
+	 * flags word has bit 7 or 6 (L3d0be) */
+	s->lit_colours = (s->data[0] & 0xc0) != 0;
+	for (int i = 0; i < 16; i++)
+		s->colours[i] = (uint16_t)(STMemory_ReadWord(a3 + 2 * (uint32_t)(s->lit_colours ? i : i & 7)) & 0xfff);
 	p->surface_ok = planet_surface_valid(s);
 }
 
 /* The colours the game fills this planet with (its 2D shape's first colour
- * table, rgb444 by now), else the unlit ones */
+ * table, rgb444 by now), else its colour tables from the frame (without a
+ * lit table, a darker copy for the dark side) */
 static void capture_palette(PlanetDesc *p)
 {
+	const PlanetSurface *s = &p->surface;
 	for (int i = 0; i < 8; i++)
 	{
-		int c = p->surface.colours[i];
-		p->palette[i] = (uint16_t)((c >> 2) & 0x333);
-		p->palette[i + 8] = (uint16_t)c;
+		p->palette[i] = s->lit_colours ? s->colours[i] : (uint16_t)((s->colours[i] >> 2) & 0x333);
+		p->palette[i + 8] = s->colours[i + 8];
 	}
 	if (!p->list_ok)
 		return;
@@ -157,6 +163,63 @@ static void capture_palette(PlanetDesc *p)
 			return;
 		}
 	}
+}
+
+/* Each planet's distance in the cockpit's straight ahead pass. The turned
+ * passes get the camera matrix rounded to words, no longer quite a rotation,
+ * so each puts the planet a little nearer or further (up to about 3 in
+ * 100000: a couple of hundred metres on Merlin, more than the height of a
+ * ship just off the ground, which then sees the ground all over some
+ * passes). The ahead pass is the game's own camera, drawn last; every pass
+ * draws the planet at its distance. */
+#define DIST_PLANETS 16
+typedef struct
+{
+	int n;
+	float radius[DIST_PLANETS];
+	double dist[DIST_PLANETS];
+} PlanetDists;
+
+static PlanetDists dists_rec, dists_pub, dists_show;
+
+void planet_dists_reset(void)
+{
+	dists_rec.n = 0;
+}
+
+void planet_dists_publish(void)
+{
+	dists_pub = dists_rec;
+}
+
+void planet_dists_acquire(void)
+{
+	dists_show = dists_pub;
+}
+
+/* The same planet in another pass: the same radius, give or take rounding */
+static int find_dist(const PlanetDists *d, float radius)
+{
+	for (int i = 0; i < d->n; i++)
+		if (fabsf(d->radius[i] - radius) <= radius * 1e-3f)
+			return i;
+	return -1;
+}
+
+static void record_dist(const PlanetDesc *p)
+{
+	if (cockpit_turned_pass() || p->radius <= 0.0f)
+		return;
+	int i = find_dist(&dists_rec, p->radius);
+	if (i < 0)
+	{
+		if (dists_rec.n >= DIST_PLANETS)
+			return;
+		i = dists_rec.n++;
+	}
+	double x = p->pos.x, y = p->pos.y, z = p->pos.z;
+	dists_rec.radius[i] = p->radius;
+	dists_rec.dist[i] = sqrt(x * x + y * y + z * z);
 }
 
 void Nu_PutPlanet(void)
@@ -189,6 +252,7 @@ void Nu_PutPlanet(void)
 	capture_list(p, words);
 	capture_surface(p);
 	capture_palette(p);
+	record_dist(p);
 
 	float centre[3];
 	vec3i_to_f(p->pos, centre);
@@ -469,6 +533,15 @@ void draw_planet(const void *payload)
 		cockpit_world_split(&lens, &head);
 	float view_pos[3], pos[3], light[3];
 	vec3i_to_f(p->pos, view_pos);
+	if (cockpit_active())
+	{
+		int i = find_dist(&dists_show, p->radius);
+		double len = sqrt((double)view_pos[0] * view_pos[0] + (double)view_pos[1] * view_pos[1] +
+						  (double)view_pos[2] * view_pos[2]);
+		if (i >= 0 && len > 0.0)
+			for (int k = 0; k < 3; k++)
+				view_pos[k] = (float)(view_pos[k] * (dists_show.dist[i] / len));
+	}
 	mat4_xform_dir(&head, view_pos, pos);
 	mat4_xform_dir(&head, p->light, light);
 

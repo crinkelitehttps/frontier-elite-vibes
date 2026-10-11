@@ -48,7 +48,8 @@ typedef struct
 	int len;                       /* bytes */
 	uint32_t seed;                 /* the planet object's long at +118 */
 	uint16_t radius_word;          /* the command's radius word */
-	uint16_t colours[8];           /* rgb444, by code / 4 (unlit) */
+	uint16_t colours[16];          /* rgb444, by code / 4: unlit 0-7, lit 8-15 */
+	bool lit_colours;              /* 8-15 are the game's (else copies of 0-7) */
 } PlanetSurface;
 
 /* Checks that `s` parses to exactly its length */

@@ -139,6 +139,9 @@ void soft_node_capture(SoftNode *s); /* gl_atmos.c */
 void soft_nodes_reset(void);         /* gl_atmos.c, with scene_reset */
 void atmos_publish(void);            /* gl_atmos.c, with scene_publish */
 void atmos_acquire(void);            /* gl_atmos.c, with scene_acquire */
+void planet_dists_reset(void);       /* gl_planet.c, with scene_reset */
+void planet_dists_publish(void);     /* gl_planet.c, with scene_publish */
+void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
 
 /* ---- hand over --------------------------------------------------------- *
  * The game records a frame while the last one it finished is drawn (on the

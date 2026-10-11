@@ -115,6 +115,7 @@ void scene_reset(void)
 	n_soft_pending = 0;
 	cur_soft = NULL;
 	soft_nodes_reset();
+	planet_dists_reset();
 }
 
 static void close_current(void)
@@ -305,6 +306,7 @@ void scene_publish(void)
 	scene_capture_soft_nodes();
 	copy_scene(&pub, &rec);
 	atmos_publish();
+	planet_dists_publish();
 	native_publish();
 }
 
@@ -312,6 +314,7 @@ void scene_acquire(void)
 {
 	copy_scene(&show, &pub);
 	atmos_acquire();
+	planet_dists_acquire();
 	native_acquire();
 	gl_prims_new_scene();
 }
