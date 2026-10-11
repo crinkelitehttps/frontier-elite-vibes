@@ -164,6 +164,7 @@ Its data is one for one with the game's because it comes from the game itself: t
 * more mods
 
 ## Acknowledgments
+* Frontier: Elite II (1993) was written by David Braben, with music by David Lowe, and published by GameTek. It is the sequel to Elite (1984) by David Braben and Ian Bell
 * Brett Wilson, author of [GLFrontier Extended](https://github.com/BrettWilsonDev/glfrontier-extended), which this cockpit fork is based on
 * Tom Morton original author of GLFrontier Wayback machine archive [Tom Morton - GLFrontier](https://web.archive.org/web/20171014043201/http://tom.noflag.org.uk/glfrontier.html)
 * This project is forked from: [Pcercuei's Copy of GLFrontier](https://github.com/pcercuei/glfrontier)

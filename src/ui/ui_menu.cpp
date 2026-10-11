@@ -415,7 +415,9 @@ void page_debug_options()
 
 void page_about()
 {
-	ui_heading("Original author");
+	ui_heading("Frontier: Elite II (1993)");
+	ImGui::TextWrapped("Written by David Braben, music by David Lowe, published by GameTek. Based on Elite by David Braben and Ian Bell");
+	ui_heading("GLFrontier author");
 	ImGui::TextWrapped("Tom Morton");
 	ui_heading("Extended by");
 	ImGui::TextWrapped("Brett Wilson");
