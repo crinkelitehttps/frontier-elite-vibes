@@ -1,6 +1,7 @@
 /*
  * gl_draw.c - batched draw list, see gl_draw.h.
  */
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,6 +14,7 @@ typedef struct
 	float pos[4];
 	uint8_t col[4];
 	float size;
+	float depth[2]; /* depth tested: window depth a + b * log(w); b 0 = gl_FragCoord.z */
 } GdVert;
 
 enum GdKind
@@ -57,6 +59,7 @@ static uint8_t cur_cull;
 static uint8_t cur_blend;
 static uint8_t cur_depth; /* 0 off, else 1 | 2 write | 4 depth only */
 static float depth_a, depth_b; /* z_clip = a * w + b */
+static float log_a, log_b;     /* window depth = a + b * log(w) */
 static bool wireframe;
 static int vp_rects[GD_VP_COUNT][4];
 
@@ -67,16 +70,29 @@ static size_t vbo_bytes;
 static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "in vec4 aColor;\n"
 							 "in float aSize;\n"
+							 "in vec2 aDepth;\n"
 							 "out vec4 vColor;\n"
+							 "out highp float vW;\n"
+							 "flat out highp vec2 vDepth;\n"
 							 "void main(){\n"
 							 "  gl_Position = aPos;\n"
 							 "  gl_PointSize = aSize;\n"
 							 "  vColor = aColor;\n"
+							 "  vW = aPos.w;\n"
+							 "  vDepth = aDepth;\n"
 							 "}\n";
 
+/* Depth tested, depth goes with log(w) (gd_set_depth): as precise far away
+ * as near */
 static const char *FS_FLAT = "in vec4 vColor;\n"
+							 "in highp float vW;\n"
+							 "flat in highp vec2 vDepth;\n"
 							 "out vec4 fragColor;\n"
-							 "void main(){ fragColor = vColor; }\n";
+							 "void main(){\n"
+							 "  fragColor = vColor;\n"
+							 "  gl_FragDepth = vDepth.y != 0.0 ? clamp(vDepth.x + vDepth.y * log(max(vW, 1e-6)), 0.0, 1.0)\n"
+							 "                                 : gl_FragCoord.z;\n"
+							 "}\n";
 
 /* =========================================================================
  * Shader helper
@@ -150,8 +166,8 @@ static void *grow(void *p, int *cap, int need, size_t elem)
 
 void gd_init(void)
 {
-	static const char *const attribs[] = {"aPos", "aColor", "aSize"};
-	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 3);
+	static const char *const attribs[] = {"aPos", "aColor", "aSize", "aDepth"};
+	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 4);
 
 	glGenVertexArrays(1, &vao);
 	glGenBuffers(1, &vbo);
@@ -163,6 +179,8 @@ void gd_init(void)
 	glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(GdVert), (void *)offsetof(GdVert, col));
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, size));
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, depth));
 	glBindVertexArray(0);
 
 	verts = grow(NULL, &cap_verts, 65536, sizeof(GdVert));
@@ -252,6 +270,12 @@ void gd_set_depth(const GdDepth *d)
 	float k = (d->hi - d->lo) * d->far / (d->far - d->near);
 	depth_a = d->lo - d->bias + k;
 	depth_b = -k * d->near;
+	/* What is drawn: window depth (lo..hi -> 0..1) with log(w) instead,
+	 * so the slice is precise all the way out, not only near `near` (a
+	 * slice starting under the ship reaches far over the ground) */
+	float l = logf(d->far / d->near);
+	log_b = (d->hi - d->lo) / (2 * l);
+	log_a = (d->lo + 1 - d->bias) / 2 - log_b * logf(d->near);
 }
 
 void gd_push(void)
@@ -384,8 +408,13 @@ static GdVert *reserve(enum GdKind kind, int n)
 static inline void put(GdVert *v, const float p[3], const uint8_t col[4], float size)
 {
 	mat4_xform(get_xf(), p[0], p[1], p[2], v->pos);
+	v->depth[0] = v->depth[1] = 0;
 	if (cur_depth)
+	{
 		v->pos[2] = depth_a * v->pos[3] + depth_b;
+		v->depth[0] = log_a;
+		v->depth[1] = log_b;
+	}
 	memcpy(v->col, col, 4);
 	v->size = size;
 }
