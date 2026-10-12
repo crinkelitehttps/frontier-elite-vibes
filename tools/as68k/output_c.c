@@ -272,19 +272,16 @@ void c_end (const char *src_filename)
 	cout ("	}\n\n");
 	
 	cout ("handle_exception:\n");
-	cln ("for (i=0; i<32; i++) {");
-	cln ("	if (exceptions_pending & ((1<<i))) {");
-	cln ("		jdest = exception_handlers[i];");
-	cln ("		if (!--exceptions_pending_nums[i]) {");
-	cln ("			exceptions_pending ^= 1<<i;");
-	cln ("		}");
+	cln ("i = TakeException();");
+	cln ("if (i >= 0) {");
+	cln ("	jdest = exception_handlers[i];");
 	/* save flags */
-	cln ("		bN=N; bnZ=nZ; bV=V; bC=C; bX=X;");
-	cln ("		goto jumptable;");
-	cln ("	}");
+	cln ("	bN=N; bnZ=nZ; bV=V; bC=C; bX=X;");
+	cln ("	goto jumptable;");
 	cln ("}");
-	cln ("/* shouldn't get here... */");
+	cln ("/* none after all: carry on */");
 	cln ("jdest = rdest;");
+	cln ("rdest = 0;");
 	cln ("goto jumptable;\n");
 	
 	cout ("end_:\treturn;\n}\n");

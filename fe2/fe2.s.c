@@ -477945,18 +477945,15 @@ __NLnative_culled:
 	}
 
 handle_exception:
-	for (i=0; i<32; i++) {
-		if (exceptions_pending & ((1<<i))) {
-			jdest = exception_handlers[i];
-			if (!--exceptions_pending_nums[i]) {
-				exceptions_pending ^= 1<<i;
-			}
-			bN=N; bnZ=nZ; bV=V; bC=C; bX=X;
-			goto jumptable;
-		}
+	i = TakeException();
+	if (i >= 0) {
+		jdest = exception_handlers[i];
+		bN=N; bnZ=nZ; bV=V; bC=C; bX=X;
+		goto jumptable;
 	}
-	/* shouldn't get here... */
+	/* none after all: carry on */
 	jdest = rdest;
+	rdest = 0;
 	goto jumptable;
 
 end_:	return;

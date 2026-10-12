@@ -19,7 +19,6 @@ s32 N, nZ, V, C, X;      // CPU flags
 s32 bN, bnZ, bV, bC, bX; // Backup flags
 s32 rdest;               // Return address from interrupt
 s32 exceptions_pending;
-s32 exceptions_pending_nums[32]; // Pending exceptions
 u32 exception_handlers[32];      // Handlers for exceptions
 char *STRam;                     // Pointer to system RAM
 
@@ -89,15 +88,29 @@ void MemWriteLong(p68K pos, int val)
 
 /* Flag Exception Handling -------------------------------------- */
 
+/* Called from the timer thread. A flagged exception runs once however many
+ * times it was flagged. (This used to be a count set here and decremented by
+ * the game's thread, unlocked: a race could leave it below zero, and then
+ * the VBL handler ran at every jump until the next tick - minutes of game
+ * time in 20 ms.) */
 void FlagException(int num)
 {
     if (exception_handlers[num])
-    {
-        exceptions_pending |= (1 << num); // Set the bit for the pending exception
+        EXCEPTIONS_PENDING_OR(1 << num);
+}
 
-        // Increment the pending exception count
-        exceptions_pending_nums[num] = 1; // A hacky fix for the speed up bug. TODO fix the incrementing version: exceptions_pending_nums[num]++;
+/* The game's thread: the lowest pending exception with a handler, now no
+ * longer pending, or -1 */
+int TakeException(void)
+{
+    for (int i = 0; i < 32; i++)
+    {
+        if (!(EXCEPTIONS_PENDING_AND(~(1 << i)) & (1 << i)))
+            continue;
+        if (exception_handlers[i])
+            return i;
     }
+    return -1;
 }
 
 /* Bin Loader (In-place) ---------------------------------------- */

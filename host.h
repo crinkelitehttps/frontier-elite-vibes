@@ -44,9 +44,21 @@ extern union Reg Regs[16];
 extern s32 N, nZ, V, C, X;
 extern s32 bN, bnZ, bV, bC, bX;
 extern s32 rdest; // Return address_player from interrupt (0 if none active)
-extern s32 exceptions_pending;
-extern s32 exceptions_pending_nums[32];
+extern s32 exceptions_pending; /* a bit per exception; set by the timer thread */
 extern u32 exception_handlers[32];
+
+/* exceptions_pending is shared with the timer thread (FlagException): only
+ * change it with these */
+#if defined(_MSC_VER) && !defined(__clang__)
+#include <intrin.h>
+#define EXCEPTIONS_PENDING_OR(v) _InterlockedOr((volatile long *)&exceptions_pending, (long)(v))
+#define EXCEPTIONS_PENDING_AND(v) _InterlockedAnd((volatile long *)&exceptions_pending, (long)(v))
+#define EXCEPTIONS_PENDING_SWAP(v) _InterlockedExchange((volatile long *)&exceptions_pending, (long)(v))
+#else
+#define EXCEPTIONS_PENDING_OR(v) __atomic_fetch_or(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
+#define EXCEPTIONS_PENDING_AND(v) __atomic_fetch_and(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
+#define EXCEPTIONS_PENDING_SWAP(v) __atomic_exchange_n(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
+#endif
 
 void SetReg(int reg, int val);
 int GetReg(int reg);
@@ -72,6 +84,7 @@ extern const int hcalls_count; /* entries in hcalls[] */
 #define SetZFlag(val) nZ = !(val)
 
 void FlagException(int num);
+int TakeException(void);
 void load_binfile(const char *bin_filename);
 
 /* Optional bounds checking when debugging */
