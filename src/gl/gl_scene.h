@@ -141,6 +141,10 @@ void soft_node_capture(SoftNode *s); /* gl_atmos.c */
 void soft_nodes_reset(void);         /* gl_atmos.c, with scene_reset */
 void atmos_publish(void);            /* gl_atmos.c, with scene_publish */
 void atmos_acquire(void);            /* gl_atmos.c, with scene_acquire */
+/* Drops what the object L390f2 is drawing (frame a6) records from here on,
+ * but its planet, until it is done (the native scene draws the rest of a
+ * planet's model, its rings); 0 stops */
+void scene_mute_object(uint32_t a6);
 void planet_dists_reset(void);       /* gl_planet.c, with scene_reset */
 void planet_dists_publish(void);     /* gl_planet.c, with scene_publish */
 void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */

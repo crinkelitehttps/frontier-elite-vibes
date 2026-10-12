@@ -118,6 +118,9 @@ void scene_reset(void)
 	planet_dists_reset();
 }
 
+/* The frame (A6) of the object whose primitives are dropped, 0 if none */
+static uint32_t mute_a6;
+
 int scene_cur_pass(void)
 {
 	return cur_pass;
@@ -148,6 +151,7 @@ bool scene_begin_pass(int id)
 	close_current();
 	cur_node = -1;
 	cur_pass = rec.n_passes++;
+	mute_a6 = 0;
 	rec.passes[cur_pass].root = -1;
 	rec.passes[cur_pass].id = id;
 	return true;
@@ -217,10 +221,26 @@ void scene_lock_node(bool lock)
 	node_locked = lock;
 }
 
+void scene_mute_object(uint32_t a6)
+{
+	mute_a6 = a6;
+}
+
 void *scene_record(enum PrimOp op, size_t size)
 {
 	if (!scene_active() || cur_node < 0)
 		return NULL;
+	if (mute_a6)
+	{
+		/* below the object's frame: still drawing it */
+		if ((uint32_t)GetReg(REG_A7) < mute_a6)
+		{
+			if (op != PRIM_PLANET)
+				return NULL;
+		}
+		else
+			mute_a6 = 0;
+	}
 
 	size_t padded = (size + 7) & ~(size_t)7;
 	if (rec.data_pos + sizeof(RecHeader) + padded > SCENE_DATA_SIZE || padded > 0xffff)

@@ -356,6 +356,11 @@ void planet_native_object(uint32_t addr, const float pos[3], const float cols[3]
 	}
 }
 
+uint32_t planet_native_object_addr(int i)
+{
+	return native_show.p[i].obj;
+}
+
 int planet_native_count(void)
 {
 	return native_mode() == 2 ? native_show.n : 0;
@@ -427,6 +432,9 @@ void Nu_PutPlanet(void)
 	capture_palette(p);
 	record_dist(p);
 	record_native(p);
+	/* the rest of the planet's model (rings) is the native scene's */
+	if (native_mode() == 2)
+		scene_mute_object(p->ctx.a[6]);
 
 	float centre[3];
 	vec3i_to_f(p->pos, centre);

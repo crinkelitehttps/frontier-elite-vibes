@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -299,6 +300,7 @@ static uint32_t far_a6, far_addr;
  * screen; d0 = 1 to have its matrix worked out and capture it anyway */
 extern "C" void Nu_NativeCulled(void)
 {
+	scene_mute_object(0);
 	uint32_t a6 = (uint32_t)GetReg(REG_A6);
 	uint32_t addr, table;
 	int model;
@@ -356,6 +358,7 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
  * when the native scene draws it instead of the game. */
 extern "C" void Nu_NativeFar(void)
 {
+	scene_mute_object(0);
 	SetReg(REG_D0, 0);
 	far_a6 = 0;
 	if (!native_enabled() || !scene_active())
@@ -407,6 +410,7 @@ static bool sky_hook(uint32_t a6)
 
 extern "C" void Nu_NativeObject(void)
 {
+	scene_mute_object(0);
 	uint32_t a6 = (uint32_t)GetReg(REG_A6);
 	if (sky_hook(a6))
 		return;
@@ -486,6 +490,8 @@ struct Node
 	 * paints these under whatever is nearer, and they need not lie under it
 	 * in 3D (a cloud's shadow hangs below the cloud, above the ground) */
 	bool under = false;
+	bool planet = false; /* the planet command: the sphere goes here */
+	float radius = 0;    /* ...the planet's, view units */
 };
 struct Drawn
 {
@@ -1097,7 +1103,7 @@ struct Runner
 
 	void run(Run &r, int depth)
 	{
-		if (depth > 8 || r.c->planet)
+		if (depth > 8)
 			return;
 		const Code &c = *r.c;
 		size_t i = 0;
@@ -1186,6 +1192,16 @@ struct Runner
 			case 0x18:
 				blobs(r, ins);
 				break;
+			case 0x1f: /* the planet (L3cd9c), at its vertex (the low byte of
+						  the third word) */
+				if (auto p = vertex(r, fe2::s8(w.size() > 2 ? w[2] : 0)))
+				{
+					Node &n = new_node(zkey(*p), false);
+					n.planet = true;
+					/* the radius word * 2^(s-8) (L3cdd8 on) */
+					n.radius = (w.size() > 1 ? (float)w[1] : 0) * r.k / 256;
+				}
+				break;
 			default:
 				emit(r, i);
 				break;
@@ -1246,7 +1262,15 @@ void run_objects(bool wire)
 	frame_seed++;
 	drawn.resize((size_t)show.n);
 	for (int i = 0; i < show.n; i++)
-		run_object(show.obj[i], drawn[(size_t)i], wire, false);
+	{
+		const Object &o = show.obj[i];
+		const Code *c = code_for(o.table, o.model);
+		/* filled, planets are drawn with the sky (draw_fars) */
+		if (c && c->planet && !wire)
+			drawn[(size_t)i] = Drawn();
+		else
+			run_object(o, drawn[(size_t)i], wire, false);
+	}
 }
 
 void draw_segs(const std::vector<Seg> &segs)
@@ -1373,6 +1397,81 @@ void draw_far(const Far &f)
 	}
 }
 
+/* The game's order within an object: its depth tree's nodes farthest
+ * first, each in the model's order */
+void sort_nodes(std::vector<Node> &nodes)
+{
+	std::stable_sort(nodes.begin(), nodes.end(), [](const Node &a, const Node &b) {
+		for (int i = 0; i < std::min(a.depth, b.depth); i++)
+			if (a.path[(size_t)i] != b.path[(size_t)i])
+				return a.path[(size_t)i] > b.path[(size_t)i];
+		return false;
+	});
+}
+
+/* A planet object: its model (rings) round the sphere, what is farther
+ * than its centre before it, the rest after (the game sorts the ring's
+ * quarters, whose ends are behind the planet and in front). Faces across
+ * that distance are cut until their pieces are small next to the planet. */
+void draw_planet_object(const Object &o, int sphere)
+{
+	Drawn d;
+	run_object(o, d, false, false);
+	const Node *planet = nullptr;
+	for (const Node &n : d.nodes)
+		if (n.planet && !planet)
+			planet = &n;
+	double cd = planet_native_dist(sphere);
+	float piece = planet && planet->radius > 0 ? planet->radius / 4 : (float)cd / 100;
+	auto len = [](const P3 &p) { return std::sqrt(dot(p, p)); };
+	bool back = true;
+	std::function<void(const P3 &, const P3 &, const P3 &, int)> split_tri = [&](const P3 &a, const P3 &b,
+																			   const P3 &c, int level) {
+		bool fa = len(a) > cd, fb = len(b) > cd, fc = len(c) > cd;
+		auto edge = [&](const P3 &u, const P3 &v) { return len(P3{u[0] - v[0], u[1] - v[1], u[2] - v[2]}); };
+		if ((fa != fb || fb != fc) && level < 8 && std::max({edge(a, b), edge(b, c), edge(c, a)}) > piece)
+		{
+			auto mid = [](const P3 &u, const P3 &v) {
+				return P3{(u[0] + v[0]) / 2, (u[1] + v[1]) / 2, (u[2] + v[2]) / 2};
+			};
+			P3 ab = mid(a, b), bc = mid(b, c), ca = mid(c, a);
+			split_tri(a, ab, ca, level + 1);
+			split_tri(ab, b, bc, level + 1);
+			split_tri(ca, bc, c, level + 1);
+			split_tri(ab, bc, ca, level + 1);
+			return;
+		}
+		P3 m = {(a[0] + b[0] + c[0]) / 3, (a[1] + b[1] + c[1]) / 3, (a[2] + b[2] + c[2]) / 3};
+		if ((len(m) > cd) == back)
+			gd_tri(a.data(), b.data(), c.data());
+	};
+	for (int pass = 0; pass < 2; pass++)
+	{
+		back = pass == 0;
+		for (const Node &n : d.nodes)
+		{
+			for (const Tri &t : n.tris)
+			{
+				set_colour(t.colour);
+				split_tri(t.p[0], t.p[1], t.p[2], 0);
+			}
+			for (const Seg &sg : n.segs)
+			{
+				P3 c = {(sg.a[0] + sg.b[0]) / 2, (sg.a[1] + sg.b[1]) / 2, (sg.a[2] + sg.b[2]) / 2};
+				if ((len(c) > cd) != back)
+					continue;
+				set_colour(sg.colour);
+				gd_line(sg.a.data(), sg.b.data());
+			}
+			for (const Dot &dt : n.dots)
+				if ((len(dt.p) > cd) == back)
+					draw_dots({dt});
+		}
+		if (back)
+			planet_native_draw(sphere);
+	}
+}
+
 /* Far bodies and planets, farthest first */
 void draw_fars()
 {
@@ -1383,21 +1482,39 @@ void draw_fars()
 		if (c && c->planet)
 			planet_native_object(o.addr, o.pos, o.cols);
 	}
-	std::vector<std::pair<double, int>> order; /* distance, far (>= 0) or ~planet */
+	/* a far body, or a planet (its sphere and/or its object) */
+	struct Item
+	{
+		double d;
+		int far, sphere;
+		const Object *o;
+	};
+	std::vector<Item> order;
+	auto dist = [](const float *p) { return std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]); };
 	for (int i = 0; i < show.nfar; i++)
-	{
-		const float *p = show.far[i].pos;
-		order.push_back({std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]), i});
-	}
+		order.push_back({dist(show.far[i].pos), i, -1, nullptr});
 	for (int i = 0; i < planet_native_count(); i++)
-		order.push_back({planet_native_dist(i), ~i});
-	std::stable_sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
-	for (const auto &e : order)
+		order.push_back({planet_native_dist(i), -1, i, nullptr});
+	for (int j = 0; j < show.n; j++)
 	{
-		if (e.second >= 0)
-			draw_far(show.far[e.second]);
+		const Object &o = show.obj[j];
+		const Code *c = code_for(o.table, o.model);
+		if (!c || !c->planet)
+			continue;
+		/* without its sphere, the game draws it (a disc far away) */
+		for (Item &e : order)
+			if (e.sphere >= 0 && planet_native_object_addr(e.sphere) == o.addr)
+				e.o = &o;
+	}
+	std::stable_sort(order.begin(), order.end(), [](const Item &a, const Item &b) { return a.d > b.d; });
+	for (const Item &e : order)
+	{
+		if (e.far >= 0)
+			draw_far(show.far[e.far]);
+		else if (e.o)
+			draw_planet_object(*e.o, e.sphere);
 		else
-			planet_native_draw(~e.second);
+			planet_native_draw(e.sphere);
 	}
 }
 
@@ -1578,12 +1695,7 @@ extern "C" void native_draw(void)
 			 * farthest first, each in the model's order, as the models were
 			 * made for (a city's buildings stand half in its ground, decals
 			 * lie on their faces), hidden only by other objects... */
-			std::stable_sort(d.nodes.begin(), d.nodes.end(), [](const Node &a, const Node &b) {
-				for (int i = 0; i < std::min(a.depth, b.depth); i++)
-					if (a.path[(size_t)i] != b.path[(size_t)i])
-						return a.path[(size_t)i] > b.path[(size_t)i];
-				return false;
-			});
+			sort_nodes(d.nodes);
 			depth.write = false;
 			depth.depth_only = false;
 			gd_set_depth(&depth);

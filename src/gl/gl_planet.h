@@ -82,6 +82,7 @@ void planet_draw_shell(const float centre[3], float cos_outer, float cos_inner, 
  * far, and drawing one */
 void planet_native_object(uint32_t addr, const float pos[3], const float cols[3][3]);
 int planet_native_count(void);
+uint32_t planet_native_object_addr(int i); /* its planet object */
 double planet_native_dist(int i);
 void planet_native_draw(int i);
 /* The atmosphere bands round them (gl_atmos.c), before the planets */
