@@ -171,13 +171,17 @@ static void capture_palette(PlanetDesc *p)
  * 100000: a couple of hundred metres on Merlin, more than the height of a
  * ship just off the ground, which then sees the ground all over some
  * passes). The ahead pass is the game's own camera, drawn last; every pass
- * draws the planet at its distance. */
+ * draws the planet at its distance. Its colours too: the game picks them
+ * for the view it draws (its 2D shape's colour table), so each pass would
+ * shade the ground a little differently and show where the passes meet. */
 #define DIST_PLANETS 16
 typedef struct
 {
 	int n;
 	float radius[DIST_PLANETS];
 	double dist[DIST_PLANETS];
+	uint16_t palette[DIST_PLANETS][16];
+	int light_col[DIST_PLANETS], obj_col[DIST_PLANETS];
 } PlanetDists;
 
 static PlanetDists dists_rec, dists_pub, dists_show;
@@ -220,6 +224,9 @@ static void record_dist(const PlanetDesc *p)
 	double x = p->pos.x, y = p->pos.y, z = p->pos.z;
 	dists_rec.radius[i] = p->radius;
 	dists_rec.dist[i] = sqrt(x * x + y * y + z * z);
+	memcpy(dists_rec.palette[i], p->palette, sizeof dists_rec.palette[i]);
+	dists_rec.light_col[i] = p->light_col;
+	dists_rec.obj_col[i] = p->obj_col;
 }
 
 void Nu_PutPlanet(void)
@@ -533,9 +540,17 @@ void draw_planet(const void *payload)
 		cockpit_world_split(&lens, &head);
 	float view_pos[3], pos[3], light[3];
 	vec3i_to_f(p->pos, view_pos);
+	const uint16_t *palette = p->palette;
+	int light_col = p->light_col, obj_col = p->obj_col;
 	if (cockpit_active())
 	{
 		int i = find_dist(&dists_show, p->radius);
+		if (i >= 0)
+		{
+			palette = dists_show.palette[i];
+			light_col = dists_show.light_col[i];
+			obj_col = dists_show.obj_col[i];
+		}
 		double len = sqrt((double)view_pos[0] * view_pos[0] + (double)view_pos[1] * view_pos[1] +
 						  (double)view_pos[2] * view_pos[2]);
 		if (i >= 0 && len > 0.0)
@@ -569,14 +584,14 @@ void draw_planet(const void *payload)
 
 	memcpy(pass->light, light, sizeof(pass->light));
 	vec3_normalize(pass->light);
-	gl_rgb444_to_f(p->light_col, pass->diffuse);
-	gl_rgb444_to_f(p->obj_col, pass->ambient);
+	gl_rgb444_to_f(light_col, pass->diffuse);
+	gl_rgb444_to_f(obj_col, pass->ambient);
 
 	/* The surface: eye space -> view space (H^T) -> the game's view (z
 	 * flipped, S) -> the planet's axes (A^T) */
 	pass->surface = p->surface_ok ? planet_surface_texture(&p->surface) : 0;
 	for (int i = 0; i < 16; i++)
-		gl_rgb444_to_f(p->palette[i], pass->palette[i]);
+		gl_rgb444_to_f(palette[i], pass->palette[i]);
 	static const float s[3] = {1, 1, -1};
 	for (int i = 0; i < 3; i++)
 		for (int k = 0; k < 3; k++)
