@@ -113,6 +113,11 @@ P3 to_p3(const fe2::Vec3 &v)
 	return {(float)v.x, (float)v.y, (float)v.z};
 }
 
+float dot(const P3 &a, const P3 &b)
+{
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
 /* An instruction's faces and lines, in the model's own units */
 void build_prims(const fe2::Model &m, const fe2::Instr &ins, const fe2::Model::ParentFn &parent,
 				 const fe2::VertexEnv *env, std::vector<Face> &faces, std::vector<Line> &lines)
@@ -221,11 +226,26 @@ struct Object
 	uint16_t t[8];
 };
 
+/* A body too far away for its model, which L390f2 draws as a disc instead
+ * (l39092): a sun, a far planet, a far ship's dot. GL view space. */
+struct Far
+{
+	uint32_t addr;
+	float pos[3];
+	float radius; /* the model's (word at +14) * 2^(s+1), view units */
+	int colour;   /* the model's word at +18: bit 15 twinkly, then 444 + flags */
+	float light[3];
+	uint16_t tint[8];
+};
+
 constexpr int MAX_OBJECTS = 256;
+constexpr int MAX_FAR = 64;
 struct Frame
 {
 	Object obj[MAX_OBJECTS];
 	int n = 0;
+	Far far[MAX_FAR];
+	int nfar = 0;
 	/* The sky (stars, the Milky Way: L44200_DrawBGStars) */
 	Object sky;
 	bool has_sky = false;
@@ -266,13 +286,32 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 	return rec.n < MAX_OBJECTS;
 }
 
+/* The far body Nu_NativeFar last saw (L390f2's frame, its object) */
+static uint32_t far_a6, far_addr;
+
 /* Host call (Lnative_clip in fe2.s): the game culls this object as off
  * screen; d0 = 1 to have its matrix worked out and capture it anyway */
 extern "C" void Nu_NativeCulled(void)
 {
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
 	uint32_t addr, table;
 	int model;
-	SetReg(REG_D0, wanted((uint32_t)GetReg(REG_A6), addr, table, model) ? 1 : 0);
+	bool want = wanted(a6, addr, table, model) && !(a6 == far_a6 && addr == far_addr);
+	SetReg(REG_D0, want ? 1 : 0);
+}
+
+/* The light vector (L60e2_lighting_vector or the object's own frame's) and
+ * the tint table (L60f6_light_tint_table) as L390f2 set them up */
+static void capture_light(uint32_t a6, float light[3], uint16_t tint[8])
+{
+	float l[3] = {(float)(int16_t)rdword(a6 - 198), (float)(int16_t)rdword(a6 - 196),
+				  -(float)(int16_t)rdword(a6 - 194)};
+	cockpit_pass_to_view(l, light);
+	float len = std::sqrt(light[0] * light[0] + light[1] * light[1] + light[2] * light[2]);
+	for (int j = 0; j < 3; j++)
+		light[j] = len > 0 ? light[j] / len : 0;
+	for (int j = 0; j < 8; j++)
+		tint[j] = (uint16_t)rdword(a6 - 104 + 2 * (uint32_t)j);
 }
 
 /* The object at a6 (L390f2's or L39426's frame), as the game's own camera
@@ -296,22 +335,46 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 						-(int16_t)rdword(m + 4) / 32768.0f};
 		cockpit_pass_to_view(col, o.cols[c]);
 	}
-	/* the light vector (L60e2_lighting_vector or the object's own frame's)
-	 * and the tint table (L60f6_light_tint_table) as L390f2 set them up */
-	float l[3] = {(float)(int16_t)rdword(a6 - 198), (float)(int16_t)rdword(a6 - 196),
-				  -(float)(int16_t)rdword(a6 - 194)};
-	cockpit_pass_to_view(l, o.light);
-	float len = std::sqrt(o.light[0] * o.light[0] + o.light[1] * o.light[1] + o.light[2] * o.light[2]);
-	for (int j = 0; j < 3; j++)
-		o.light[j] = len > 0 ? o.light[j] / len : 0;
-	for (int j = 0; j < 8; j++)
-		o.tint[j] = (uint16_t)rdword(a6 - 104 + 2 * (uint32_t)j);
+	capture_light(a6, o.light, o.tint);
 	for (int j = 0; j < NUM_VARS; j++)
 		o.vars[j] = (uint16_t)rdword(addr + 114 + 2 * (uint32_t)j);
 	for (int j = 0; j < 8; j++)
 		o.t[j] = j == 0 ? 0 : (uint16_t)rdword(a6 - 64 + 2 * (uint32_t)j);
 	o.detail[0] = (int16_t)rdword(FE2_optdetail1);
 	o.detail[1] = (int16_t)rdword(FE2_optdetail2);
+}
+
+/* Host call (Lnative_clip, before the cull): is the object too far for its
+ * model (d7, its distance's exponent, >= the model's word at +20), so that
+ * L390f2 would draw it as a disc (l39092)? Kept as a far body if so; d0 = 1
+ * when the native scene draws it instead of the game. */
+extern "C" void Nu_NativeFar(void)
+{
+	SetReg(REG_D0, 0);
+	far_a6 = 0;
+	if (!native_enabled() || !scene_active())
+		return;
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	uint32_t m = (uint32_t)GetReg(REG_A5);
+	if ((int16_t)GetReg(REG_D7) < (int16_t)rdword(m + 20) || (int32_t)rdlong(a6 - 8) < 0x40)
+		return;
+	uint32_t addr = (uint32_t)rdlong(a6 - 212);
+	far_a6 = a6;
+	far_addr = addr;
+	bool have = false;
+	for (int i = 0; i < rec.nfar && !have; i++)
+		have = rec.far[i].addr == addr;
+	if (!have && rec.nfar < MAX_FAR)
+	{
+		Far &f = rec.far[rec.nfar++];
+		f.addr = addr;
+		float p[3] = {(float)rdlong(a6 - 16), (float)rdlong(a6 - 12), -(float)rdlong(a6 - 8)};
+		cockpit_pass_to_view(p, f.pos);
+		f.radius = std::ldexp((float)(int16_t)rdword(m + 14), (int16_t)rdword(a6 - 208) + 1);
+		f.colour = (uint16_t)rdword(m + 18);
+		capture_light(a6, f.light, f.tint);
+	}
+	SetReg(REG_D0, enabled == 2 ? 1 : 0);
 }
 
 /* The sky model, drawn by L44200_DrawBGStars through L39426 in every pass:
@@ -351,6 +414,7 @@ extern "C" void Nu_NativeObject(void)
 extern "C" void native_reset(void)
 {
 	rec.n = 0;
+	rec.nfar = 0;
 	rec.has_sky = false;
 }
 
@@ -554,7 +618,6 @@ struct Runner
 			p[j] = r.ax[0][j] * v[0] + r.ax[1][j] * v[1] + r.ax[2][j] * v[2];
 		return p;
 	}
-	static float dot(const P3 &a, const P3 &b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
 	static float len(const P3 &a) { return std::sqrt(dot(a, a)); }
 	/* A depth tree key as the game works it out (L3a202): depth along its
 	 * camera plus (|x| + |y|) / 8. The models' drawing order is tuned to it,
@@ -1225,20 +1288,115 @@ void draw_nodes(const std::vector<Node> &nodes)
 	}
 }
 
+/* View units per pixel of the game's screen at distance z, as gl_prims.c
+ * draws the game's circles */
+float px_at(const float p[3])
+{
+	return 0.002f * std::fabs(p[2]);
+}
+
+/* A far body (L3a68c and on): a disc of its true size, lit as a sphere
+ * with the tints the game gives a face by how square it is to the light,
+ * unless its colour says it shines (bit 8); a twinkly one (a sun) has
+ * rays across it 8 pixels longer than its radius, and when it is smaller
+ * than a pixel the rays alone, shorter (L3aa74). Something smaller than a
+ * pixel is a dot. */
+void draw_far(const Far &f)
+{
+	int c = f.colour & 0xfff;
+	int base = (c & 0xeee) + ((c & 0x10) ? 0x111 : 0);
+	bool lit = !(c & 0x100);
+	bool twinkly = f.colour & 0x8000;
+	float px = px_at(f.pos);
+	float rpx = f.radius / px;
+	if (rpx >= 0.5f)
+	{
+		/* the disc's axes, square to the line of sight */
+		float d = std::sqrt(f.pos[0] * f.pos[0] + f.pos[1] * f.pos[1] + f.pos[2] * f.pos[2]);
+		P3 w = {-f.pos[0] / d, -f.pos[1] / d, -f.pos[2] / d};
+		P3 u = std::fabs(w[1]) < 0.9f ? P3{w[2], 0, -w[0]} : P3{0, -w[2], w[1]};
+		float ul = std::sqrt(dot(u, u));
+		u = {u[0] / ul, u[1] / ul, u[2] / ul};
+		P3 v = {w[1] * u[2] - w[2] * u[1], w[2] * u[0] - w[0] * u[2], w[0] * u[1] - w[1] * u[0]};
+		const int RINGS = lit ? 12 : 1, SEGS = 48;
+		auto at = [&](float rho, float th, P3 &n) {
+			float cu = rho * std::cos(th), cv = rho * std::sin(th);
+			n = {cu * u[0] + cv * v[0], cu * u[1] + cv * v[1], cu * u[2] + cv * v[2]};
+			P3 p = {f.pos[0] + f.radius * n[0], f.pos[1] + f.radius * n[1], f.pos[2] + f.radius * n[2]};
+			float h = std::sqrt(std::max(0.0f, 1 - rho * rho));
+			for (int k = 0; k < 3; k++)
+				n[k] += h * w[k];
+			return p;
+		};
+		auto colour = [&](const P3 &n) {
+			if (!lit)
+				return base;
+			float dl = dot(n, P3{f.light[0], f.light[1], f.light[2]}) * (127.0f / 128.0f);
+			return dl >= 0 ? base : base + f.tint[std::max(0, std::min(7, (int)std::floor(8 * (1 + dl))))];
+		};
+		for (int i = 0; i < RINGS; i++)
+		{
+			float r0 = (float)i / RINGS, r1 = (float)(i + 1) / RINGS;
+			for (int j = 0; j < SEGS; j++)
+			{
+				float t0 = 6.2831853f * j / SEGS, t1 = 6.2831853f * (j + 1) / SEGS;
+				P3 n00, n01, n10, n11, nm;
+				P3 a = at(r0, t0, n00), b = at(r1, t0, n10), e = at(r1, t1, n11), g = at(r0, t1, n01);
+				at((r0 + r1) / 2, (t0 + t1) / 2, nm);
+				set_colour(colour(nm));
+				gd_tri(a.data(), b.data(), e.data());
+				if (i > 0)
+					gd_tri(a.data(), e.data(), g.data());
+			}
+		}
+	}
+	else if (!twinkly)
+	{
+		set_colour(lit ? base + f.tint[0] : base);
+		gd_point(f.pos, 1.0f);
+	}
+	if (twinkly)
+	{
+		set_colour(base);
+		float len = (rpx >= 1 ? rpx + 8 : 1 + 7 * rpx) * px;
+		const float *p = f.pos;
+		float a[3] = {p[0] - len, p[1], p[2]}, b[3] = {p[0] + len, p[1], p[2]};
+		float e[3] = {p[0], p[1] - len, p[2]}, g[3] = {p[0], p[1] + len, p[2]};
+		gd_line(a, b);
+		gd_line(e, g);
+	}
+}
+
+/* Far bodies, farthest first */
+void draw_fars()
+{
+	std::vector<const Far *> fars;
+	for (int i = 0; i < show.nfar; i++)
+		fars.push_back(&show.far[i]);
+	auto d2 = [](const Far *f) { return f->pos[0] * f->pos[0] + f->pos[1] * f->pos[1] + f->pos[2] * f->pos[2]; };
+	std::sort(fars.begin(), fars.end(), [&](const Far *a, const Far *b) { return d2(a) > d2(b); });
+	for (const Far *f : fars)
+		draw_far(*f);
+}
+
 } // namespace
 
 /* The sky, filled, under everything (before the scene): its parts in the
  * model's order, not depth tested. Round the camera, so it is the same
- * whichever way that looks. */
+ * whichever way that looks. Then the far bodies on it. */
 extern "C" void native_draw_sky(void)
 {
-	if (!native_enabled() || enabled != 2 || !show.has_sky)
+	if (!native_enabled() || enabled != 2)
 		return;
-	Drawn d;
-	run_object(show.sky, d, false, true);
 	gd_push();
 	gd_identity();
-	draw_nodes(d.nodes);
+	if (show.has_sky)
+	{
+		Drawn d;
+		run_object(show.sky, d, false, true);
+		draw_nodes(d.nodes);
+	}
+	draw_fars();
 	gd_pop();
 }
 
@@ -1261,6 +1419,21 @@ extern "C" void native_draw(void)
 			for (const Seg &s : d.wire)
 				gd_line(s.a.data(), s.b.data());
 			draw_dots(d.wire_dots, false);
+		}
+		/* far bodies as orange rings */
+		gd_color3ub(255, 160, 64);
+		for (int i = 0; i < show.nfar; i++)
+		{
+			const Far &f = show.far[i];
+			float r = std::max(f.radius, 3 * px_at(f.pos));
+			float ring[32][3];
+			for (int j = 0; j < 32; j++)
+			{
+				ring[j][0] = f.pos[0] + r * std::cos(6.2831853f * j / 32);
+				ring[j][1] = f.pos[1] + r * std::sin(6.2831853f * j / 32);
+				ring[j][2] = f.pos[2];
+			}
+			gd_line_loop(ring, 32);
 		}
 		/* bright colours, one per object, to tell them from the game's
 		 * picture and each other */

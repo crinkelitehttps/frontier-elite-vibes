@@ -370,6 +370,6 @@
 #define FE2_Lcockpit_vertex_d                        0xa90ac /* Lcockpit_vertex_d */
 #define FE2_Lnative_object                           0xa90c4 /* Lnative_object */
 #define FE2_Lnative_clip                             0xa90ee /* Lnative_clip */
-#define FE2_Lnative_culled                           0xa911a /* Lnative_culled */
+#define FE2_Lnative_culled                           0xa9152 /* Lnative_culled */
 
 #endif /* FE2_LABELS_H */

@@ -47,6 +47,10 @@ void Nu_NativeObject(void);
 /* Host call (Lnative_clip in fe2.s): the game culls an object as off
  * screen, d0 = 1 to capture it all the same */
 void Nu_NativeCulled(void);
+/* Host call (Lnative_clip): d0 = 1 if the object is a body too far for its
+ * model (a sun, a far planet) that the native scene draws instead of the
+ * game's disc */
+void Nu_NativeFar(void);
 
 /* With the scene (gl_scene.c): a new frame, the frame is done (game
  * thread), the latest frame is taken for drawing (render thread) */
@@ -57,7 +61,8 @@ void native_acquire(void);
 /* Render thread, after the scene, with the 3D view's viewport and its
  * un-turned projection set */
 void native_draw(void);
-/* The same, before the scene: the sky (GLF_NATIVE_SCENE=2) */
+/* The same, before the scene: the sky and the far bodies
+ * (GLF_NATIVE_SCENE=2) */
 void native_draw_sky(void);
 
 /* GLF_NATIVE_SCENE is set */

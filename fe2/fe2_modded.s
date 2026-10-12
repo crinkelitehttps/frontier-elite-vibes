@@ -151,6 +151,7 @@ Call_CockpitVertexD	equ	$80
 * Native scene: an object's pose (src/gl/gl_native.cpp)
 Nu_NativeObject		equ	$81
 Nu_NativeCulled		equ	$82
+Nu_NativeFar		equ	$83
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -67407,6 +67408,9 @@ lnative_object_culled:
 * L39646_3DObjClipOffscreen / bne.w l390e6".
 ******************************************************************************
 Lnative_clip:
+		hcall	#Nu_NativeFar
+		tst.w	d0
+		bne.s	lnative_clip_far
 		jsr	L39646_3DObjClipOffscreen
 		bne.s	lnative_clip_off
 		rts
@@ -67420,6 +67424,28 @@ lnative_clip_keep:
 		movem.l	d0-7/a0-5,-(a7)
 		move.w	#1,Lnative_culled
 		jmp	L39290
+
+******************************************************************************
+* Native scene: suns and other bodies too far away for their models, which
+* L390f2 draws as a disc (l39092): with Nu_NativeFar's d0 set the native
+* scene draws them (with a true size and the light on them) and the game
+* doesn't. Only its screen position (110(a4)) is set, as the game would,
+* and L390f2 is left as l39092 leaves it. Nu_NativeFar sees to z >= $40.
+******************************************************************************
+lnative_clip_far:
+		addq.l	#4,a7
+		jsr	L39646_3DObjClipOffscreen
+		bne.s	lnative_clip_far_off
+		movem.l	-16(a6),d0-2
+		jsr	L35ea2_ZProject
+		addi.w	#$a0,d0
+		subi.w	#$54,d1
+		neg.w	d1
+		movem.w	d0-1,110(a4)
+		unlk	a6
+		rts
+lnative_clip_far_off:
+		jmp	l390e6
 
 Lnative_culled:
 		dc.w	0
