@@ -243,25 +243,43 @@ extern "C" bool native_enabled(void)
 	return enabled != 0;
 }
 
-extern "C" void Nu_NativeObject(void)
+/* The object L390f2 or L39426 is at is to be captured */
+static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 {
 	if (!native_enabled() || !scene_active())
-		return;
-	uint32_t a6 = (uint32_t)GetReg(REG_A6);
-	uint32_t addr = (uint32_t)rdlong(a6 - 212);
-	uint32_t table = (uint32_t)rdlong(FE2_game_data);
-	int model = (uint16_t)rdword(addr + 90) / 2;
+		return false;
+	addr = (uint32_t)rdlong(a6 - 212);
+	table = (uint32_t)rdlong(FE2_game_data);
+	model = (uint16_t)rdword(addr + 90) / 2;
 	if (table == FE2_gamedata1 && model == SKY_MODEL)
-		return; /* the sky, drawn by L39426 too */
+		return false; /* the sky, drawn by L39426 too */
 	/* Already captured from another pass. Objects made up on the stack
 	 * (the hangar's) share addresses, but within one pass. */
 	int pass = scene_cur_pass();
 	for (int i = 0; i < rec.n; i++)
 		if (rec.obj[i].addr == addr && rec.obj[i].model == model && rec.obj[i].table == table &&
 			rec.obj[i].pass != pass)
-			return;
-	if (rec.n >= MAX_OBJECTS)
+			return false;
+	return rec.n < MAX_OBJECTS;
+}
+
+/* Host call (Lnative_clip in fe2.s): the game culls this object as off
+ * screen; d0 = 1 to have its matrix worked out and capture it anyway */
+extern "C" void Nu_NativeCulled(void)
+{
+	uint32_t addr, table;
+	int model;
+	SetReg(REG_D0, wanted((uint32_t)GetReg(REG_A6), addr, table, model) ? 1 : 0);
+}
+
+extern "C" void Nu_NativeObject(void)
+{
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	uint32_t addr, table;
+	int model;
+	if (!wanted(a6, addr, table, model))
 		return;
+	int pass = scene_cur_pass();
 	Object &o = rec.obj[rec.n++];
 	o.addr = addr;
 	o.table = table;

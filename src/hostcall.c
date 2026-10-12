@@ -148,5 +148,6 @@ HOSTCALL hcalls[] = {
 	[0x7f] = Call_CockpitSky,
 	[0x80] = Call_CockpitVertexD,
 	[0x81] = Nu_NativeObject,
+	[0x82] = Nu_NativeCulled,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

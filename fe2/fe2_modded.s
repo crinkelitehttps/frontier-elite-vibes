@@ -150,6 +150,7 @@ Call_CockpitSky		equ	$7f
 Call_CockpitVertexD	equ	$80
 * Native scene: an object's pose (src/gl/gl_native.cpp)
 Nu_NativeObject		equ	$81
+Nu_NativeCulled		equ	$82
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -10968,8 +10969,10 @@ L390f2:
 		asr.l	d0,d5
 		asr.l	d0,d6
 		movem.l	d4-6,-16(a6)
-		bsr.w	L39646_3DObjClipOffscreen
-		bne.w	l390e6
+* Native scene: hook, same size as the code it replaced (8 bytes). See
+* Lnative_clip at the end of the file.
+		jsr	Lnative_clip
+		nop
 		move.w	#$111,-154(a6)
 		movem.l	-16(a6),d0-2
 		cmp.l	#$40,d2
@@ -67382,4 +67385,41 @@ lcockpit_vertex_d_done:
 Lnative_object:
 		clr.w	-64(a6)
 		hcall	#Nu_NativeObject
+		tst.w	Lnative_culled
+		bne.s	lnative_object_culled
 		jmp	L39546_CalcRotViewNLight
+	* Off screen, only run up to here for its matrix (Lnative_clip): back
+	* out to the game's off-screen exit with the registers it had
+lnative_object_culled:
+		clr.w	Lnative_culled
+		addq.l	#4,a7
+		movem.l	(a7)+,d0-7/a0-5
+		addq.l	#4,a7
+		jmp	l390e6
+
+******************************************************************************
+* Native scene: objects off screen too. The game skips an object outside its
+* view (L39646_3DObjClipOffscreen) before working out its matrix; the native
+* scene wants it all the same, for any camera. When the host wants it
+* (Nu_NativeCulled sets d0), the rest of L390f2 is run up to the hook with
+* Lnative_culled set, which captures the object and leaves by the game's
+* off-screen exit (l390e6) instead of drawing it. In place of "bsr.w
+* L39646_3DObjClipOffscreen / bne.w l390e6".
+******************************************************************************
+Lnative_clip:
+		jsr	L39646_3DObjClipOffscreen
+		bne.s	lnative_clip_off
+		rts
+lnative_clip_off:
+		hcall	#Nu_NativeCulled
+		tst.w	d0
+		bne.s	lnative_clip_keep
+		addq.l	#4,a7
+		jmp	l390e6
+lnative_clip_keep:
+		movem.l	d0-7/a0-5,-(a7)
+		move.w	#1,Lnative_culled
+		jmp	L39290
+
+Lnative_culled:
+		dc.w	0

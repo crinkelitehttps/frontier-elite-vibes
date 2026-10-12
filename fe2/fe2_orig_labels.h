@@ -319,7 +319,10 @@
 #define FE2_Lcockpit_sky                             0x83150 /* Lcockpit_sky */
 #define FE2_Lcockpit_vertex_d                        0x8316e /* Lcockpit_vertex_d */
 #define FE2_Lnative_object                           0x83186 /* Lnative_object */
-#define FE2_Lnative_object2                          0x83194 /* Lnative_object2 */
+#define FE2_Lnative_object2                          0x831b0 /* Lnative_object2 */
+#define FE2_Lnative_clip                             0x831d6 /* Lnative_clip */
+#define FE2_Lnative_clip2                            0x83202 /* Lnative_clip2 */
+#define FE2_Lnative_culled                           0x83226 /* Lnative_culled */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

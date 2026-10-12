@@ -9,6 +9,8 @@
  *     a hook at L393de in L390f2, where the object's view position and its
  *     model -> view matrix are ready), turned into the game's own camera's
  *     view space when it comes from a turned pass and kept once per object;
+ *     objects the game culls as off screen are captured too (Lnative_clip,
+ *     Nu_NativeCulled), so the scene is whole for any camera;
  *   - its model is run natively, like the game's model interpreter: the
  *     bytecode (decoded by the ship builder's tools/fe2ShipBuilder/fe2core.cpp,
  *     from the game's own memory) with its conditions on detail and on the
@@ -42,6 +44,9 @@ extern "C"
 
 /* Host call (Lnative_object in fe2.s): an object is about to be drawn */
 void Nu_NativeObject(void);
+/* Host call (Lnative_clip in fe2.s): the game culls an object as off
+ * screen, d0 = 1 to capture it all the same */
+void Nu_NativeCulled(void);
 
 /* With the scene (gl_scene.c): a new frame, the frame is done (game
  * thread), the latest frame is taken for drawing (render thread) */
