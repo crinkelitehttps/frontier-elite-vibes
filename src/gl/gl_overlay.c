@@ -11,7 +11,15 @@ static void canvas_tri(void *ctx, const float xy[6], const OverlayColour col[3])
 {
 	(void)ctx;
 	float a[3] = {xy[0], xy[1], 0}, b[3] = {xy[2], xy[3], 0}, c[3] = {xy[4], xy[5], 0};
-	gd_tri_rgba(a, &col[0].r, b, &col[1].r, c, &col[2].r);
+	uint8_t k[3][4];
+	for (int i = 0; i < 3; i++)
+	{
+		k[i][0] = col[i].r;
+		k[i][1] = col[i].g;
+		k[i][2] = col[i].b;
+		k[i][3] = col[i].a;
+	}
+	gd_tri_rgba(a, k[0], b, k[1], c, k[2]);
 }
 
 void gl_overlay_draw(void)
