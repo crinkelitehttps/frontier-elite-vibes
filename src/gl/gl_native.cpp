@@ -218,6 +218,7 @@ struct Object
 	int model;
 	int scale;     /* s: view = pos + R v 2^s */
 	float pos[3];  /* view units */
+	float shrink;  /* native_frame_shrink: true distance = |pos| * shrink */
 	float cols[3][3]; /* R's columns: the model's axes */
 	float light[3];   /* away from the light, unit */
 	uint16_t tint[8]; /* the light's colour by how square a face is to it */
@@ -336,6 +337,7 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 	o.pass = pass;
 	o.model = model;
 	o.scale = (int16_t)rdword(a6 - 208);
+	o.shrink = native_frame_shrink(a6);
 	/* the game's view space -> GL's (z flipped) -> the game's own camera
 	 * (from a turned pass) */
 	float p[3] = {(float)rdlong(a6 - 16), (float)rdlong(a6 - 12), -(float)rdlong(a6 - 8)};
@@ -434,6 +436,11 @@ extern "C" void Nu_NativeObject(void)
 	if (!wanted(a6, addr, table, model))
 		return;
 	capture(rec.obj[rec.n++], a6, addr, table, model);
+	/* filled, the native scene draws it: not the game's primitives too,
+	 * which the classic view paints under the native scene (over the
+	 * planets and the far bodies there) */
+	if (enabled == 2)
+		scene_mute_object(a6);
 }
 
 /* A planet object (L3cd9c, the planet command, is in these models) */
@@ -550,13 +557,14 @@ struct Seg
 	P3 a, b;
 	uint16_t colour;
 };
-/* A blob (L3ab42_ProjectBlobs): stars, stardust */
+/* A blob (L3ab42_ProjectBlobs): stars, stardust; or a circle (L3a558) */
 struct Dot
 {
 	P3 p;
 	uint16_t colour;
 	float px;     /* radius in pixels, else < 0 and... */
 	float radius; /* ...in view units */
+	bool twinkly = false; /* rays across it, 8 pixels longer (L3a93c) */
 };
 constexpr int ZTREE_MAX = 4; /* nested depth trees (L385d0_3dview_thing2) */
 struct Node
@@ -584,6 +592,14 @@ struct Drawn
 	std::vector<Seg> wire; /* the wireframe: outlines and lines */
 	std::vector<Dot> wire_dots;
 	float near = 1e30f, far = 0; /* clip w (depth along the camera) it spans */
+	/* The object's: what it is drawn at is shrunk by this (far away, the
+	 * game works in a frame shrunk by a power of two, Object.shrink) */
+	float shrink = 1;
+	bool back = false; /* beyond a planet: drawn with the far bodies */
+	/* An object that calls a planet's model (the intro's scene): what it
+	 * draws before the planet, drawn after the sky, before the planet's
+	 * atmosphere */
+	std::vector<Node> before_planet;
 };
 
 /* A model being run: where it is and its state (the game's A6 frame) */
@@ -1020,6 +1036,109 @@ struct Runner
 			}
 	}
 
+	/* circle (L3a558_ProjectCircle): a disc at the vertex in the high byte
+	 * of the third word, its size word (as a blob's, but no pixel form)
+	 * / 2 * 2^(s-7) across: the game halves it for the radius (L3a68c's
+	 * clip, l3a5e6 up close). Far away for its size, a whole number of
+	 * pixels across. With bit 7 of that word, rays across it. Lit unless the
+	 * colour's bit 8: plus the brightest tint when the light comes from
+	 * anywhere but well behind it (L3a908 on, a small one; a big one only
+	 * square to it) */
+	void circle(const Run &r, const fe2::Instr &ins)
+	{
+		const auto &w = ins.w;
+		if (w.size() < 3)
+			return;
+		auto p = vertex(r, fe2::s8(w[2] >> 8));
+		float z = p ? -(*p)[2] : 0;
+		if (!p || z < 64)
+			return;
+		int sz = w[1], v;
+		if (!(sz & 0x80))
+			v = ((sz >> 7) | (sz << 9)) & 0xffff;
+		else if (sz & 0x40)
+			v = (sz & 0x3f) < 8 ? r.t[sz & 0x3f] : 0;
+		else
+			v = o.vars[sz & 0x3f];
+		float across = (float)((v & 0xffff) >> 1) * r.k / 128;
+		int c0 = (w[0] >> 4) & 0xfff;
+		int c = c0 & 0xefe;
+		if (c & 0x10)
+			c = ((c & ~0x10) + r.base) & 0xfff;
+		Dot d;
+		d.p = *p;
+		d.twinkly = w[2] & 0x80;
+		bool small = z / 8 > across;
+		if (!small && z <= across / 2)
+			return; /* round the eye */
+		d.px = small ? std::floor(across * 256 / z) / 2 : -1.0f;
+		d.radius = small ? 0 : across / 2;
+		if (!(c0 & 0x100) && (small ? o.light[2] <= 0.875f : o.light[2] < -0.9766f))
+			c = (c + o.tint[0]) & 0xfff;
+		d.colour = (uint16_t)c;
+		if (wire)
+			out.wire_dots.push_back(d);
+		else
+			node(d.p).dots.push_back(d);
+	}
+
+	/* teardrop (L3bc46_ProjectThrust): an engine's exhaust, from the
+	 * vertex in the high byte of the second word (its tail) towards the
+	 * one in the low byte (its head); the third word its width, * 2^(s-5).
+	 * Narrower than 9 pixels on the game's screen, a line; as gl_prims.c
+	 * draws the game's (draw_teardrop) */
+	void teardrop(const Run &r, const fe2::Instr &ins)
+	{
+		const auto &w = ins.w;
+		if (w.size() < 3)
+			return;
+		auto head = vertex(r, fe2::s8(w[1])), tail = vertex(r, fe2::s8(w[1] >> 8));
+		if (!head || !tail || -(*head)[2] <= 512 || -(*tail)[2] <= 512)
+			return;
+		int px = (int)((float)(int16_t)w[2] * r.k / 32 * 256 / -(*head)[2]);
+		if (px == 0)
+			return;
+		int c = (w[0] >> 4) & 0xefe;
+		if (c & 0x10)
+			c = ((c & ~0x10) + r.base) & 0xfff;
+		Seg line = {*head, *tail, (uint16_t)c};
+		if (wire)
+		{
+			out.wire.push_back(line);
+			return;
+		}
+		Node &nd = node(*head);
+		if (px <= 8)
+		{
+			nd.segs.push_back(line);
+			return;
+		}
+		const float STRETCH = 1.3333333333f, BROADEN = 0.33f;
+		const int STEPS = 24;
+		const P3 &b = *tail;
+		P3 dir = {(*head)[0] - b[0], (*head)[1] - b[1], (*head)[2] - b[2]};
+		P3 cp[4] = {b,
+					{b[0] + STRETCH * dir[0] - BROADEN * dir[1], b[1] + STRETCH * dir[1] + BROADEN * dir[0],
+					 b[2] + dir[2]},
+					{b[0] + STRETCH * dir[0] + BROADEN * dir[1], b[1] + STRETCH * dir[1] - BROADEN * dir[0],
+					 b[2] + dir[2]},
+					b};
+		auto at = [&](float t) {
+			float u = 1 - t, k0 = u * u * u, k1 = 3 * u * u * t, k2 = 3 * u * t * t, k3 = t * t * t;
+			P3 q;
+			for (int j = 0; j < 3; j++)
+				q[j] = k0 * cp[0][j] + k1 * cp[1][j] + k2 * cp[2][j] + k3 * cp[3][j];
+			return q;
+		};
+		P3 prev = at(0);
+		for (int i = 1; i <= STEPS; i++)
+		{
+			P3 cur = at((float)i / STEPS);
+			nd.tris.push_back({{b, prev, cur}, (uint16_t)c});
+			prev = cur;
+		}
+	}
+
 	/* Axes swapped by `code` and negated by bits 13, 12, 11 of `w`
 	 * (L3c446's table, as L3c3be and mrotate use it) */
 	static void permute(const P3 (&from)[3], int w, int code, P3 (&to)[3])
@@ -1129,11 +1248,19 @@ struct Runner
 	{
 		const auto &w = ins.w;
 		const Code *child = code_for(o.table, (w[0] >> 5) & 0x7ff);
-		if (!child || child == r.c || child->planet)
+		if (!child || child == r.c)
 			return;
 		auto org = vertex(r, fe2::s8(w[1]));
 		if (!org)
 			return;
+		/* a planet (the intro's): the sphere is drawn with the far bodies,
+		 * after what of this model is farther (draw_fars) */
+		if (child->planet)
+		{
+			if (!wire)
+				new_node(zkey(*org), false).planet = true;
+			return;
+		}
 		Run c;
 		c.c = child;
 		c.org = *org;
@@ -1277,6 +1404,12 @@ struct Runner
 			case 0x18:
 				blobs(r, ins);
 				break;
+			case 0x01:
+				circle(r, ins);
+				break;
+			case 0x09:
+				teardrop(r, ins);
+				break;
 			case 0x1f: /* the planet (L3cd9c), at its vertex (the low byte of
 						  the third word) */
 				if (auto p = vertex(r, fe2::s8(w.size() > 2 ? w[2] : 0)))
@@ -1355,6 +1488,55 @@ void run_objects(bool wire)
 			drawn[(size_t)i] = Drawn();
 		else
 			run_object(o, drawn[(size_t)i], wire, false);
+		drawn[(size_t)i].shrink = o.shrink;
+	}
+}
+
+void sort_nodes(std::vector<Node> &nodes);
+
+/* This frame's objects run (native_draw_sky does it first, native_draw
+ * otherwise), each with the clip w it spans */
+bool prepared = false;
+void prepare(bool wire)
+{
+	if (prepared)
+		return;
+	prepared = true;
+	run_objects(wire);
+	mat4 mvp = gd_mvp();
+	auto clip_w = [&](const P3 &p) { return mvp.m[3] * p[0] + mvp.m[7] * p[1] + mvp.m[11] * p[2] + mvp.m[15]; };
+	for (Drawn &d : drawn)
+	{
+		auto span = [&](const P3 &p) {
+			float w = clip_w(p);
+			d.near = std::min(d.near, w);
+			d.far = std::max(d.far, w);
+		};
+		for (const Node &n : d.nodes)
+		{
+			for (const Tri &t : n.tris)
+				for (const P3 &p : t.p)
+					span(p);
+			for (const Seg &s : n.segs)
+			{
+				span(s.a);
+				span(s.b);
+			}
+			for (const Dot &s : n.dots)
+				span(s.p);
+		}
+		/* in the game's order, what comes before a planet it calls */
+		if (wire || planet_native_count() == 0)
+			continue;
+		sort_nodes(d.nodes);
+		for (size_t i = 0; i < d.nodes.size(); i++)
+			if (d.nodes[i].planet)
+			{
+				d.before_planet.assign(std::make_move_iterator(d.nodes.begin()),
+									   std::make_move_iterator(d.nodes.begin() + (long)i));
+				d.nodes.erase(d.nodes.begin(), d.nodes.begin() + (long)i);
+				break;
+			}
 	}
 }
 
@@ -1367,19 +1549,45 @@ void draw_segs(const std::vector<Seg> &segs)
 	}
 }
 
-/* As draw_blob (gl_prims.c) draws the game's: small ones as points */
+/* Rays across p, `len` either way: a cross on the screen, as the game
+ * draws it, along the eye's right and up, not fixed in the world (it would
+ * turn as the head rolls) */
+void draw_rays(const float p[3], float len)
+{
+	float x[3] = {1, 0, 0}, y[3] = {0, 1, 0};
+	if (cockpit_active())
+	{
+		mat4 h = cockpit_head_rotation();
+		for (int k = 0; k < 3; k++)
+			x[k] = h.m[4 * k], y[k] = h.m[4 * k + 1];
+	}
+	float a[3], b[3], e[3], g[3];
+	for (int k = 0; k < 3; k++)
+	{
+		a[k] = p[k] - len * x[k], b[k] = p[k] + len * x[k];
+		e[k] = p[k] - len * y[k], g[k] = p[k] + len * y[k];
+	}
+	gd_line(a, b);
+	gd_line(e, g);
+}
+
+/* As draw_blob (gl_prims.c) draws the game's: small ones as points; a
+ * twinkly one with rays 8 pixels longer than its radius, as
+ * draw_twinkly_circle */
 void draw_dots(const std::vector<Dot> &dots, bool colour = true)
 {
 	for (const Dot &d : dots)
 	{
 		if (colour)
 			set_colour(d.colour);
+		float r = d.px >= 0 ? -0.002f * d.px * d.p[2] : d.radius;
+		if (d.twinkly)
+			draw_rays(d.p.data(), std::max(r, 0.0f) - 0.016f * d.p[2]);
 		if (d.px >= 0 && d.px < 3)
 		{
 			gd_point(d.p.data(), (float)((int)d.px / 2 + 1));
 			continue;
 		}
-		float r = d.px >= 0 ? -0.002f * d.px * d.p[2] : d.radius;
 		if (r <= 0)
 			continue;
 		gd_push();
@@ -1473,26 +1681,7 @@ void draw_far(const Far &f)
 	if (twinkly)
 	{
 		set_colour(base);
-		float len = (rpx >= 1 ? rpx + 8 : 1 + 7 * rpx) * px;
-		/* a cross on the screen, as the game draws it: along the eye's
-		 * right and up, not fixed in the world (it would turn as the head
-		 * rolls) */
-		float x[3] = {1, 0, 0}, y[3] = {0, 1, 0};
-		if (cockpit_active())
-		{
-			mat4 h = cockpit_head_rotation();
-			for (int k = 0; k < 3; k++)
-				x[k] = h.m[4 * k], y[k] = h.m[4 * k + 1];
-		}
-		const float *p = f.pos;
-		float a[3], b[3], e[3], g[3];
-		for (int k = 0; k < 3; k++)
-		{
-			a[k] = p[k] - len * x[k], b[k] = p[k] + len * x[k];
-			e[k] = p[k] - len * y[k], g[k] = p[k] + len * y[k];
-		}
-		gd_line(a, b);
-		gd_line(e, g);
+		draw_rays(f.pos, (rpx >= 1 ? rpx + 8 : 1 + 7 * rpx) * px);
 	}
 }
 
@@ -1588,13 +1777,30 @@ void draw_fars()
 		double d;
 		int far, sphere;
 		const Object *o;
+		int obj = -1; /* an object beyond a planet (drawn[obj]) */
 	};
 	std::vector<Item> order;
 	auto dist = [](const float *p) { return std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]); };
 	for (int i = 0; i < show.nfar; i++)
 		order.push_back({dist(show.far[i].pos) * show.far[i].shrink, i, -1, nullptr});
+	double nearest_planet = 1e300;
 	for (int i = 0; i < planet_native_count(); i++)
+	{
 		order.push_back({planet_native_dist(i) * planet_native_shrink(i), -1, i, nullptr});
+		nearest_planet = std::min(nearest_planet, order.back().d);
+	}
+	/* An object farther than a planet's centre (a nebula in the intro, a
+	 * station round the far side) goes before it, as the game sorts them,
+	 * not over it with the rest of the scene */
+	for (size_t j = 0; j < drawn.size() && (int)j < show.n; j++)
+	{
+		double d = dist(show.obj[j].pos) * show.obj[j].shrink;
+		if (d > nearest_planet && drawn[j].far > 1.0f)
+		{
+			drawn[j].back = true;
+			order.push_back({d, -1, -1, nullptr, (int)j});
+		}
+	}
 	for (int j = 0; j < show.n; j++)
 	{
 		const Object &o = show.obj[j];
@@ -1609,7 +1815,12 @@ void draw_fars()
 	std::stable_sort(order.begin(), order.end(), [](const Item &a, const Item &b) { return a.d > b.d; });
 	for (const Item &e : order)
 	{
-		if (e.far >= 0)
+		if (e.obj >= 0)
+		{
+			sort_nodes(drawn[(size_t)e.obj].nodes);
+			draw_nodes(drawn[(size_t)e.obj].nodes);
+		}
+		else if (e.far >= 0)
 			draw_far(show.far[e.far]);
 		else if (e.o)
 			draw_planet_object(*e.o, e.sphere);
@@ -1630,12 +1841,15 @@ extern "C" void native_draw_sky(void)
 		return;
 	gd_push();
 	gd_identity();
+	prepare(false);
 	if (show.has_sky)
 	{
 		Drawn d;
 		run_object(show.sky, d, false, true);
 		draw_nodes(d.nodes);
 	}
+	for (const Drawn &d : drawn)
+		draw_nodes(d.before_planet);
 	atmos_draw_native();
 	draw_fars();
 	gd_pop();
@@ -1646,9 +1860,10 @@ extern "C" void native_draw(void)
 	if (!native_enabled())
 		return;
 	bool wire = enabled == 1;
-	run_objects(wire);
 	gd_push();
 	gd_identity();
+	prepare(wire);
+	prepared = false;
 	if (wire)
 	{
 		/* the sky in blue, over the game's */
@@ -1698,71 +1913,47 @@ extern "C" void native_draw(void)
 	/* Each object spans near..far in clip w. Objects whose spans overlap
 	 * share a depth slice, so they hide each other properly; the slices go
 	 * nearest first, so slices hide each other too, and each is precise
-	 * however far away it is. */
-	mat4 mvp = gd_mvp();
-	auto clip_w = [&](const P3 &p) { return mvp.m[3] * p[0] + mvp.m[7] * p[1] + mvp.m[11] * p[2] + mvp.m[15]; };
+	 * however far away it is. Spans and keys are compared at their true
+	 * distances (a far object is drawn shrunk), so a far one never shares a
+	 * slice with near ones. */
 	std::vector<Drawn *> placed;
 	for (Drawn &d : drawn)
-	{
-		for (const Node &n : d.nodes)
-		{
-			for (const Tri &t : n.tris)
-				for (const P3 &p : t.p)
-				{
-					float w = clip_w(p);
-					d.near = std::min(d.near, w);
-					d.far = std::max(d.far, w);
-				}
-			for (const Seg &s : n.segs)
-				for (const P3 &p : {s.a, s.b})
-				{
-					float w = clip_w(p);
-					d.near = std::min(d.near, w);
-					d.far = std::max(d.far, w);
-				}
-			for (const Dot &s : n.dots)
-			{
-				float w = clip_w(s.p);
-				d.near = std::min(d.near, w);
-				d.far = std::max(d.far, w);
-			}
-		}
-		if (d.far > 1.0f)
+		if (d.far > 1.0f && !d.back)
 			placed.push_back(&d);
-	}
-	std::sort(placed.begin(), placed.end(), [](const Drawn *a, const Drawn *b) { return a->near < b->near; });
+	std::sort(placed.begin(), placed.end(),
+			  [](const Drawn *a, const Drawn *b) { return a->near * a->shrink < b->near * b->shrink; });
 	std::vector<std::pair<size_t, size_t>> groups; /* [first, last) in placed */
 	float group_far = 0;
 	for (size_t i = 0; i < placed.size(); i++)
 	{
-		if (!groups.empty() && placed[i]->near < group_far)
+		if (!groups.empty() && placed[i]->near * placed[i]->shrink < group_far)
 			groups.back().second = i + 1;
 		else
 		{
 			groups.push_back({i, i + 1});
 			group_far = 0;
 		}
-		group_far = std::max(group_far, placed[i]->far);
+		group_far = std::max(group_far, placed[i]->far * placed[i]->shrink);
 	}
 	/* Underlays, all objects', in the game's order: each before any object
 	 * with a part nearer than its key (a city's ground plates, far back,
 	 * before everything), after objects wholly beyond it (a ship seen past
 	 * a station's bay, which the bay then hides). Painted, not depth
 	 * tested: they need not lie under what is drawn on them in 3D. */
-	std::vector<const Node *> unders;
+	std::vector<std::pair<float, const Node *>> unders; /* true key, node */
 	for (const Drawn *d : placed)
 		for (const Node &n : d->nodes)
 			if (n.under)
-				unders.push_back(&n);
-	std::stable_sort(unders.begin(), unders.end(), [](const Node *a, const Node *b) { return a->key > b->key; });
+				unders.push_back({n.key * d->shrink, &n});
+	std::stable_sort(unders.begin(), unders.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
-		if (next_under >= unders.size() || unders[next_under]->key <= beyond)
+		if (next_under >= unders.size() || unders[next_under].first <= beyond)
 			return;
 		gd_set_depth(nullptr);
-		for (; next_under < unders.size() && unders[next_under]->key > beyond; next_under++)
+		for (; next_under < unders.size() && unders[next_under].first > beyond; next_under++)
 		{
-			const Node *n = unders[next_under];
+			const Node *n = unders[next_under].second;
 			for (const Tri &t : n->tris)
 			{
 				set_colour(t.colour);
@@ -1786,7 +1977,7 @@ extern "C" void native_draw(void)
 		for (size_t j = groups[g].first; j < groups[g].second; j++)
 			for (const Node &n : placed[j]->nodes)
 				if (!n.under)
-					nearest = std::min(nearest, n.key);
+					nearest = std::min(nearest, n.key * placed[j]->shrink);
 		draw_unders(nearest);
 		for (size_t j = groups[g].first; j < groups[g].second; j++)
 		{
