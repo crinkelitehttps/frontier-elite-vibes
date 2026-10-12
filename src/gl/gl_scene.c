@@ -118,6 +118,11 @@ void scene_reset(void)
 	planet_dists_reset();
 }
 
+int scene_cur_pass(void)
+{
+	return cur_pass;
+}
+
 static void close_current(void)
 {
 	if (cur_node >= 0)

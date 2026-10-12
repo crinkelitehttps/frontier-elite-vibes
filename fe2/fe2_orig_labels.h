@@ -319,6 +319,7 @@
 #define FE2_Lcockpit_sky                             0x83150 /* Lcockpit_sky */
 #define FE2_Lcockpit_vertex_d                        0x8316e /* Lcockpit_vertex_d */
 #define FE2_Lnative_object                           0x83186 /* Lnative_object */
+#define FE2_Lnative_object2                          0x83194 /* Lnative_object2 */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

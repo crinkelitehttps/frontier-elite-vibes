@@ -28,25 +28,46 @@ extern "C"
 
 /* fe2core's image is the game binary as loaded: at address 0 of emulated RAM.
  * Models don't change while the game runs. */
+static void set_table(fe2::Image &img, uint32_t table)
+{
+	img.table = table;
+	int first = 0x10000;
+	for (int i = 0; i * 2 < first; i++)
+	{
+		int o = img.u16(img.table + i * 2);
+		if (o)
+			first = std::min(first, o);
+	}
+	img.num_models = first / 2;
+}
+
 const fe2::Image &fe2::Image::game()
 {
 	static Image img;
 	static std::once_flag once;
 	std::call_once(once, [] {
 		img.data.assign((const uint8_t *)m68kram, (const uint8_t *)m68kram + MEM_SIZE);
-		img.table = FE2_gamedata1;
 		img.gamedata2 = FE2_gamedata2;
 		img.core_strings = FE2_L3e894;
-		int first = 0x10000;
-		for (int i = 0; i * 2 < first; i++)
-		{
-			int o = img.u16(img.table + i * 2);
-			if (o)
-				first = std::min(first, o);
-		}
-		img.num_models = first / 2;
+		set_table(img, FE2_gamedata1);
 	});
 	return img;
+}
+
+/* The game's other model tables (the intro's has the hangar and the launch
+ * lift): the same image, another table. Only used on the render thread. */
+static const fe2::Image &image_for(uint32_t table)
+{
+	if (table == FE2_gamedata1)
+		return fe2::Image::game();
+	static std::unordered_map<uint32_t, std::unique_ptr<fe2::Image>> others;
+	auto &slot = others[table];
+	if (!slot)
+	{
+		slot.reset(new fe2::Image(fe2::Image::game()));
+		set_table(*slot, table);
+	}
+	return *slot;
 }
 
 namespace
@@ -80,6 +101,10 @@ struct Code
 	std::unordered_map<int, size_t> at; /* byte offset -> instruction */
 	std::vector<std::vector<Face>> faces; /* by instruction */
 	std::vector<std::vector<Line>> lines;
+	/* by instruction: its geometry depends on the object (variables,
+	 * temporaries, random offsets, the parent's vertices), so it is worked
+	 * out each time it is drawn */
+	std::vector<bool> dyn;
 	bool planet = false; /* drawn by the planet code */
 };
 
@@ -88,16 +113,46 @@ P3 to_p3(const fe2::Vec3 &v)
 	return {(float)v.x, (float)v.y, (float)v.z};
 }
 
-std::unordered_map<int, std::unique_ptr<Code>> codes;
-
-/* Model `index`, or null */
-const Code *code_for(int index)
+/* An instruction's faces and lines, in the model's own units */
+void build_prims(const fe2::Model &m, const fe2::Instr &ins, const fe2::Model::ParentFn &parent,
+				 const fe2::VertexEnv *env, std::vector<Face> &faces, std::vector<Line> &lines)
 {
-	auto it = codes.find(index);
+	for (const fe2::Prim &p : fe2::primitives(m, {ins}, parent, env))
+	{
+		if (p.kind == fe2::Prim::Face && p.pts.size() >= 3)
+		{
+			Face f;
+			f.colour = p.colour;
+			f.nidx = p.normal ? p.nidx : 0;
+			f.has_normal = p.normal.has_value();
+			fe2::Vec3 n = fe2::normalize(p.normal ? *p.normal : fe2::newell(p.pts));
+			f.n = to_p3(n);
+			for (auto &t : fe2::triangulate(p.pts, n))
+				for (int v : t)
+					f.tris.push_back(to_p3(p.pts[v]));
+			for (auto &v : p.pts)
+				f.outline.push_back(to_p3(v));
+			faces.push_back(std::move(f));
+		}
+		else if (p.kind == fe2::Prim::Line)
+		{
+			for (size_t j = 0; j + 1 < p.pts.size(); j++)
+				lines.push_back({p.colour, to_p3(p.pts[j]), to_p3(p.pts[j + 1])});
+		}
+	}
+}
+
+std::unordered_map<uint64_t, std::unique_ptr<Code>> codes;
+
+/* Model `index` of the model table at `table`, or null */
+const Code *code_for(uint32_t table, int index)
+{
+	uint64_t key = (uint64_t)table << 32 | (uint32_t)index;
+	auto it = codes.find(key);
 	if (it != codes.end())
 		return it->second.get();
-	std::unique_ptr<Code> &slot = codes[index];
-	const fe2::Image &img = fe2::Image::game();
+	std::unique_ptr<Code> &slot = codes[key];
+	const fe2::Image &img = image_for(table);
 	auto model = img.model(index);
 	if (!model)
 		return nullptr;
@@ -111,38 +166,33 @@ const Code *code_for(int index)
 	c.ins = std::move(ins);
 	c.faces.resize(c.ins.size());
 	c.lines.resize(c.ins.size());
-	/* vertex -1, the point the parent called it at, is its origin */
-	fe2::Model::ParentFn origin = [](int i) -> std::optional<fe2::Vec3> {
-		return i == -1 ? std::optional<fe2::Vec3>(fe2::Vec3()) : std::nullopt;
+	c.dyn.resize(c.ins.size());
+	/* vertex -1, the point the parent called it at, is its origin; the
+	 * parent's other vertices, variables and random offsets make an
+	 * instruction dynamic */
+	bool dyn = false;
+	fe2::Model::ParentFn origin = [&](int i) -> std::optional<fe2::Vec3> {
+		if (i != -1)
+			dyn = true;
+		return fe2::Vec3();
+	};
+	fe2::VertexEnv probe;
+	probe.param = [&](int) {
+		dyn = true;
+		return 0x8000;
+	};
+	probe.jitter = [&](int, int) {
+		dyn = true;
+		return fe2::Vec3();
 	};
 	for (size_t i = 0; i < c.ins.size(); i++)
 	{
 		c.at[c.ins[i].off] = i;
 		if (c.ins[i].op == 0x1f)
 			c.planet = true;
-		for (const fe2::Prim &p : fe2::primitives(c.model, {c.ins[i]}, origin))
-		{
-			if (p.kind == fe2::Prim::Face && p.pts.size() >= 3)
-			{
-				Face f;
-				f.colour = p.colour;
-				f.nidx = p.normal ? p.nidx : 0;
-				f.has_normal = p.normal.has_value();
-				fe2::Vec3 n = fe2::normalize(p.normal ? *p.normal : fe2::newell(p.pts));
-				f.n = to_p3(n);
-				for (auto &t : fe2::triangulate(p.pts, n))
-					for (int v : t)
-						f.tris.push_back(to_p3(p.pts[v]));
-				for (auto &v : p.pts)
-					f.outline.push_back(to_p3(v));
-				c.faces[i].push_back(std::move(f));
-			}
-			else if (p.kind == fe2::Prim::Line)
-			{
-				for (size_t j = 0; j + 1 < p.pts.size(); j++)
-					c.lines[i].push_back({p.colour, to_p3(p.pts[j]), to_p3(p.pts[j + 1])});
-			}
-		}
+		dyn = false;
+		build_prims(c.model, c.ins[i], origin, &probe, c.faces[i], c.lines[i]);
+		c.dyn[i] = dyn;
 	}
 	return &c;
 }
@@ -150,11 +200,14 @@ const Code *code_for(int index)
 /* ---- captured objects -------------------------------------------------------- */
 
 constexpr int NUM_VARS = 128;
+constexpr int SKY_MODEL = 0xb0 / 2;
 
 /* An object as the game's own camera sees it, GL view space (z flipped) */
 struct Object
 {
 	uint32_t addr;
+	uint32_t table; /* the model table it was drawn from (L973c_game_data) */
+	int pass;       /* the scene pass it was captured in */
 	int model;
 	int scale;     /* s: view = pos + R v 2^s */
 	float pos[3];  /* view units */
@@ -196,14 +249,24 @@ extern "C" void Nu_NativeObject(void)
 		return;
 	uint32_t a6 = (uint32_t)GetReg(REG_A6);
 	uint32_t addr = (uint32_t)rdlong(a6 - 212);
+	uint32_t table = (uint32_t)rdlong(FE2_game_data);
+	int model = (uint16_t)rdword(addr + 90) / 2;
+	if (table == FE2_gamedata1 && model == SKY_MODEL)
+		return; /* the sky, drawn by L39426 too */
+	/* Already captured from another pass. Objects made up on the stack
+	 * (the hangar's) share addresses, but within one pass. */
+	int pass = scene_cur_pass();
 	for (int i = 0; i < rec.n; i++)
-		if (rec.obj[i].addr == addr)
-			return; /* already captured, from another pass */
+		if (rec.obj[i].addr == addr && rec.obj[i].model == model && rec.obj[i].table == table &&
+			rec.obj[i].pass != pass)
+			return;
 	if (rec.n >= MAX_OBJECTS)
 		return;
 	Object &o = rec.obj[rec.n++];
 	o.addr = addr;
-	o.model = (uint16_t)rdword(addr + 90) / 2;
+	o.table = table;
+	o.pass = pass;
+	o.model = model;
 	o.scale = (int16_t)rdword(a6 - 208);
 	/* the game's view space -> GL's (z flipped) -> the game's own camera
 	 * (from a turned pass) */
@@ -276,9 +339,15 @@ struct Seg
 	P3 a, b;
 	uint16_t colour;
 };
+constexpr int ZTREE_MAX = 4; /* nested depth trees (L385d0_3dview_thing2) */
 struct Node
 {
 	float key; /* the game's depth key (zkey); the farthest is drawn first */
+	/* The keys of the ztree nodes it is inside, outermost first, then its
+	 * own: those nodes are sorted among the others by their keys, and what
+	 * is inside each among itself */
+	std::array<float, ZTREE_MAX + 1> path;
+	int depth;
 	std::vector<Tri> tris;
 	std::vector<Seg> segs;
 	/* Keyed farther back than it is (a batch pushed back by a depth): an
@@ -305,6 +374,13 @@ struct Run
 	int base;     /* base colour, -154(a6) */
 	int shade0;   /* the shade of normal 0, faces without a normal */
 	uint16_t t[8]; /* temporaries, -64(a6): t0 the depth of sub-models */
+	int voff = 0;  /* mcopy: vertex records shifted by this many */
+	/* The matrix msetup and mrotate make (-122(a6)), view space: sub-models
+	 * called with flip code 6 get it, mcopy makes it the model's own */
+	P3 m[3];
+	/* The parent's vertices passed to a sub-model: vertex -1 (its origin)
+	 * to -5, view space */
+	std::optional<P3> pv[5];
 };
 
 struct Runner
@@ -313,15 +389,47 @@ struct Runner
 	Drawn &out;
 	bool wire;
 	int s2; /* -192(a6): sub-models' scales are relative to it */
+	uint32_t frame_seed;
 	int batch = -1; /* the node a batch is going into (L385e4_3dview_word1) */
+	std::vector<float> zpath; /* the open ztree nodes' keys */
+
+	Node &new_node(float key, bool under)
+	{
+		Node n;
+		n.key = key;
+		n.depth = 0;
+		for (float k : zpath)
+			n.path[(size_t)n.depth++] = k;
+		n.path[(size_t)n.depth++] = key;
+		n.under = under;
+		if (n.depth > 1)
+			n.key = n.path[0];
+		out.nodes.push_back(std::move(n));
+		return out.nodes.back();
+	}
 
 	/* The node a primitive keyed on point `at` goes into */
 	Node &node(const P3 &at)
 	{
 		if (batch >= 0)
 			return out.nodes[(size_t)batch];
-		out.nodes.push_back({zkey(at), {}, {}, false});
-		return out.nodes.back();
+		return new_node(zkey(at), false);
+	}
+
+	/* ztree (L3a4b4): a node keyed on a vertex whose contents, up to the
+	 * matching pop (bit 15), are a depth tree of their own */
+	void ztree(const Run &r, const fe2::Instr &ins)
+	{
+		int w0 = ins.w[0];
+		if (w0 & 0x8000)
+		{
+			if (!zpath.empty())
+				zpath.pop_back();
+			return;
+		}
+		auto p = vertex(r, fe2::s8(w0 >> 5));
+		if (zpath.size() < ZTREE_MAX)
+			zpath.push_back(zkey(p ? *p : r.org));
 	}
 
 	/* batch begin / end (L3a1c0_ZWTF): what follows, up to the end or the
@@ -363,7 +471,7 @@ struct Runner
 		else
 			key = dist(v);
 		bool under = v == 0x7fe || v == 0x7fd || ((v & 0x700) == 0x700 && v != 0x7ff && w.size() > 1 && (int16_t)w[1] > 0);
-		out.nodes.push_back({key, {}, {}, under});
+		new_node(key, under);
 		batch = (int)out.nodes.size() - 1;
 	}
 
@@ -388,12 +496,54 @@ struct Runner
 	 * so it is kept, in the game camera's view space (GL's, z flipped). */
 	static float zkey(const P3 &a) { return -a[2] + (std::fabs(a[0]) + std::fabs(a[1])) / 8; }
 
+	/* View space -> the model's units */
+	fe2::Vec3 unplace(const Run &r, const P3 &p) const
+	{
+		P3 d = {p[0] - r.org[0], p[1] - r.org[1], p[2] - r.org[2]};
+		return {dot(r.ax[0], d) / r.k, dot(r.ax[1], d) / r.k, dot(r.ax[2], d) / r.k};
+	}
+	fe2::Model::ParentFn parent_fn(const Run &r) const
+	{
+		return [this, &r](int j) -> std::optional<fe2::Vec3> {
+			if (j == -1)
+				return fe2::Vec3();
+			int k = -1 - j;
+			if (k < 0 || k >= 5 || !r.pv[k])
+				return std::nullopt;
+			return unplace(r, *r.pv[k]);
+		};
+	}
+	/* Type $7/$8 vertices' random offsets (L39a26): three random longs
+	 * >> shift, view units; new each frame, the same within one */
+	fe2::Vec3 jitter(const Run &r, int vi, int shift) const
+	{
+		uint32_t h = o.addr * 2654435761u ^ (uint32_t)r.c->model.index * 40503u ^ (uint32_t)vi * 2246822519u ^
+					 frame_seed * 3266489917u;
+		float d[3];
+		for (float &x : d)
+		{
+			h ^= h >> 15;
+			h *= 2246822519u;
+			h ^= h >> 13;
+			h *= 3266489917u;
+			h ^= h >> 16;
+			x = shift >= 32 ? 0 : std::ldexp((float)(int32_t)h, -shift);
+		}
+		return {d[0] / r.k, d[1] / r.k, d[2] / r.k};
+	}
+	fe2::VertexEnv env(const Run &r) const
+	{
+		fe2::VertexEnv e;
+		e.param = [this, &r](int p) { return param(r, p); };
+		e.offset = r.voff;
+		e.jitter = [this, &r](int vi, int shift) { return jitter(r, vi, shift); };
+		return e;
+	}
+
 	std::optional<P3> vertex(const Run &r, int i) const
 	{
-		static const fe2::Model::ParentFn origin = [](int j) -> std::optional<fe2::Vec3> {
-			return j == -1 ? std::optional<fe2::Vec3>(fe2::Vec3()) : std::nullopt;
-		};
-		auto v = r.c->model.vertex_pos(i, origin);
+		fe2::VertexEnv e = env(r);
+		auto v = r.c->model.vertex_pos(i, parent_fn(r), 0, &e);
 		if (!v)
 			return std::nullopt;
 		return place(r, to_p3(*v));
@@ -559,7 +709,18 @@ struct Runner
 
 	void emit(const Run &r, size_t i)
 	{
-		for (const Face &f : r.c->faces[i])
+		const std::vector<Face> *faces = &r.c->faces[i];
+		const std::vector<Line> *lines = &r.c->lines[i];
+		std::vector<Face> dfaces;
+		std::vector<Line> dlines;
+		if (r.c->dyn[i] || r.voff)
+		{
+			fe2::VertexEnv e = env(r);
+			build_prims(r.c->model, r.c->ins[i], parent_fn(r), &e, dfaces, dlines);
+			faces = &dfaces;
+			lines = &dlines;
+		}
+		for (const Face &f : *faces)
 		{
 			P3 n = turn(r, f.n);
 			P3 a = place(r, f.tris[0]);
@@ -585,8 +746,7 @@ struct Runner
 				nd.tris.push_back(tri);
 			}
 		}
-		for (const Line &l : r.c->lines[i])
-		{
+		for (const Line &l : *lines)
 		{
 			Seg s = {place(r, l.a), place(r, l.b), (uint16_t)colour(l.colour, r.shade0, r.base)};
 			if (wire)
@@ -594,7 +754,109 @@ struct Runner
 			else
 				node(s.a).segs.push_back(s);
 		}
+	}
+
+	/* Axes swapped by `code` and negated by bits 13, 12, 11 of `w`
+	 * (L3c446's table, as L3c3be and mrotate use it) */
+	static void permute(const P3 (&from)[3], int w, int code, P3 (&to)[3])
+	{
+		static const int SWAPS[8][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0},
+										{1, 0, 2}, {0, 2, 1}, {0, 1, 2}, {0, 1, 2}};
+		const int bits[3] = {0x2000, 0x1000, 0x0800};
+		for (int i = 0; i < 3; i++)
+		{
+			float sign = (w & bits[i]) ? -1.0f : 1.0f;
+			for (int j = 0; j < 3; j++)
+				to[SWAPS[code][i]][j] = from[i][j] * sign;
 		}
+	}
+
+	/* Turns the matrix's axes `pair` (0: y, z; 1: z, x; 2: x, y) by the
+	 * angle with this cosine and sine (L3c614): a' = a c + b s,
+	 * b' = b c - a s */
+	static void rotate(Run &r, int pair, float c, float s)
+	{
+		static const int AXES[4][2] = {{1, 2}, {2, 0}, {0, 1}, {1, 0}};
+		P3 &a = r.m[AXES[pair][0]], &b = r.m[AXES[pair][1]];
+		for (int j = 0; j < 3; j++)
+		{
+			float x = a[j], y = b[j];
+			a[j] = x * c + y * s;
+			b[j] = y * c - x * s;
+		}
+	}
+	/* An angle word (mrotate's): a constant ror 7, or a variable or
+	 * temporary (bit 6) */
+	int angle(const Run &r, int w) const
+	{
+		w &= 0xffff;
+		if (!(w & 0x80))
+			return ((w >> 7) | (w << 9)) & 0xffff;
+		int i = (((w & ~0x80) * 2) & 0xffff) & ~0x80;
+		if (!(w & 0x40))
+			return (i >> 1) < NUM_VARS ? o.vars[i >> 1] : 0;
+		return (i >> 1) < 8 ? r.t[i >> 1] : 0;
+	}
+	void rotate_by(Run &r, int pair, int a) const
+	{
+		rotate(r, pair, sine(a + 0x4000) / 32768.0f, sine(a) / 32768.0f);
+	}
+
+	/* msetup (L3c556): the matrix the camera's (bit 15), or turned about
+	 * one axis towards the light in the model's axes (-42(a6)) */
+	void msetup(Run &r, int w0)
+	{
+		if (w0 & 0x8000)
+		{
+			r.m[0] = {1, 0, 0};
+			r.m[1] = {0, 1, 0};
+			r.m[2] = {0, 0, -1};
+			return;
+		}
+		int pair = (w0 >> 5) & 3;
+		/* the light, away from it, in the model's axes; the game view's
+		 * z is GL's flipped, as are the axes, so the dots agree */
+		const P3 light = {o.light[0], o.light[1], o.light[2]};
+		float l[3] = {dot(r.ax[0], light), dot(r.ax[1], light), dot(r.ax[2], light)};
+		static const int COMP[4][2] = {{1, 2}, {2, 0}, {0, 1}, {1, 0}};
+		float c = l[COMP[pair][0]], s = l[COMP[pair][1]];
+		float n = std::sqrt(c * c + s * s);
+		if (n <= 0)
+			return;
+		/* the game's divide comes to about 0.992 of a unit vector */
+		rotate(r, pair, c / n * (16384.0f / 0.50392f / 32768.0f), s / n * (16384.0f / 0.50392f / 32768.0f));
+	}
+
+	/* mrotate (L3c4ac): the matrix the model's axes swapped and negated
+	 * and turned by an angle (when the next word isn't 0); with bit 15,
+	 * the matrix turned by an angle */
+	void mrotate(Run &r, const fe2::Instr &ins)
+	{
+		const auto &w = ins.w;
+		int w0 = w[0];
+		int a = w.size() > 1 ? w[1] : 0;
+		if (!(w0 & 0x8000))
+		{
+			permute(r.ax, w0 << 1, (w0 >> 7) & 7, r.m);
+			if (!a)
+				return;
+		}
+		rotate_by(r, (w0 >> 5) & 3, angle(r, a));
+	}
+
+	/* mcopy (L39ea0): with bit 15 the matrix becomes the model's own axes;
+	 * else the vertex records are shifted by an operand */
+	void mcopy(Run &r, int w0)
+	{
+		if (w0 & 0x8000)
+		{
+			if (w0 == 0x801e)
+				return; /* a list of stars drawn from the object (the maps) */
+			for (int i = 0; i < 3; i++)
+				r.ax[i] = r.m[i];
+			return;
+		}
+		r.voff += (int16_t)(param(r, (w0 >> 5) & 0xff) << 2) >> 2;
 	}
 
 	/* a sub-model call (L3c928, L3c8d8): op $0e, or $1b with a scale and
@@ -602,7 +864,7 @@ struct Runner
 	void call(const Run &r, const fe2::Instr &ins, int depth)
 	{
 		const auto &w = ins.w;
-		const Code *child = code_for((w[0] >> 5) & 0x7ff);
+		const Code *child = code_for(o.table, (w[0] >> 5) & 0x7ff);
 		if (!child || child == r.c || child->planet)
 			return;
 		auto org = vertex(r, fe2::s8(w[1]));
@@ -612,6 +874,22 @@ struct Runner
 		c.c = child;
 		c.org = *org;
 		c.base = r.base;
+		c.pv[0] = *org;
+		/* with bit 15, the long after (the scale word for $1b) gives
+		 * vertices -2 to -5: bytes 0, 2, 3, 1 (low first), up to a $7f */
+		size_t ext = ins.op == 0x1b ? 3 : 2;
+		if ((w[1] & 0x8000) && w.size() >= ext + 2)
+		{
+			uint32_t l = (uint32_t)w[ext] << 16 | w[ext + 1];
+			const int byte_of[4] = {0, 2, 3, 1};
+			for (int k = 0; k < 4; k++)
+			{
+				int b = (int)(l >> (8 * byte_of[k])) & 0xff;
+				if (k > 0 && b == 0x7f)
+					break;
+				c.pv[k + 1] = vertex(r, fe2::s8(b));
+			}
+		}
 		int sparam = 0;
 		if (ins.op == 0x1b)
 		{
@@ -626,19 +904,16 @@ struct Runner
 		}
 		c.s = sparam + child->model.scale + child->model.scale2 - s2;
 		c.k = std::ldexp(1.0f, c.s);
-		/* its axes: the parent's, swapped and negated (L3c3be); code 6 is
-		 * the matrix made by mrotate, not done yet: the parent's */
-		static const int SWAPS[8][3] = {{0, 1, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0},
-										{1, 0, 2}, {0, 2, 1}, {0, 1, 2}, {0, 1, 2}};
+		/* its axes: the parent's, swapped and negated (L3c3be); code 6
+		 * the parent's msetup / mrotate matrix */
 		int code = (w[1] >> 8) & 7;
-		const int bits[3] = {0x2000, 0x1000, 0x0800};
+		if (code == 6)
+			for (int i = 0; i < 3; i++)
+				c.ax[i] = r.m[i];
+		else
+			permute(r.ax, w[1], code, c.ax);
 		for (int i = 0; i < 3; i++)
-		{
-			float sign = code != 6 && (w[1] & bits[i]) ? -1.0f : 1.0f;
-			int to = code == 6 ? i : SWAPS[code][i];
-			for (int j = 0; j < 3; j++)
-				c.ax[to][j] = r.ax[i][j] * sign;
-		}
+			c.m[i] = c.ax[i];
 		c.shade0 = o.tint[3];
 		std::memset(c.t, 0, sizeof c.t);
 		c.t[0] = (uint16_t)(r.t[0] + 1);
@@ -723,7 +998,17 @@ struct Runner
 			case 0x06:
 				begin_batch(r, ins);
 				break;
-			case 0x15: /* ztree: sorting within a batch, not done */
+			case 0x15:
+				ztree(r, ins);
+				break;
+			case 0x19:
+				msetup(r, w[0]);
+				break;
+			case 0x1c:
+				mrotate(r, ins);
+				break;
+			case 0x1e:
+				mcopy(r, w[0]);
 				break;
 			default:
 				emit(r, i);
@@ -755,16 +1040,18 @@ std::vector<Drawn> drawn;
 
 void run_objects(bool wire)
 {
+	static uint32_t frame_seed;
+	frame_seed++;
 	drawn.resize((size_t)show.n);
 	for (int i = 0; i < show.n; i++)
 	{
 		const Object &o = show.obj[i];
 		Drawn &d = drawn[(size_t)i];
 		d = Drawn();
-		const Code *c = code_for(o.model);
+		const Code *c = code_for(o.table, o.model);
 		if (!c)
 			continue;
-		Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale};
+		Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
 		Run r;
 		r.c = c;
 		r.org = {o.pos[0], o.pos[1], o.pos[2]};
@@ -775,6 +1062,9 @@ void run_objects(bool wire)
 		r.base = 0x111; /* L390f2 */
 		r.shade0 = o.tint[3];
 		std::memcpy(r.t, o.t, sizeof r.t);
+		for (int a = 0; a < 3; a++)
+			r.m[a] = r.ax[a];
+		r.pv[0] = r.org;
 		rn.run(r, 0);
 	}
 }
@@ -857,22 +1147,33 @@ extern "C" void native_draw(void)
 		}
 		group_far = std::max(group_far, placed[i]->far);
 	}
-	/* Underlays first, all objects', farthest first, under everything */
+	/* Underlays, all objects', in the game's order: each before any object
+	 * with a part nearer than its key (a city's ground plates, far back,
+	 * before everything), after objects wholly beyond it (a ship seen past
+	 * a station's bay, which the bay then hides). Painted, not depth
+	 * tested: they need not lie under what is drawn on them in 3D. */
 	std::vector<const Node *> unders;
 	for (const Drawn *d : placed)
 		for (const Node &n : d->nodes)
 			if (n.under)
 				unders.push_back(&n);
 	std::stable_sort(unders.begin(), unders.end(), [](const Node *a, const Node *b) { return a->key > b->key; });
-	for (const Node *n : unders)
-	{
-		for (const Tri &t : n->tris)
+	size_t next_under = 0;
+	auto draw_unders = [&](float beyond) {
+		if (next_under >= unders.size() || unders[next_under]->key <= beyond)
+			return;
+		gd_set_depth(nullptr);
+		for (; next_under < unders.size() && unders[next_under]->key > beyond; next_under++)
 		{
-			set_colour(t.colour);
-			gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+			const Node *n = unders[next_under];
+			for (const Tri &t : n->tris)
+			{
+				set_colour(t.colour);
+				gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+			}
+			draw_segs(n->segs);
 		}
-		draw_segs(n->segs);
-	}
+	};
 
 	float slice = groups.empty() ? 0 : 2.0f / (float)groups.size();
 	for (size_t g = groups.size(); g-- > 0;)
@@ -883,6 +1184,12 @@ extern "C" void native_draw(void)
 			depth.far = std::max(depth.far, placed[j]->far * 1.01f + 1.0f);
 		depth.lo = -1 + slice * (float)g;
 		depth.hi = -1 + slice * (float)(g + 1);
+		float nearest = 1e30f;
+		for (size_t j = groups[g].first; j < groups[g].second; j++)
+			for (const Node &n : placed[j]->nodes)
+				if (!n.under)
+					nearest = std::min(nearest, n.key);
+		draw_unders(nearest);
 		for (size_t j = groups[g].first; j < groups[g].second; j++)
 		{
 			Drawn &d = *placed[j];
@@ -890,8 +1197,12 @@ extern "C" void native_draw(void)
 			 * farthest first, each in the model's order, as the models were
 			 * made for (a city's buildings stand half in its ground, decals
 			 * lie on their faces), hidden only by other objects... */
-			std::stable_sort(d.nodes.begin(), d.nodes.end(),
-							 [](const Node &a, const Node &b) { return a.key > b.key; });
+			std::stable_sort(d.nodes.begin(), d.nodes.end(), [](const Node &a, const Node &b) {
+				for (int i = 0; i < std::min(a.depth, b.depth); i++)
+					if (a.path[(size_t)i] != b.path[(size_t)i])
+						return a.path[(size_t)i] > b.path[(size_t)i];
+				return false;
+			});
 			depth.write = false;
 			depth.depth_only = false;
 			gd_set_depth(&depth);
@@ -916,6 +1227,7 @@ extern "C" void native_draw(void)
 						gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
 		}
 	}
+	draw_unders(-1e30f);
 	gd_set_depth(nullptr);
 	gd_pop();
 }

@@ -117,6 +117,8 @@ void scene_lock_node(bool lock);
  * the records then stay in pass 0. */
 bool scene_begin_pass(int id);
 void scene_end_pass(void);
+/* The pass being recorded: 0, or the further pass's number */
+int scene_cur_pass(void);
 /* A node with just a record of type `op`, in front of everything the pass
  * has so far (its background) and behind all that comes after. Records
  * after it are dropped until the next scene_insert_node. */

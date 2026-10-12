@@ -66,6 +66,16 @@ struct Normal
 
 class Image;
 
+/* What a vertex can depend on besides the model, when a model is run for an
+ * object: type $13/$14's operand (an object variable or temporary), the
+ * vertex records shifted by mcopy, type $7/$8's random offset */
+struct VertexEnv
+{
+	std::function<int(int)> param;           /* an operand byte's value */
+	int offset = 0;                          /* records shifted by this many */
+	std::function<Vec3(int, int)> jitter;    /* (vertex index, shift): model units */
+};
+
 class Model
 {
   public:
@@ -80,7 +90,8 @@ class Model
 	std::vector<Normal> norms;
 
 	using ParentFn = std::function<std::optional<Vec3>(int)>;
-	std::optional<Vec3> vertex_pos(int index, const ParentFn &parent = nullptr, int depth = 0) const;
+	std::optional<Vec3> vertex_pos(int index, const ParentFn &parent = nullptr, int depth = 0,
+								   const VertexEnv *env = nullptr) const;
 	std::optional<Vec3> normal_vec(int index) const;
 	uint32_t code_addr() const { return addr + code_off; }
 	std::vector<uint8_t> ship_data(int n = 32) const;
@@ -150,7 +161,7 @@ struct Prim
 };
 
 std::vector<Prim> primitives(const Model &m, const std::vector<Instr> &instrs,
-							 const Model::ParentFn &parent = nullptr);
+							 const Model::ParentFn &parent = nullptr, const VertexEnv *env = nullptr);
 
 /* -- whole model in world space (mm, FE2 axes: x right, y up, z forward) - */
 

@@ -170,20 +170,28 @@ std::optional<Model> Image::model(int index) const
 /* Model                                                                    */
 /* ======================================================================== */
 
-std::optional<Vec3> Model::vertex_pos(int index, const ParentFn &parent, int depth) const
+/* The game's vertex types (L397be_TransformModelCoords and after) */
+std::optional<Vec3> Model::vertex_pos(int index, const ParentFn &parent, int depth, const VertexEnv *env) const
 {
 	if (depth > 32)
 		return Vec3();
 	if (index < 0)
 		return parent ? parent(index) : std::nullopt;
-	int vi = index >> 1, odd = index & 1;
-	if (vi >= (int)verts.size())
+	int vi = (index >> 1) + (env ? env->offset : 0), odd = index & 1;
+	if (vi < 0 || vi >= (int)verts.size())
 		return std::nullopt;
 	const Vertex &v = verts[vi];
 	int t = v.type;
-	auto rec = [&](int i) { return vertex_pos(i, parent, depth + 1); };
-	if (t <= 2 || t == 0x15 || t == 0x16 || t > 0x16)
+	auto rec = [&](int i) { return vertex_pos(i, parent, depth + 1, env); };
+	if (t <= 2)
 		return Vec3(odd ? -v.a : v.a, v.b, v.c);
+	if (t >= 0x15)
+	{
+		/* on a sphere of the model's radius word (+16) * $7f00 / 2^23
+		 * towards (a, b, c); the odd one opposite */
+		Vec3 d = normalize(Vec3(v.a, v.b, v.c)) * ((x16 & 0xffff) * (double)0x7f00 / 8388608.0);
+		return odd ? -d : d;
+	}
 	if (t == 9 || t == 0xA)
 		return Vec3(odd ? 0 : v.a, v.b, v.c);
 	int b = v.b, c = v.c;
@@ -198,7 +206,22 @@ std::optional<Vec3> Model::vertex_pos(int index, const ParentFn &parent, int dep
 		return p ? std::optional<Vec3>(-*p) : std::nullopt;
 	}
 	if (t == 7 || t == 8)
-		return rec(c);
+	{
+		/* moved at random by 2^31 >> a view units (lightning) */
+		auto p = rec(c);
+		if (p && env && env->jitter)
+			*p = *p + env->jitter(vi * 2 + odd, v.a & 0xff);
+		return p;
+	}
+	if ((t == 0x13 || t == 0x14) && env && env->param)
+	{
+		/* from b towards c by an operand / 65536 */
+		auto p = rec(b), q = rec(c);
+		if (!p || !q)
+			return p ? p : q;
+		double f = (double)((env->param(v.a & 0xff) & 0xffff) >> 1) / 32768.0;
+		return *p + (*q - *p) * f;
+	}
 	if (t == 3 || t == 4 || t == 0xB || t == 0xC || t == 0xD || t == 0xE || t == 0x13 || t == 0x14)
 	{
 		auto p = rec(b), q = rec(c);
@@ -208,10 +231,11 @@ std::optional<Vec3> Model::vertex_pos(int index, const ParentFn &parent, int dep
 	}
 	if (t == 0xF || t == 0x10)
 	{
-		auto p = rec(b), q = rec(c), r = rec(v.a);
+		/* a + b - c */
+		auto p = rec(b), q = rec(c), r = rec(odd ? v.a ^ 1 : v.a);
 		if (!p || !q || !r)
 			return p ? p : q;
-		return *p + *q - *r;
+		return *r + *p - *q;
 	}
 	if (t == 0x11 || t == 0x12)
 	{
@@ -712,9 +736,10 @@ static std::vector<Vec3> disc(const Vec3 &c, const Vec3 &nrm, double r, int seg 
 	return out;
 }
 
-std::vector<Prim> primitives(const Model &m, const std::vector<Instr> &instrs, const Model::ParentFn &parent)
+std::vector<Prim> primitives(const Model &m, const std::vector<Instr> &instrs, const Model::ParentFn &parent,
+							 const VertexEnv *env)
 {
-	auto vp = [&](int i) { return m.vertex_pos(i, parent); };
+	auto vp = [&](int i) { return m.vertex_pos(i, parent, 0, env); };
 	std::vector<Prim> out;
 	struct Region
 	{

@@ -11000,8 +11000,10 @@ L39426_PutGameData3DObj:
 		movem.w	d0-2,-198(a6)
 		movem.l	L60f6_light_tint_table,d0-3
 		movem.l	d0-3,-104(a6)
-		bsr.w	L39546_CalcRotViewNLight
-		bsr.w	L3e14e_SetupNProjectObj
+* Native scene: hook, same size as the code it replaced (8 bytes). See
+* Lnative_object2 at the end of the file.
+		jsr	Lnative_object2
+		nop
 		tst.w	L385e4_3dview_word1
 		beq.s	l394ae
 		movea.l	L385c8_primitives_end,a0
@@ -66500,3 +66502,14 @@ Lnative_object:
 		clr.w	-64(a6)
 		hcall	#Nu_NativeObject
 		jmp	L39546_CalcRotViewNLight
+
+******************************************************************************
+* Native scene: the same for objects drawn by L39426_PutGameData3DObj, from
+* whichever model table is in use (the hangar and launch lift come from the
+* intro's). In place of "bsr.w L39546_CalcRotViewNLight / bsr.w
+* L3e14e_SetupNProjectObj".
+******************************************************************************
+Lnative_object2:
+		hcall	#Nu_NativeObject
+		jsr	L39546_CalcRotViewNLight
+		jmp	L3e14e_SetupNProjectObj
