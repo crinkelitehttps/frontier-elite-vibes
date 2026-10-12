@@ -129,7 +129,10 @@ static void capture_surface(PlanetDesc *p)
 
 /* The colours the game fills this planet with (its 2D shape's first colour
  * table, rgb444 by now), else its colour tables from the frame (without a
- * lit table, a darker copy for the dark side) */
+ * lit table, a darker copy for the dark side). When no coastline crosses
+ * the game's view it fills the whole table with the colour under the view
+ * (L3d5dc_PushPlanetCol, 210(a3) set): right for its flat shape, but the
+ * sphere shows every feature, so a table of one colour is left out. */
 static void capture_palette(PlanetDesc *p)
 {
 	const PlanetSurface *s = &p->surface;
@@ -157,9 +160,16 @@ static void capture_palette(PlanetDesc *p)
 			i += 3;
 			break;
 		case PL_COLOURS:
+		{
+			int same = 1;
+			while (same < 16 && p->list[i + 1 + same] == p->list[i + 1])
+				same++;
+			if (same == 16 && p->surface_ok)
+				return;
 			for (int k = 0; k < 16; k++)
 				p->palette[k] = (uint16_t)(p->list[i + 1 + k] & 0xfff);
 			return;
+		}
 		default:
 			return;
 		}
