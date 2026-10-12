@@ -226,6 +226,9 @@ struct Frame
 {
 	Object obj[MAX_OBJECTS];
 	int n = 0;
+	/* The sky (stars, the Milky Way: L44200_DrawBGStars) */
+	Object sky;
+	bool has_sky = false;
 };
 Frame rec, pub, show;
 
@@ -272,15 +275,11 @@ extern "C" void Nu_NativeCulled(void)
 	SetReg(REG_D0, wanted((uint32_t)GetReg(REG_A6), addr, table, model) ? 1 : 0);
 }
 
-extern "C" void Nu_NativeObject(void)
+/* The object at a6 (L390f2's or L39426's frame), as the game's own camera
+ * sees it */
+static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int model)
 {
-	uint32_t a6 = (uint32_t)GetReg(REG_A6);
-	uint32_t addr, table;
-	int model;
-	if (!wanted(a6, addr, table, model))
-		return;
 	int pass = scene_cur_pass();
-	Object &o = rec.obj[rec.n++];
 	o.addr = addr;
 	o.table = table;
 	o.pass = pass;
@@ -315,9 +314,44 @@ extern "C" void Nu_NativeObject(void)
 	o.detail[1] = (int16_t)rdword(FE2_optdetail2);
 }
 
+/* The sky model, drawn by L44200_DrawBGStars through L39426 in every pass:
+ * kept once. Filled, the native scene draws it (native_draw_sky) and the
+ * game doesn't: Lnative_object2 leaves L39426 when Lnative_culled is set.
+ * Lnative_object would not, but the sky never comes through L390f2. */
+static bool sky_hook(uint32_t a6)
+{
+	if (!native_enabled() || !scene_active())
+		return false;
+	uint32_t addr = (uint32_t)rdlong(a6 - 212);
+	if ((uint32_t)rdlong(FE2_game_data) != FE2_gamedata1 || (uint16_t)rdword(addr + 90) / 2 != SKY_MODEL)
+		return false;
+	if (!rec.has_sky)
+	{
+		capture(rec.sky, a6, addr, FE2_gamedata1, SKY_MODEL);
+		rec.has_sky = true;
+	}
+	uint32_t ret = (uint32_t)rdlong((uint32_t)GetReg(REG_A7));
+	if (enabled == 2 && ret > FE2_PutGameData3DObj && ret < FE2_Put3DGamedata2Obj)
+		wrword(FE2_Lnative_culled, 1);
+	return true;
+}
+
+extern "C" void Nu_NativeObject(void)
+{
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	if (sky_hook(a6))
+		return;
+	uint32_t addr, table;
+	int model;
+	if (!wanted(a6, addr, table, model))
+		return;
+	capture(rec.obj[rec.n++], a6, addr, table, model);
+}
+
 extern "C" void native_reset(void)
 {
 	rec.n = 0;
+	rec.has_sky = false;
 }
 
 extern "C" void native_publish(void)
@@ -357,6 +391,14 @@ struct Seg
 	P3 a, b;
 	uint16_t colour;
 };
+/* A blob (L3ab42_ProjectBlobs): stars, stardust */
+struct Dot
+{
+	P3 p;
+	uint16_t colour;
+	float px;     /* radius in pixels, else < 0 and... */
+	float radius; /* ...in view units */
+};
 constexpr int ZTREE_MAX = 4; /* nested depth trees (L385d0_3dview_thing2) */
 struct Node
 {
@@ -368,6 +410,7 @@ struct Node
 	int depth;
 	std::vector<Tri> tris;
 	std::vector<Seg> segs;
+	std::vector<Dot> dots;
 	/* Keyed farther back than it is (a batch pushed back by a depth): an
 	 * underlay, ground plates, a starport's ground, cloud shadows. The game
 	 * paints these under whatever is nearer, and they need not lie under it
@@ -378,6 +421,7 @@ struct Drawn
 {
 	std::vector<Node> nodes;
 	std::vector<Seg> wire; /* the wireframe: outlines and lines */
+	std::vector<Dot> wire_dots;
 	float near = 1e30f, far = 0; /* clip w (depth along the camera) it spans */
 };
 
@@ -410,6 +454,9 @@ struct Runner
 	uint32_t frame_seed;
 	int batch = -1; /* the node a batch is going into (L385e4_3dview_word1) */
 	std::vector<float> zpath; /* the open ztree nodes' keys */
+	/* The sky: all of it, for any camera. The game draws the half of each
+	 * part that faces its camera (normal tests), from inside. */
+	bool sky = false;
 
 	Node &new_node(float key, bool under)
 	{
@@ -742,7 +789,7 @@ struct Runner
 		{
 			P3 n = turn(r, f.n);
 			P3 a = place(r, f.tris[0]);
-			if (f.has_normal && dot(n, a) >= 0)
+			if (f.has_normal && !sky && dot(n, a) >= 0)
 				continue; /* faces away */
 			int sh = f.has_normal ? tint(n) : shade(r, f.nidx);
 			uint16_t col = (uint16_t)colour(f.colour, sh, r.base);
@@ -772,6 +819,45 @@ struct Runner
 			else
 				node(s.a).segs.push_back(s);
 		}
+	}
+
+	/* blobs (L3ab42_ProjectBlobs): a dot at each vertex of a list. The size
+	 * word: bit 7 clear a constant, rotated right by 7, else an operand
+	 * (bit 6 a temporary, else an object variable); with bit 15 the radius
+	 * in pixels, else in model units / 128. Vertex bytes follow up to $7f. */
+	void blobs(const Run &r, const fe2::Instr &ins)
+	{
+		const auto &w = ins.w;
+		if (w.size() < 3)
+			return;
+		int c = (w[0] >> 4) & 0xefe;
+		if (c & 0x10)
+			c = ((c & ~0x10) + r.base) & 0xfff;
+		int sz = w[1], v;
+		if (!(sz & 0x80))
+			v = ((sz >> 7) | (sz << 9)) & 0xffff;
+		else if (sz & 0x40)
+			v = (sz & 0x3f) < 8 ? r.t[sz & 0x3f] : 0;
+		else
+			v = o.vars[sz & 0x3f];
+		Dot d;
+		d.colour = (uint16_t)c;
+		d.px = (v & 0x8000) ? (float)(v & 0x7fff) : -1.0f;
+		d.radius = (v & 0x8000) ? 0 : (float)(int16_t)v * r.k / 128;
+		for (size_t i = 2; i < w.size(); i++)
+			for (int b : {w[i] >> 8, w[i] & 0xff})
+			{
+				if (b == 0x7f)
+					return;
+				auto p = vertex(r, fe2::s8(b));
+				if (!p)
+					continue;
+				d.p = *p;
+				if (wire)
+					out.wire_dots.push_back(d);
+				else
+					node(d.p).dots.push_back(d);
+			}
 	}
 
 	/* Axes swapped by `code` and negated by bits 13, 12, 11 of `w`
@@ -960,7 +1046,7 @@ struct Runner
 				if (w[1] & 0x8000)
 				{
 					bool faces = normal_faces(r, w[1] & 0x7f);
-					jump = ins.op == 0x0b ? !faces : faces;
+					jump = !sky && (ins.op == 0x0b ? !faces : faces);
 				}
 				else
 				{
@@ -1028,6 +1114,9 @@ struct Runner
 			case 0x1e:
 				mcopy(r, w[0]);
 				break;
+			case 0x18:
+				blobs(r, ins);
+				break;
 			default:
 				emit(r, i);
 				break;
@@ -1056,35 +1145,39 @@ void set_colour(int rgb444)
 /* Each object's models, run */
 std::vector<Drawn> drawn;
 
+uint32_t frame_seed;
+
+/* Runs object o's model into d; the sky round the camera */
+void run_object(const Object &o, Drawn &d, bool wire, bool sky)
+{
+	d = Drawn();
+	const Code *c = code_for(o.table, o.model);
+	if (!c)
+		return;
+	Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
+	rn.sky = sky;
+	Run r;
+	r.c = c;
+	r.org = sky ? P3{0, 0, 0} : P3{o.pos[0], o.pos[1], o.pos[2]};
+	for (int a = 0; a < 3; a++)
+		r.ax[a] = {o.cols[a][0], o.cols[a][1], o.cols[a][2]};
+	r.s = o.scale;
+	r.k = std::ldexp(1.0f, o.scale);
+	r.base = 0x111; /* L390f2 */
+	r.shade0 = o.tint[3];
+	std::memcpy(r.t, o.t, sizeof r.t);
+	for (int a = 0; a < 3; a++)
+		r.m[a] = r.ax[a];
+	r.pv[0] = r.org;
+	rn.run(r, 0);
+}
+
 void run_objects(bool wire)
 {
-	static uint32_t frame_seed;
 	frame_seed++;
 	drawn.resize((size_t)show.n);
 	for (int i = 0; i < show.n; i++)
-	{
-		const Object &o = show.obj[i];
-		Drawn &d = drawn[(size_t)i];
-		d = Drawn();
-		const Code *c = code_for(o.table, o.model);
-		if (!c)
-			continue;
-		Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
-		Run r;
-		r.c = c;
-		r.org = {o.pos[0], o.pos[1], o.pos[2]};
-		for (int a = 0; a < 3; a++)
-			r.ax[a] = {o.cols[a][0], o.cols[a][1], o.cols[a][2]};
-		r.s = o.scale;
-		r.k = std::ldexp(1.0f, o.scale);
-		r.base = 0x111; /* L390f2 */
-		r.shade0 = o.tint[3];
-		std::memcpy(r.t, o.t, sizeof r.t);
-		for (int a = 0; a < 3; a++)
-			r.m[a] = r.ax[a];
-		r.pv[0] = r.org;
-		rn.run(r, 0);
-	}
+		run_object(show.obj[i], drawn[(size_t)i], wire, false);
 }
 
 void draw_segs(const std::vector<Seg> &segs)
@@ -1096,7 +1189,58 @@ void draw_segs(const std::vector<Seg> &segs)
 	}
 }
 
+/* As draw_blob (gl_prims.c) draws the game's: small ones as points */
+void draw_dots(const std::vector<Dot> &dots, bool colour = true)
+{
+	for (const Dot &d : dots)
+	{
+		if (colour)
+			set_colour(d.colour);
+		if (d.px >= 0 && d.px < 3)
+		{
+			gd_point(d.p.data(), (float)((int)d.px / 2 + 1));
+			continue;
+		}
+		float r = d.px >= 0 ? -0.002f * d.px * d.p[2] : d.radius;
+		if (r <= 0)
+			continue;
+		gd_push();
+		gd_translate(d.p[0], d.p[1], d.p[2]);
+		gd_disk(r, 16);
+		gd_pop();
+	}
+}
+
+void draw_nodes(const std::vector<Node> &nodes)
+{
+	for (const Node &n : nodes)
+	{
+		for (const Tri &t : n.tris)
+		{
+			set_colour(t.colour);
+			gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+		}
+		draw_segs(n.segs);
+		draw_dots(n.dots);
+	}
+}
+
 } // namespace
+
+/* The sky, filled, under everything (before the scene): its parts in the
+ * model's order, not depth tested. Round the camera, so it is the same
+ * whichever way that looks. */
+extern "C" void native_draw_sky(void)
+{
+	if (!native_enabled() || enabled != 2 || !show.has_sky)
+		return;
+	Drawn d;
+	run_object(show.sky, d, false, true);
+	gd_push();
+	gd_identity();
+	draw_nodes(d.nodes);
+	gd_pop();
+}
 
 extern "C" void native_draw(void)
 {
@@ -1108,6 +1252,16 @@ extern "C" void native_draw(void)
 	gd_identity();
 	if (wire)
 	{
+		/* the sky in blue, over the game's */
+		if (show.has_sky)
+		{
+			Drawn d;
+			run_object(show.sky, d, true, true);
+			gd_color3ub(96, 128, 255);
+			for (const Seg &s : d.wire)
+				gd_line(s.a.data(), s.b.data());
+			draw_dots(d.wire_dots, false);
+		}
 		/* bright colours, one per object, to tell them from the game's
 		 * picture and each other */
 		static const uint8_t pal[6][3] = {{255, 255, 0}, {0, 255, 255}, {255, 0, 255},
@@ -1118,6 +1272,11 @@ extern "C" void native_draw(void)
 				gd_color3ub(pal[i % 6][0], pal[i % 6][1], pal[i % 6][2]);
 				gd_line(s.a.data(), s.b.data());
 			}
+		for (size_t i = 0; i < drawn.size(); i++)
+		{
+			gd_color3ub(pal[i % 6][0], pal[i % 6][1], pal[i % 6][2]);
+			draw_dots(drawn[i].wire_dots, false);
+		}
 		gd_pop();
 		return;
 	}
@@ -1147,6 +1306,12 @@ extern "C" void native_draw(void)
 					d.near = std::min(d.near, w);
 					d.far = std::max(d.far, w);
 				}
+			for (const Dot &s : n.dots)
+			{
+				float w = clip_w(s.p);
+				d.near = std::min(d.near, w);
+				d.far = std::max(d.far, w);
+			}
 		}
 		if (d.far > 1.0f)
 			placed.push_back(&d);
@@ -1190,6 +1355,7 @@ extern "C" void native_draw(void)
 				gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
 			}
 			draw_segs(n->segs);
+			draw_dots(n->dots);
 		}
 	};
 
@@ -1234,6 +1400,7 @@ extern "C" void native_draw(void)
 					gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
 				}
 				draw_segs(n.segs);
+				draw_dots(n.dots);
 			}
 			/* ...then its depth, to hide what is behind it of the others */
 			depth.write = true;

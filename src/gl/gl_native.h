@@ -57,6 +57,8 @@ void native_acquire(void);
 /* Render thread, after the scene, with the 3D view's viewport and its
  * un-turned projection set */
 void native_draw(void);
+/* The same, before the scene: the sky (GLF_NATIVE_SCENE=2) */
+void native_draw_sky(void);
 
 /* GLF_NATIVE_SCENE is set */
 bool native_enabled(void);

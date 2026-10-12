@@ -619,6 +619,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gd_set_viewport(GD_VP_VIEW3D);
 	gd_set_projection(&persp);
 	gd_set_wireframe(scr_show.renderer == R_GLWIRE);
+	native_draw_sky();
 	scene_draw();
 	gl_prims_finish();
 	native_draw();
