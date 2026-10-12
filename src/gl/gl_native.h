@@ -36,6 +36,7 @@
 #define GL_NATIVE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -51,6 +52,12 @@ void Nu_NativeCulled(void);
  * model (a sun, a far planet) that the native scene draws instead of the
  * game's disc */
 void Nu_NativeFar(void);
+
+/* Game thread, in L390f2's frame a6: how much the game shrank the object
+ * (l3924a). A far object's view position and scale s are both cut by 2^e
+ * so its position fits, which keeps its look but not its distance: its
+ * true distance is this times the one at A6-16. */
+float native_frame_shrink(uint32_t a6);
 
 /* With the scene (gl_scene.c): a new frame, the frame is done (game
  * thread), the latest frame is taken for drawing (render thread) */

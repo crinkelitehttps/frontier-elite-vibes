@@ -89,7 +89,8 @@ bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3
 						bool *ahead);
 int planet_native_count(void);
 uint32_t planet_native_object_addr(int i); /* its planet object */
-double planet_native_dist(int i);
+double planet_native_dist(int i);   /* as drawn (shrunk, native_frame_shrink) */
+float planet_native_shrink(int i); /* true distance = dist * shrink */
 void planet_native_draw(int i);
 /* The atmosphere bands round them (gl_atmos.c), before the planets */
 void atmos_draw_native(void);

@@ -235,6 +235,7 @@ struct Far
 	uint32_t addr;
 	float pos[3];
 	float radius; /* the model's (word at +14) * 2^(s+1), view units */
+	float shrink; /* native_frame_shrink: true distance = |pos| * shrink */
 	int colour;   /* the model's word at +18: bit 15 twinkly, then 444 + flags */
 	float light[3];
 	uint16_t tint[8];
@@ -355,6 +356,15 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 	o.detail[1] = (int16_t)rdword(FE2_optdetail2);
 }
 
+extern "C" float native_frame_shrink(uint32_t a6)
+{
+	uint32_t table = (uint32_t)rdlong(FE2_game_data);
+	uint32_t addr = (uint32_t)rdlong(a6 - 212);
+	uint32_t m = table + (uint16_t)rdword(table + (uint16_t)rdword(addr + 90));
+	int e = (int16_t)rdword(m + 10) - (int16_t)rdword(a6 - 208);
+	return e > 0 ? std::ldexp(1.0f, e) : 1.0f;
+}
+
 /* Host call (Lnative_clip, before the cull): is the object too far for its
  * model (d7, its distance's exponent, >= the model's word at +20), so that
  * L390f2 would draw it as a disc (l39092)? Kept as a far body if so; d0 = 1
@@ -385,6 +395,7 @@ extern "C" void Nu_NativeFar(void)
 		cockpit_pass_to_view(p, f.pos);
 		f.radius = std::ldexp((float)(int16_t)rdword(m + 14), (int16_t)rdword(a6 - 208) + 1);
 		f.colour = (uint16_t)rdword(m + 18);
+		f.shrink = native_frame_shrink(a6);
 		capture_light(a6, f.light, f.tint);
 	}
 	SetReg(REG_D0, enabled == 2 ? 1 : 0);
@@ -1570,7 +1581,8 @@ void draw_fars()
 		if (c && c->planet)
 			planet_native_object(o.addr, o.pos, o.cols);
 	}
-	/* a far body, or a planet (its sphere and/or its object) */
+	/* a far body, or a planet (its sphere and/or its object), by true
+	 * distance: each is shrunk by its own power of two */
 	struct Item
 	{
 		double d;
@@ -1580,9 +1592,9 @@ void draw_fars()
 	std::vector<Item> order;
 	auto dist = [](const float *p) { return std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]); };
 	for (int i = 0; i < show.nfar; i++)
-		order.push_back({dist(show.far[i].pos), i, -1, nullptr});
+		order.push_back({dist(show.far[i].pos) * show.far[i].shrink, i, -1, nullptr});
 	for (int i = 0; i < planet_native_count(); i++)
-		order.push_back({planet_native_dist(i), -1, i, nullptr});
+		order.push_back({planet_native_dist(i) * planet_native_shrink(i), -1, i, nullptr});
 	for (int j = 0; j < show.n; j++)
 	{
 		const Object &o = show.obj[j];

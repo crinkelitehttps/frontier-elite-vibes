@@ -13,6 +13,7 @@
 #include "gl_fill2d.h"
 #include "gl_native.h"
 #include "gl_planet.h"
+#include "game_state.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
 #include "main.h"
@@ -211,6 +212,7 @@ typedef struct
 	bool ahead;    /* from the game camera's own pass */
 	double pos[3]; /* centre, GL view space */
 	float radius;
+	float shrink; /* native_frame_shrink of the object's frame */
 	float light[3];
 	float axes[9]; /* as PlanetDesc.axes, in the game camera's view */
 	int light_col, obj_col;
@@ -327,6 +329,7 @@ static void record_native(const PlanetDesc *p)
 	for (int k = 0; k < 3; k++)
 		n->pos[k] = v[k];
 	n->radius = p->radius;
+	n->shrink = native_frame_shrink(a6);
 	cockpit_pass_to_view(p->light, n->light);
 	for (int c = 0; c < 3; c++)
 		pass_to_view_game(&p->axes[3 * c], &n->axes[3 * c]);
@@ -439,6 +442,11 @@ int planet_native_count(void)
 	return native_mode() == 2 ? native_show.n : 0;
 }
 
+float planet_native_shrink(int i)
+{
+	return native_show.p[i].shrink;
+}
+
 double planet_native_dist(int i)
 {
 	const double *p = native_show.p[i].pos;
@@ -473,6 +481,33 @@ static void record_dist(const PlanetDesc *p)
 	dists_rec.obj_col[i] = p->obj_col;
 }
 
+/* The game rounds a planet's position to 14 bits (L3cd9c "itsybitsyfy"),
+ * so close to the ground its sphere is out by up to thousands of metres,
+ * and in steps as you climb: the horizon dips below where the surface
+ * objects stand, and mountains float over a band of sky. The ship's own
+ * altitude (A6+692, L622de, in view units) is exact: when the camera is
+ * the ship's and the planet's distance is within that rounding of radius
+ * + altitude, the planet is the one it is measured from; its centre goes
+ * where it puts the ground just that far below the eye. Its direction,
+ * size and look stay the game's. */
+static void ground_planet(PlanetDesc *p)
+{
+	int32_t alt = (int32_t)STMemory_ReadLong(GAME_A6 + 692);
+	if (alt < 0 || STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL || p->radius <= 0.0f)
+		return;
+	double x = p->pos.x, y = p->pos.y, z = p->pos.z;
+	double d = sqrt(x * x + y * y + z * z);
+	/* altitude is the ship's, the eye is about 5 m (5000 units) above the
+	 * ground when landed (a starport's ground objects at Mars) */
+	double want = (double)p->radius + (alt + 5000.0) / native_frame_shrink(p->ctx.a[6]);
+	if (d <= 0 || fabs(want - d) > d / 1024) /* each part and the radius cut to 2^-14 */
+		return;
+	double k = want / d;
+	p->pos.x = (int32_t)lround(x * k);
+	p->pos.y = (int32_t)lround(y * k);
+	p->pos.z = (int32_t)lround(z * k);
+}
+
 void Nu_PutPlanet(void)
 {
 	int words = list_words((uint32_t)GetReg(REG_A6));
@@ -491,6 +526,7 @@ void Nu_PutPlanet(void)
 	p->radius = (float)GetReg(REG_D0);
 	gl_read_light_dir(GetReg(REG_A1), p->light);
 	p->pos = m68k_vertex(GetReg(REG_A0) + 4);
+	ground_planet(p);
 
 	/* 3x3 rotation matrix of signed 1.15 fixed point words, stored at A6-36 */
 	uint32_t m = GetReg(REG_A6) - 36;
@@ -527,7 +563,7 @@ void Nu_PutPlanet(void)
 static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
-	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette;
+	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
 } us;
 static struct
 {
@@ -557,6 +593,7 @@ static const char *FS_SPHERE =
 	"uniform int uTextured;\n"
 	"uniform mat3 uToLocal;\n" /* eye space -> the planet's axes */
 	"uniform vec3 uPalette[16];\n" /* by code / 4: dark 0-7, lit 8-15 */
+	"uniform float uFlat;\n" /* the sphere drawn is this many times the planet (draw_sphere) */
 	"out vec4 fragColor;\n"
 	/* a texel's colour: the code through the palette (dark half, lit half) */
 	"vec3 texel(ivec2 c, ivec2 size, float lit){\n"
@@ -568,6 +605,23 @@ static const char *FS_SPHERE =
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
 	"  float b = dot(d, uCentre);\n"
+	"  vec3 n;\n"
+	"  if (uFlat > 1.0) {\n"
+	/* flattened, the eye just over a huge sphere: b and uC are both tiny
+	 * near the horizon, so b^2 - uC rather than 1 - |c x d|^2, and the
+	 * near root without cancelling */
+	"    float disc = b * b - uC;\n"
+	"    if (disc < 0.0 || b <= 0.0) discard;\n"
+	"    float t = uC / (b + sqrt(disc));\n"
+	/* the point is as far over the ground from the one under the eye as on
+	 * the planet itself, so its surface and light are the planet's there:
+	 * its normal turned uFlat times as far from straight up */
+	"    vec3 up = -normalize(uCentre), p = t * d;\n"
+	"    vec3 w = p - dot(p, up) * up;\n"
+	"    float sw = length(w);\n"
+	"    float a = atan(sw, dot(p, up) + length(uCentre)) * uFlat;\n"
+	"    n = sw > 0.0 ? up * cos(a) + (w / sw) * sin(a) : up;\n"
+	"  } else {\n"
 	/* 1 - (distance from centre to the ray)^2; the cross product form avoids
 	 * cancelling two large numbers when the planet is far away */
 	"  vec3 x = cross(uCentre, d);\n"
@@ -576,7 +630,8 @@ static const char *FS_SPHERE =
 	"  float s = sqrt(disc);\n"
 	"  float t = (uC > 0.0) ? b - s : b + s;\n" /* outside: near hit; inside: far hit */
 	"  if (t <= 0.0) discard;\n"
-	"  vec3 n = t * d - uCentre;\n"
+	"  n = t * d - uCentre;\n"
+	"  }\n"
 	"  float l = max(dot(normalize(n), uLightDir), 0.0);\n"
 	"  if (uTextured != 0) {\n"
 	"    vec3 p = normalize(uToLocal * n);\n"
@@ -628,6 +683,7 @@ void gl_planet_init(void)
 	us.textured = glGetUniformLocation(sphere_prog, "uTextured");
 	us.to_local = glGetUniformLocation(sphere_prog, "uToLocal");
 	us.palette = glGetUniformLocation(sphere_prog, "uPalette");
+	us.flat = glGetUniformLocation(sphere_prog, "uFlat");
 
 	static const float quad[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
 	glGenVertexArrays(1, &quad_vao);
@@ -659,6 +715,7 @@ typedef struct
 	float centre[3];
 	float c;
 	float light[3], diffuse[3], ambient[3];
+	float flat;
 	GLuint surface; /* 0: plain */
 	float to_local[9];
 	float palette[16][3];
@@ -672,6 +729,7 @@ static void planet_sphere_pass(const void *data)
 	glUniform4fv(us.proj, 1, p->proj);
 	glUniform3fv(us.centre, 1, p->centre);
 	glUniform1f(us.c, p->c);
+	glUniform1f(us.flat, p->flat);
 	glUniform3fv(us.light_dir, 1, p->light);
 	glUniform3fv(us.diffuse, 1, p->diffuse);
 	glUniform3fv(us.ambient, 1, p->ambient);
@@ -775,6 +833,26 @@ typedef struct
 	const PlanetSurface *surface; /* null: plain */
 } SphereIn;
 
+/* The game lays out a planet's surface (cities, mountains, starports) on
+ * flat ground: out to 35 km and more, their feet stay about level with the
+ * ground under the ship, while the planet curves away from it. Its horizon
+ * then dips below them, and they stand over a band of sky. Close by, the
+ * planet is drawn flatter, as a sphere `k` times as big touching the same
+ * ground under the eye: over FLAT_REACH (view units, mm) its horizon dips
+ * no more than objects there stand below the eye, so they stand on it. k
+ * is 1 again once the true planet's horizon is that low anyway (some km
+ * up). The surface and light are still mapped as on the planet. */
+#define FLAT_REACH 6.0e7
+static double flatten(const double pos[3], double radius)
+{
+	double d = sqrt(pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]);
+	double h = d - radius;
+	if (h <= 0 || radius <= 0)
+		return 1;
+	double k = 2 * FLAT_REACH * FLAT_REACH / (h * radius);
+	return k < 1 ? 1 : k > 1e5 ? 1e5 : k;
+}
+
 static void draw_sphere(const SphereIn *in)
 {
 	/* The sphere shader takes a plain lens (no rotation): in the cockpit,
@@ -783,14 +861,21 @@ static void draw_sphere(const SphereIn *in)
 	if (cockpit_active())
 		cockpit_world_split(&lens, &head);
 
+	/* flattened: the centre k times as far below the ground under the eye */
+	double flat = flatten(in->pos, in->radius);
+	double dist = sqrt(in->pos[0] * in->pos[0] + in->pos[1] * in->pos[1] + in->pos[2] * in->pos[2]);
+	double h = dist - in->radius, r = in->radius * flat, pos[3];
+	for (int k = 0; k < 3; k++)
+		pos[k] = flat > 1 ? in->pos[k] * (h + r) / dist : in->pos[k];
+
 	float rect[4];
-	if (!screen_rect(in->pos, in->radius, rect))
+	if (!screen_rect(pos, (float)r, rect))
 		return;
 
 	/* the head's turn in double: the centre may be millions of units off */
-	double r = in->radius, c[3];
+	double c[3];
 	for (int k = 0; k < 3; k++)
-		c[k] = (head.m[k] * in->pos[0] + head.m[4 + k] * in->pos[1] + head.m[8 + k] * in->pos[2]) / r;
+		c[k] = (head.m[k] * pos[0] + head.m[4 + k] * pos[1] + head.m[8 + k] * pos[2]) / r;
 	float light[3];
 	mat4_xform_dir(&head, in->light, light);
 
@@ -805,7 +890,11 @@ static void draw_sphere(const SphereIn *in)
 
 	for (int k = 0; k < 3; k++)
 		pass->centre[k] = (float)c[k];
-	pass->c = (float)(c[0] * c[0] + c[1] * c[1] + c[2] * c[2] - 1.0);
+	/* |c|^2 - 1 = (2 h r + h^2) / r^2 without cancelling (h tiny next to a
+	 * flattened r) */
+	pass->c = flat > 1 ? (float)((2 * h * r + h * h) / (r * r))
+					   : (float)(c[0] * c[0] + c[1] * c[1] + c[2] * c[2] - 1.0);
+	pass->flat = (float)flat;
 
 	memcpy(pass->light, light, sizeof(pass->light));
 	vec3_normalize(pass->light);
