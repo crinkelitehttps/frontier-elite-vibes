@@ -620,7 +620,9 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gd_set_projection(&persp);
 	gd_set_wireframe(scr_show.renderer == R_GLWIRE);
 	native_draw_sky();
-	scene_draw();
+	/* the cockpit's world is all native: the game's passes only capture it */
+	if (!(cockpit && native_mode() == 2))
+		scene_draw();
 	gl_prims_finish();
 	native_draw();
 	gd_set_wireframe(false);

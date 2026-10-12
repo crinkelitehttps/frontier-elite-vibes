@@ -19,6 +19,7 @@
 
 #include "gl_api.h"
 #include "gl_cockpit.h"
+#include "gl_native.h"
 #include "gl_draw.h"
 #include "gl_fill2d.h"
 #include "gl_laser.h"
@@ -628,6 +629,36 @@ static void sample_view(const mat4 *V, float l, float r, float d, float u, bool 
 		}
 }
 
+/* The native scene (gl_native.h) draws the world for any view from what
+ * the game's own view captures, so the game draws just that, and a
+ * capture pass towards each planet it needs to see (native_capture_dirs).
+ * None of what the game draws is shown. */
+static void choose_capture_passes(void)
+{
+	float dirs[4][3];
+	int n = native_capture_dirs(dirs, 4);
+	n_pass_order = 0;
+	for (int i = 0; i < n; i++)
+	{
+		int best = 0;
+		float best_dot = -2.0f;
+		for (int k = 0; k < COCKPIT_MAX_PASSES; k++)
+		{
+			float d = dot3(pass_axes[k][2], dirs[i]);
+			if (pass_contains(k, dirs[i]))
+				d += 2.0f; /* one that has it, the nearest of those */
+			if (d > best_dot)
+				best = k, best_dot = d;
+		}
+		bool have = best == 0;
+		for (int j = 0; j < n_pass_order && !have; j++)
+			have = pass_order[j] == best;
+		if (!have)
+			pass_order[n_pass_order++] = best;
+	}
+	pass_order[n_pass_order++] = 0;
+}
+
 /* The passes the window (and a headset's eyes) show this frame, by
  * sampling them a little beyond their edges: each sample goes to the first
  * pass that has it, as the stencil does when they are drawn. Ahead is
@@ -637,6 +668,11 @@ static void choose_passes(void)
 {
 	if (!passes_built)
 		build_passes();
+	if (native_mode() == 2)
+	{
+		choose_capture_passes();
+		return;
+	}
 	SharedView sv;
 	get_shared(&sv);
 	bool want[COCKPIT_MAX_PASSES] = {false};

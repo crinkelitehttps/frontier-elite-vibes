@@ -81,6 +81,12 @@ void planet_draw_shell(const float centre[3], float cos_outer, float cos_inner, 
  * gl_native.cpp has them), before counting; then how many there are, how
  * far, and drawing one */
 void planet_native_object(uint32_t addr, const float pos[3], const float cols[3][3]);
+/* Game thread: where planet object `addr`, now at view position `pos` with
+ * axes `cols` (as gl_native.cpp captures it), has its planet, as last seen
+ * (GL view space); *ahead: the last frame's ahead pass drew it. False if
+ * it has not been seen. */
+bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3], float centre[3], float *radius,
+						bool *ahead);
 int planet_native_count(void);
 uint32_t planet_native_object_addr(int i); /* its planet object */
 double planet_native_dist(int i);

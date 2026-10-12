@@ -232,14 +232,32 @@ typedef struct
 static NativePlanets native_rec, native_pub, native_show, native_last;
 static uint32_t native_frame;
 
+/* Where each planet was when last seen, for the cockpit's capture passes
+ * (planet_native_find; game thread) */
+#define KNOWN_PLANETS 16
+typedef struct
+{
+	uint32_t obj;
+	double pos[3];
+	float radius;
+	float obj_pos[3], obj_cols[3][3];
+	uint32_t frame; /* game frame it was seen in */
+	bool ahead;
+} KnownPlanet;
+static KnownPlanet known[KNOWN_PLANETS];
+static int n_known;
+static uint32_t game_frame, published_frame;
+
 void planet_dists_reset(void)
 {
 	dists_rec.n = 0;
 	native_rec.n = 0;
+	game_frame++;
 }
 
 void planet_dists_publish(void)
 {
+	published_frame = game_frame;
 	dists_pub = dists_rec;
 	native_pub.n = native_rec.n;
 	memcpy(native_pub.p, native_rec.p, sizeof native_rec.p[0] * (size_t)native_rec.n);
@@ -259,6 +277,30 @@ static void pass_to_view_game(const float v[3], float out[3])
 	float g[3] = {v[0], v[1], -v[2]};
 	cockpit_pass_to_view(g, out);
 	out[2] = -out[2];
+}
+
+static void remember_known(const NativePlanet *n)
+{
+	int i = 0;
+	while (i < n_known && known[i].obj != n->obj)
+		i++;
+	if (i == n_known)
+	{
+		if (n_known < KNOWN_PLANETS)
+			n_known++;
+		else /* forget the one seen longest ago */
+			for (int j = i = 0; j < n_known; j++)
+				if (known[j].frame < known[i].frame)
+					i = j;
+	}
+	KnownPlanet *k = &known[i];
+	k->obj = n->obj;
+	memcpy(k->pos, n->pos, sizeof k->pos);
+	k->radius = n->radius;
+	memcpy(k->obj_pos, n->obj_pos, sizeof k->obj_pos);
+	memcpy(k->obj_cols, n->obj_cols, sizeof k->obj_cols);
+	k->frame = game_frame;
+	k->ahead = n->ahead;
 }
 
 static void record_native(const PlanetDesc *p)
@@ -305,6 +347,7 @@ static void record_native(const PlanetDesc *p)
 						-(int16_t)STMemory_ReadWord(m + 4) / 32768.0f};
 		cockpit_pass_to_view(col, n->obj_cols[c]);
 	}
+	remember_known(n);
 }
 
 /* Q v: the object's turn since `old` was captured, Q = new old^T */
@@ -364,6 +407,26 @@ void planet_native_object(uint32_t addr, const float pos[3], const float cols[3]
 		}
 		return;
 	}
+}
+
+bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3], float centre[3], float *radius,
+						bool *ahead)
+{
+	for (int i = 0; i < n_known; i++)
+	{
+		const KnownPlanet *k = &known[i];
+		if (k->obj != addr)
+			continue;
+		float d[3] = {(float)(k->pos[0] - k->obj_pos[0]), (float)(k->pos[1] - k->obj_pos[1]),
+					  (float)(k->pos[2] - k->obj_pos[2])}, t[3];
+		turn_by(k->obj_cols, cols, d, t);
+		for (int c = 0; c < 3; c++)
+			centre[c] = pos[c] + t[c];
+		*radius = k->radius;
+		*ahead = k->ahead && k->frame == published_frame;
+		return true;
+	}
+	return false;
 }
 
 uint32_t planet_native_object_addr(int i)

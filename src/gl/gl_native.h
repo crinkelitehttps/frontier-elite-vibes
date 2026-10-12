@@ -65,6 +65,13 @@ void native_draw(void);
  * (GLF_NATIVE_SCENE=2) */
 void native_draw_sky(void);
 
+/* Game thread, the cockpit choosing its passes (GLF_NATIVE_SCENE=2): the
+ * directions (game view, z ahead) of planets the game's own view did not
+ * draw last frame, at their horizon. The game is to draw a pass that way
+ * too (a capture pass, not shown), so the planet's routine gives the
+ * planet's sphere and its atmosphere. Returns how many, up to `max`. */
+int native_capture_dirs(float dirs[][3], int max);
+
 /* GLF_NATIVE_SCENE is set */
 bool native_enabled(void);
 /* Its value: 1 wireframe, 2 filled (0 when not set) */

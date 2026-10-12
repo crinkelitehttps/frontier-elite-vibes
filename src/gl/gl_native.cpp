@@ -295,6 +295,9 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 
 /* The far body Nu_NativeFar last saw (L390f2's frame, its object) */
 static uint32_t far_a6, far_addr;
+/* Every far body's radius, by object (game thread): a planet's size before
+ * its planet has been seen close up (native_capture_dirs) */
+static std::unordered_map<uint32_t, float> far_radius;
 
 /* Host call (Lnative_clip in fe2.s): the game culls this object as off
  * screen; d0 = 1 to have its matrix worked out and capture it anyway */
@@ -373,6 +376,7 @@ extern "C" void Nu_NativeFar(void)
 	bool have = false;
 	for (int i = 0; i < rec.nfar && !have; i++)
 		have = rec.far[i].addr == addr;
+	far_radius[addr] = std::ldexp((float)(int16_t)rdword(m + 14), (int16_t)rdword(a6 - 208) + 1);
 	if (!have && rec.nfar < MAX_FAR)
 	{
 		Far &f = rec.far[rec.nfar++];
@@ -419,6 +423,76 @@ extern "C" void Nu_NativeObject(void)
 	if (!wanted(a6, addr, table, model))
 		return;
 	capture(rec.obj[rec.n++], a6, addr, table, model);
+}
+
+/* A planet object (L3cd9c, the planet command, is in these models) */
+static bool planet_model(const Object &o)
+{
+	return o.table == FE2_gamedata1 && ((o.model >= 61 && o.model <= 86) || o.model == 193 || o.model == 194);
+}
+
+/* v turned towards w (both unit) by angle a, in their plane */
+static void turn_towards(const float v[3], const float w[3], float a, float out[3])
+{
+	float d = v[0] * w[0] + v[1] * w[1] + v[2] * w[2];
+	float p[3] = {w[0] - d * v[0], w[1] - d * v[1], w[2] - d * v[2]};
+	float l = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+	if (l < 1e-4f) /* w is v: any way will do, up */
+	{
+		float up[3] = {0, 1, 0};
+		if (std::fabs(v[1]) > 0.9f)
+			up[1] = 0, up[2] = 1;
+		d = v[0] * up[0] + v[1] * up[1] + v[2] * up[2];
+		for (int c = 0; c < 3; c++)
+			p[c] = up[c] - d * v[c];
+		l = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+	}
+	for (int c = 0; c < 3; c++)
+		out[c] = v[c] * std::cos(a) + p[c] / l * std::sin(a);
+}
+
+extern "C" int native_capture_dirs(float dirs[][3], int max)
+{
+	if (enabled != 2)
+		return 0;
+	static unsigned parity;
+	parity++;
+	const float ahead[3] = {0, 0, -1};
+	int n = 0;
+	for (int i = 0; i < pub.n && n < max; i++)
+	{
+		const Object &o = pub.obj[i];
+		if (!planet_model(o))
+			continue;
+		float c[3], radius;
+		bool was_ahead = false;
+		if (planet_native_find(o.addr, o.pos, o.cols, c, &radius, &was_ahead))
+		{
+			if (was_ahead)
+				continue;
+		}
+		else
+		{
+			/* not seen yet: its centre, and its size if it was a far body */
+			memcpy(c, o.pos, sizeof c);
+			auto f = far_radius.find(o.addr);
+			radius = f != far_radius.end() ? f->second : 0;
+		}
+		float dist = std::sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
+		if (dist <= 0)
+			continue;
+		float u[3] = {c[0] / dist, c[1] / dist, c[2] / dist}, g[3];
+		/* its horizon, where it is nearest ahead: the planet's routine
+		 * makes the planet and its haze when that is in view. Size unknown:
+		 * its centre and a right angle off it, a frame each. */
+		float a = radius > 0 ? std::asin(std::min(radius / dist, 1.0f)) : parity & 1 ? 1.5708f : 0.0f;
+		turn_towards(u, ahead, a, g);
+		dirs[n][0] = g[0];
+		dirs[n][1] = g[1];
+		dirs[n][2] = -g[2]; /* the game's: z ahead */
+		n++;
+	}
+	return n;
 }
 
 extern "C" void native_reset(void)
@@ -1389,9 +1463,23 @@ void draw_far(const Far &f)
 	{
 		set_colour(base);
 		float len = (rpx >= 1 ? rpx + 8 : 1 + 7 * rpx) * px;
+		/* a cross on the screen, as the game draws it: along the eye's
+		 * right and up, not fixed in the world (it would turn as the head
+		 * rolls) */
+		float x[3] = {1, 0, 0}, y[3] = {0, 1, 0};
+		if (cockpit_active())
+		{
+			mat4 h = cockpit_head_rotation();
+			for (int k = 0; k < 3; k++)
+				x[k] = h.m[4 * k], y[k] = h.m[4 * k + 1];
+		}
 		const float *p = f.pos;
-		float a[3] = {p[0] - len, p[1], p[2]}, b[3] = {p[0] + len, p[1], p[2]};
-		float e[3] = {p[0], p[1] - len, p[2]}, g[3] = {p[0], p[1] + len, p[2]};
+		float a[3], b[3], e[3], g[3];
+		for (int k = 0; k < 3; k++)
+		{
+			a[k] = p[k] - len * x[k], b[k] = p[k] + len * x[k];
+			e[k] = p[k] - len * y[k], g[k] = p[k] + len * y[k];
+		}
 		gd_line(a, b);
 		gd_line(e, g);
 	}
