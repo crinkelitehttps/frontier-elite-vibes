@@ -67,6 +67,8 @@ void native_draw_sky(void);
 
 /* GLF_NATIVE_SCENE is set */
 bool native_enabled(void);
+/* Its value: 1 wireframe, 2 filled (0 when not set) */
+int native_mode(void);
 
 #ifdef __cplusplus
 }

@@ -52,6 +52,7 @@
 
 #include "gl_cockpit.h"
 #include "gl_fill2d.h"
+#include "gl_native.h"
 #include "gl_planet.h"
 #include "gl_scene.h"
 #include "m68000.h"
@@ -183,11 +184,25 @@ void atmos_place_bands(const float centre[3], float radius)
 	scale_so_far = 1.0f;
 }
 
+static void draw_bands(void);
+
 void draw_atmos(const void *payload)
 {
 	(void)payload;
-	if (!cockpit_active())
-		return;
+	if (cockpit_active() && native_mode() != 2)
+		draw_bands();
+}
+
+/* The native scene draws the planets once, round the game's camera, and
+ * the bands with them, cockpit or not */
+void atmos_draw_native(void)
+{
+	if (native_mode() == 2)
+		draw_bands();
+}
+
+static void draw_bands(void)
+{
 	double f = FILL2D_VIEW_H * 0.5 / tan(CLASSIC_FOV * GLM_PI / 360.0);
 	for (int i = 0; i < show.n_bands; i++)
 	{
@@ -251,7 +266,8 @@ void draw_soft_node(const void *payload)
 	if (s->band < 0)
 		return;
 	/* drawn in 3D instead (draw_atmos) */
-	if (s->shell >= 0 && s->shell < show.n_bands && show.bands[s->shell].planet >= 0 && cockpit_active())
+	if (s->shell >= 0 && s->shell < show.n_bands && show.bands[s->shell].planet >= 0 &&
+		(cockpit_active() || native_mode() == 2))
 		return;
 
 	const int16_t *w = &show.arena[s->band];

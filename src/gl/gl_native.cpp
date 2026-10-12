@@ -16,6 +16,7 @@ extern "C"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_native.h"
+#include "gl_planet.h"
 #include "gl_scene.h"
 #include "game_state.h"
 #include "host.h"
@@ -264,6 +265,11 @@ extern "C" bool native_enabled(void)
 		enabled = e ? std::max(0, atoi(e)) : 0;
 	}
 	return enabled != 0;
+}
+
+extern "C" int native_mode(void)
+{
+	return native_enabled() ? enabled : 0;
 }
 
 /* The object L390f2 or L39426 is at is to be captured */
@@ -1367,23 +1373,40 @@ void draw_far(const Far &f)
 	}
 }
 
-/* Far bodies, farthest first */
+/* Far bodies and planets, farthest first */
 void draw_fars()
 {
-	std::vector<const Far *> fars;
+	for (int i = 0; i < show.n; i++)
+	{
+		const Object &o = show.obj[i];
+		const Code *c = code_for(o.table, o.model);
+		if (c && c->planet)
+			planet_native_object(o.addr, o.pos, o.cols);
+	}
+	std::vector<std::pair<double, int>> order; /* distance, far (>= 0) or ~planet */
 	for (int i = 0; i < show.nfar; i++)
-		fars.push_back(&show.far[i]);
-	auto d2 = [](const Far *f) { return f->pos[0] * f->pos[0] + f->pos[1] * f->pos[1] + f->pos[2] * f->pos[2]; };
-	std::sort(fars.begin(), fars.end(), [&](const Far *a, const Far *b) { return d2(a) > d2(b); });
-	for (const Far *f : fars)
-		draw_far(*f);
+	{
+		const float *p = show.far[i].pos;
+		order.push_back({std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]), i});
+	}
+	for (int i = 0; i < planet_native_count(); i++)
+		order.push_back({planet_native_dist(i), ~i});
+	std::stable_sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (const auto &e : order)
+	{
+		if (e.second >= 0)
+			draw_far(show.far[e.second]);
+		else
+			planet_native_draw(~e.second);
+	}
 }
 
 } // namespace
 
 /* The sky, filled, under everything (before the scene): its parts in the
  * model's order, not depth tested. Round the camera, so it is the same
- * whichever way that looks. Then the far bodies on it. */
+ * whichever way that looks. Then the atmosphere bands and, farthest first,
+ * the far bodies and the planets on it. */
 extern "C" void native_draw_sky(void)
 {
 	if (!native_enabled() || enabled != 2)
@@ -1396,6 +1419,7 @@ extern "C" void native_draw_sky(void)
 		run_object(show.sky, d, false, true);
 		draw_nodes(d.nodes);
 	}
+	atmos_draw_native();
 	draw_fars();
 	gd_pop();
 }

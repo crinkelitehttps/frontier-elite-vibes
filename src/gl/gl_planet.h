@@ -76,6 +76,17 @@ void gl_planet_shutdown(void);
  * rgb444 colour: an atmosphere band (gl_atmos.c). cos_inner > 1 for no
  * inner edge, cos_outer < -1 for no outer one. */
 void planet_draw_shell(const float centre[3], float cos_outer, float cos_inner, int rgb);
+/* The native scene's planets (GLF_NATIVE_SCENE=2; render thread): each
+ * planet object captured this frame, its view position and axes (as
+ * gl_native.cpp has them), before counting; then how many there are, how
+ * far, and drawing one */
+void planet_native_object(uint32_t addr, const float pos[3], const float cols[3][3]);
+int planet_native_count(void);
+double planet_native_dist(int i);
+void planet_native_draw(int i);
+/* The atmosphere bands round them (gl_atmos.c), before the planets */
+void atmos_draw_native(void);
+
 /* Says which planet the atmosphere bands just made are round (gl_atmos.c) */
 void atmos_place_bands(const float centre[3], float radius);
 

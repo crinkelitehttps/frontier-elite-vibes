@@ -11,6 +11,7 @@
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_fill2d.h"
+#include "gl_native.h"
 #include "gl_planet.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
@@ -186,19 +187,184 @@ typedef struct
 
 static PlanetDists dists_rec, dists_pub, dists_show;
 
+/* The native scene's planets (GLF_NATIVE_SCENE=2): each planet once a
+ * frame, from the pass of the game's own camera when that one has it, else
+ * the first pass that does, in the game camera's view space; drawn by
+ * native_draw_sky instead of the passes. The planet routine leaves some
+ * views out (all ground, L3cd8e), so a planet object captured without its
+ * planet gets its last one, carried along by the object's turn
+ * (planet_native_object). */
+#define NATIVE_PLANETS 8
+typedef struct
+{
+	uint32_t obj;  /* the planet object */
+	bool ahead;    /* from the game camera's own pass */
+	double pos[3]; /* centre, GL view space */
+	float radius;
+	float light[3];
+	float axes[9]; /* as PlanetDesc.axes, in the game camera's view */
+	int light_col, obj_col;
+	uint16_t palette[16];
+	PlanetSurface surface;
+	bool surface_ok;
+	/* the object as gl_native.cpp captures it: its view position and axes */
+	float obj_pos[3], obj_cols[3][3];
+	uint32_t seen;  /* render frame it was last captured in (remembered ones) */
+	bool stand_in;  /* a remembered one standing in this frame */
+} NativePlanet;
+
+typedef struct
+{
+	int n;
+	NativePlanet p[NATIVE_PLANETS];
+} NativePlanets;
+
+static NativePlanets native_rec, native_pub, native_show, native_last;
+static uint32_t native_frame;
+
 void planet_dists_reset(void)
 {
 	dists_rec.n = 0;
+	native_rec.n = 0;
 }
 
 void planet_dists_publish(void)
 {
 	dists_pub = dists_rec;
+	native_pub.n = native_rec.n;
+	memcpy(native_pub.p, native_rec.p, sizeof native_rec.p[0] * (size_t)native_rec.n);
 }
 
 void planet_dists_acquire(void)
 {
 	dists_show = dists_pub;
+	native_show.n = native_pub.n;
+	memcpy(native_show.p, native_pub.p, sizeof native_pub.p[0] * (size_t)native_pub.n);
+	native_frame++;
+}
+
+/* A turned pass's game view vector (z ahead) in the game camera's */
+static void pass_to_view_game(const float v[3], float out[3])
+{
+	float g[3] = {v[0], v[1], -v[2]};
+	cockpit_pass_to_view(g, out);
+	out[2] = -out[2];
+}
+
+static void record_native(const PlanetDesc *p)
+{
+	if (native_mode() != 2)
+		return;
+	uint32_t a6 = p->ctx.a[6];
+	uint32_t obj = (uint32_t)STMemory_ReadLong(a6 - 212);
+	bool ahead = !cockpit_turned_pass();
+	int i = 0;
+	while (i < native_rec.n && native_rec.p[i].obj != obj)
+		i++;
+	if (i < native_rec.n ? native_rec.p[i].ahead || !ahead : native_rec.n >= NATIVE_PLANETS)
+		return;
+	if (i == native_rec.n)
+		native_rec.n++;
+	NativePlanet *n = &native_rec.p[i];
+	n->obj = obj;
+	n->ahead = ahead;
+	n->stand_in = false;
+	float pos[3], v[3];
+	vec3i_to_f(p->pos, pos);
+	cockpit_pass_to_view(pos, v);
+	for (int k = 0; k < 3; k++)
+		n->pos[k] = v[k];
+	n->radius = p->radius;
+	cockpit_pass_to_view(p->light, n->light);
+	for (int c = 0; c < 3; c++)
+		pass_to_view_game(&p->axes[3 * c], &n->axes[3 * c]);
+	n->light_col = p->light_col;
+	n->obj_col = p->obj_col;
+	memcpy(n->palette, p->palette, sizeof n->palette);
+	n->surface_ok = p->surface_ok;
+	if (p->surface_ok)
+		n->surface = p->surface;
+	/* as capture() in gl_native.cpp */
+	float op[3] = {(float)(int32_t)STMemory_ReadLong(a6 - 16), (float)(int32_t)STMemory_ReadLong(a6 - 12),
+				   -(float)(int32_t)STMemory_ReadLong(a6 - 8)};
+	cockpit_pass_to_view(op, n->obj_pos);
+	for (int c = 0; c < 3; c++)
+	{
+		uint32_t m = a6 - 36 + 6 * (uint32_t)c;
+		float col[3] = {(int16_t)STMemory_ReadWord(m) / 32768.0f, (int16_t)STMemory_ReadWord(m + 2) / 32768.0f,
+						-(int16_t)STMemory_ReadWord(m + 4) / 32768.0f};
+		cockpit_pass_to_view(col, n->obj_cols[c]);
+	}
+}
+
+/* Q v: the object's turn since `old` was captured, Q = new old^T */
+static void turn_by(const float old_cols[3][3], const float cols[3][3], const float v[3], float out[3])
+{
+	float a[3];
+	for (int i = 0; i < 3; i++)
+		a[i] = old_cols[i][0] * v[0] + old_cols[i][1] * v[1] + old_cols[i][2] * v[2];
+	for (int k = 0; k < 3; k++)
+		out[k] = cols[0][k] * a[0] + cols[1][k] * a[1] + cols[2][k] * a[2];
+}
+
+/* How long a remembered planet stands in, render frames */
+#define NATIVE_REMEMBER 120
+
+void planet_native_object(uint32_t addr, const float pos[3], const float cols[3][3])
+{
+	for (int i = 0; i < native_show.n; i++)
+		if (native_show.p[i].obj == addr)
+		{
+			if (native_show.p[i].stand_in)
+				return;
+			/* remember it */
+			int j = 0;
+			while (j < native_last.n && native_last.p[j].obj != addr)
+				j++;
+			if (j == native_last.n)
+			{
+				if (native_last.n >= NATIVE_PLANETS)
+					j = 0; /* forget the first */
+				else
+					native_last.n++;
+			}
+			native_last.p[j] = native_show.p[i];
+			native_last.p[j].seen = native_frame;
+			return;
+		}
+	for (int j = 0; j < native_last.n; j++)
+	{
+		const NativePlanet *o = &native_last.p[j];
+		if (o->obj != addr || native_frame - o->seen > NATIVE_REMEMBER || native_show.n >= NATIVE_PLANETS)
+			continue;
+		NativePlanet *n = &native_show.p[native_show.n++];
+		*n = *o;
+		n->stand_in = true;
+		float d[3] = {(float)(o->pos[0] - o->obj_pos[0]), (float)(o->pos[1] - o->obj_pos[1]),
+					  (float)(o->pos[2] - o->obj_pos[2])}, t[3];
+		turn_by(o->obj_cols, cols, d, t);
+		for (int k = 0; k < 3; k++)
+			n->pos[k] = (double)pos[k] + t[k];
+		turn_by(o->obj_cols, cols, o->light, n->light);
+		for (int c = 0; c < 3; c++)
+		{
+			float g[3] = {o->axes[3 * c], o->axes[3 * c + 1], -o->axes[3 * c + 2]};
+			turn_by(o->obj_cols, cols, g, &n->axes[3 * c]);
+			n->axes[3 * c + 2] = -n->axes[3 * c + 2];
+		}
+		return;
+	}
+}
+
+int planet_native_count(void)
+{
+	return native_mode() == 2 ? native_show.n : 0;
+}
+
+double planet_native_dist(int i)
+{
+	const double *p = native_show.p[i].pos;
+	return sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
 }
 
 /* The same planet in another pass: the same radius, give or take rounding */
@@ -260,6 +426,7 @@ void Nu_PutPlanet(void)
 	capture_surface(p);
 	capture_palette(p);
 	record_dist(p);
+	record_native(p);
 
 	float centre[3];
 	vec3i_to_f(p->pos, centre);
@@ -443,15 +610,15 @@ static void planet_sphere_pass(const void *data)
 /* NDC rectangle covering the sphere: the projected corners of its bounding
  * cube. Falls back to the whole view if any corner is at or behind the
  * camera. Returns false if the planet is entirely off screen. */
-static bool screen_rect(const PlanetDesc *p, float rect[4])
+static bool screen_rect(const double centre[3], float radius, float rect[4])
 {
 	const mat4 *pr = gd_projection();
-	float r = p->radius * 1.01f;
+	double r = radius * 1.01;
 	float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
 	for (int i = 0; i < 8; i++)
 	{
-		float c[3] = {p->pos.x + ((i & 1) ? r : -r), p->pos.y + ((i & 2) ? r : -r),
-					  p->pos.z + ((i & 4) ? r : -r)};
+		float c[3] = {(float)(centre[0] + ((i & 1) ? r : -r)), (float)(centre[1] + ((i & 2) ? r : -r)),
+					  (float)(centre[2] + ((i & 4) ? r : -r))};
 		float clip[4];
 		mat4_xform(pr, c[0], c[1], c[2], clip);
 		if (clip[3] <= 1e-3f * fabsf(c[2]) || c[2] >= 0.0f)
@@ -515,10 +682,75 @@ static void draw_list(const PlanetDesc *p)
 	}
 }
 
+/* A planet as the sphere pass draws it */
+typedef struct
+{
+	double pos[3];  /* centre, view space as drawn (GL, not turned by the head) */
+	float radius;
+	float light[3]; /* view space */
+	int light_col, obj_col;
+	const uint16_t *palette; /* 16 rgb444 */
+	const float *axes;       /* PlanetDesc.axes */
+	const PlanetSurface *surface; /* null: plain */
+} SphereIn;
+
+static void draw_sphere(const SphereIn *in)
+{
+	/* The sphere shader takes a plain lens (no rotation): in the cockpit,
+	 * turn the planet by the head instead */
+	mat4 lens = *gd_projection(), head = mat4_identity();
+	if (cockpit_active())
+		cockpit_world_split(&lens, &head);
+
+	float rect[4];
+	if (!screen_rect(in->pos, in->radius, rect))
+		return;
+
+	/* the head's turn in double: the centre may be millions of units off */
+	double r = in->radius, c[3];
+	for (int k = 0; k < 3; k++)
+		c[k] = (head.m[k] * in->pos[0] + head.m[4 + k] * in->pos[1] + head.m[8 + k] * in->pos[2]) / r;
+	float light[3];
+	mat4_xform_dir(&head, in->light, light);
+
+	SpherePass *pass = gd_custom(planet_sphere_pass, sizeof *pass);
+	if (!pass)
+		return;
+	memcpy(pass->rect, rect, sizeof(rect));
+	pass->proj[0] = lens.m[0];
+	pass->proj[1] = lens.m[5];
+	pass->proj[2] = lens.m[8];
+	pass->proj[3] = lens.m[9];
+
+	for (int k = 0; k < 3; k++)
+		pass->centre[k] = (float)c[k];
+	pass->c = (float)(c[0] * c[0] + c[1] * c[1] + c[2] * c[2] - 1.0);
+
+	memcpy(pass->light, light, sizeof(pass->light));
+	vec3_normalize(pass->light);
+	gl_rgb444_to_f(in->light_col, pass->diffuse);
+	gl_rgb444_to_f(in->obj_col, pass->ambient);
+
+	/* The surface: eye space -> view space (H^T) -> the game's view (z
+	 * flipped, S) -> the planet's axes (A^T) */
+	pass->surface = in->surface ? planet_surface_texture(in->surface) : 0;
+	for (int i = 0; i < 16; i++)
+		gl_rgb444_to_f(in->palette[i], pass->palette[i]);
+	static const float s[3] = {1, 1, -1};
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+		{
+			float v = 0;
+			for (int j = 0; j < 3; j++)
+				v += in->axes[3 * i + j] * s[j] * head.m[j * 4 + k];
+			pass->to_local[k * 3 + i] = v;
+		}
+}
+
 void draw_planet(const void *payload)
 {
 	const PlanetDesc *p = payload;
-	if (p->radius <= 0.0f)
+	if (p->radius <= 0.0f || native_mode() == 2) /* native_draw_sky draws it */
 		return;
 
 	/* The game's shape only fits the view it was made for: the cockpit's
@@ -533,74 +765,37 @@ void draw_planet(const void *payload)
 		return;
 	}
 
-	/* The sphere shader takes a plain lens (no rotation): in the cockpit,
-	 * turn the planet by the head instead */
-	mat4 lens = *gd_projection(), head = mat4_identity();
-	if (cockpit_active())
-		cockpit_world_split(&lens, &head);
-	float view_pos[3], pos[3], light[3];
-	vec3i_to_f(p->pos, view_pos);
-	const uint16_t *palette = p->palette;
-	int light_col = p->light_col, obj_col = p->obj_col;
+	SphereIn in = {{p->pos.x, p->pos.y, p->pos.z}, p->radius, {p->light[0], p->light[1], p->light[2]},
+				   p->light_col, p->obj_col, p->palette, p->axes, p->surface_ok ? &p->surface : NULL};
 	if (cockpit_active())
 	{
 		int i = find_dist(&dists_show, p->radius);
+		double len = sqrt(in.pos[0] * in.pos[0] + in.pos[1] * in.pos[1] + in.pos[2] * in.pos[2]);
 		if (i >= 0)
 		{
-			palette = dists_show.palette[i];
-			light_col = dists_show.light_col[i];
-			obj_col = dists_show.obj_col[i];
+			in.palette = dists_show.palette[i];
+			in.light_col = dists_show.light_col[i];
+			in.obj_col = dists_show.obj_col[i];
+			if (len > 0.0)
+				for (int k = 0; k < 3; k++)
+					in.pos[k] *= dists_show.dist[i] / len;
 		}
-		double len = sqrt((double)view_pos[0] * view_pos[0] + (double)view_pos[1] * view_pos[1] +
-						  (double)view_pos[2] * view_pos[2]);
-		if (i >= 0 && len > 0.0)
-			for (int k = 0; k < 3; k++)
-				view_pos[k] = (float)(view_pos[k] * (dists_show.dist[i] / len));
 	}
-	mat4_xform_dir(&head, view_pos, pos);
-	mat4_xform_dir(&head, p->light, light);
+	draw_sphere(&in);
+}
 
-	double r = p->radius;
-	double cx = pos[0] / r, cy = pos[1] / r, cz = pos[2] / r;
-
-	float rect[4];
-	if (!screen_rect(p, rect))
-		return;
-
-	SpherePass *pass = gd_custom(planet_sphere_pass, sizeof *pass);
-	if (!pass)
-		return;
-	memcpy(pass->rect, rect, sizeof(rect));
-	const mat4 *pr = &lens;
-	pass->proj[0] = pr->m[0];
-	pass->proj[1] = pr->m[5];
-	pass->proj[2] = pr->m[8];
-	pass->proj[3] = pr->m[9];
-
-	pass->centre[0] = (float)cx;
-	pass->centre[1] = (float)cy;
-	pass->centre[2] = (float)cz;
-	pass->c = (float)(cx * cx + cy * cy + cz * cz - 1.0);
-
-	memcpy(pass->light, light, sizeof(pass->light));
-	vec3_normalize(pass->light);
-	gl_rgb444_to_f(light_col, pass->diffuse);
-	gl_rgb444_to_f(obj_col, pass->ambient);
-
-	/* The surface: eye space -> view space (H^T) -> the game's view (z
-	 * flipped, S) -> the planet's axes (A^T) */
-	pass->surface = p->surface_ok ? planet_surface_texture(&p->surface) : 0;
-	for (int i = 0; i < 16; i++)
-		gl_rgb444_to_f(palette[i], pass->palette[i]);
-	static const float s[3] = {1, 1, -1};
-	for (int i = 0; i < 3; i++)
-		for (int k = 0; k < 3; k++)
-		{
-			float v = 0;
-			for (int j = 0; j < 3; j++)
-				v += p->axes[3 * i + j] * s[j] * head.m[j * 4 + k];
-			pass->to_local[k * 3 + i] = v;
-		}
+void planet_native_draw(int i)
+{
+	const NativePlanet *n = &native_show.p[i];
+	SphereIn in = {{n->pos[0], n->pos[1], n->pos[2]},
+				   n->radius,
+				   {n->light[0], n->light[1], n->light[2]},
+				   n->light_col,
+				   n->obj_col,
+				   n->palette,
+				   n->axes,
+				   n->surface_ok ? &n->surface : NULL};
+	draw_sphere(&in);
 }
 
 typedef struct
