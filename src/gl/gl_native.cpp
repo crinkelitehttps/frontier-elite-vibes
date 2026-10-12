@@ -263,7 +263,7 @@ extern "C" bool native_enabled(void)
 	if (enabled < 0)
 	{
 		const char *e = getenv("GLF_NATIVE_SCENE");
-		enabled = e ? std::max(0, atoi(e)) : 0;
+		enabled = e ? std::max(0, atoi(e)) : 2;
 	}
 	return enabled != 0;
 }

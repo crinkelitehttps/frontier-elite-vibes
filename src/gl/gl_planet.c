@@ -839,7 +839,7 @@ void draw_planet(const void *payload)
 	 * planet is the sphere, which every pass draws the same. */
 	static int native = -1;
 	if (native < 0)
-		native = getenv("GLF_NATIVE_PLANETS") && atoi(getenv("GLF_NATIVE_PLANETS")) > 0;
+		native = !getenv("GLF_NATIVE_PLANETS") || atoi(getenv("GLF_NATIVE_PLANETS")) > 0;
 	if (p->list_ok && !cockpit_active() && !(native && p->surface_ok))
 	{
 		draw_list(p);

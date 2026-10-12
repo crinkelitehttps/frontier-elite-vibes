@@ -72,9 +72,9 @@ void native_draw_sky(void);
  * planet's sphere and its atmosphere. Returns how many, up to `max`. */
 int native_capture_dirs(float dirs[][3], int max);
 
-/* GLF_NATIVE_SCENE is set */
+/* The native scene is on (GLF_NATIVE_SCENE unset or non-zero) */
 bool native_enabled(void);
-/* Its value: 1 wireframe, 2 filled (0 when not set) */
+/* Its value: 1 wireframe, 2 filled (the default), 0 off */
 int native_mode(void);
 
 #ifdef __cplusplus
