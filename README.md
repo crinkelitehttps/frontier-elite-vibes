@@ -52,7 +52,10 @@ Pauses the game and lets you fly a camera around, e.g. to look at your ship. Sta
 
 On touch screens: drag on the left half to move (a thumbstick that starts under your finger), drag on the right half to look, and use the on-screen buttons for up / down, roll, speed, help and exit.
 
-## What's New in This Fork Of GLFrontier
+## Inherited from GLFrontier Extended (Brett Wilson)
+
+Everything in this section, including the Android and WebAssembly builds and the FE2 Ship Builder, is Brett Wilson's work in GLFrontier Extended, not this fork's. The Android and WebAssembly builds have not been built or tested since this fork's changes (cockpit, head tracking, VR, render thread), so they may need fixes.
+
 * Added native Android build (APK; no external emulator required)
 * Added WebAssembly (Wasm) build via Emscripten for browser-based play at full speed
 * Rewritten OpenGL renderer: batched drawing, planets drawn from the game's own data (surface features, atmosphere haze), much faster on weak machines
@@ -102,6 +105,8 @@ Saves from the modded game can hold mod state the original game doesn't know abo
 
 ### Android
 
+*Inherited from GLFrontier Extended; not built or tested in this fork.*
+
 ```
 tools\build-android.bat          # -> build-android/GLFrontier.apk
 tools\build-android.bat --run    # also install and start it (adb, USB debugging on)
@@ -141,7 +146,7 @@ The web build links prebuilt copies of the game code (`fe2/web`); rebuild them w
 
 ## FE2 Ship Builder (custom ship models)
 
-`tools/fe2ShipBuilder` is a ship editor: build a ship's model, paint it, give it collision, stats, a name and the shipyards and traffic it shows up in, then put it in the game. It is its own CMake project; build it with `tools/fe2ShipBuilder/build_fe2ShipBuilder.bat`. `FE2ShipBuilder.exe` is one static file with the game binary compiled in, so it runs on any machine.
+`tools/fe2ShipBuilder` (by Brett Wilson, from GLFrontier Extended) is a ship editor: build a ship's model, paint it, give it collision, stats, a name and the shipyards and traffic it shows up in, then put it in the game. It is its own CMake project; build it with `tools/fe2ShipBuilder/build_fe2ShipBuilder.bat`. `FE2ShipBuilder.exe` is one static file with the game binary compiled in, so it runs on any machine.
 
 * Ships are saved as `tools/fe2ShipBuilder/custom_ships/NNN.fe2m` (NNN = model number; new ship types count up from 240, big ships' extra parts down from 511). Every file there is compiled into GLFrontier.exe on the next build.
 * SAVE THE GAME in the studio packs the ships straight into an existing GLFrontier.exe instead, no rebuild needed.
