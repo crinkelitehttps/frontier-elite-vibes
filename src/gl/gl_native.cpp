@@ -938,15 +938,17 @@ struct Runner
 		}
 	}
 
-	/* `if > z:K` / `if < z:K`: K << (detail + s) against the depth along
-	 * the game's camera (-8(a6)), as the game does, to pick the same detail
-	 * (behind it, never beyond); nullopt when the shift overflows */
+	/* `if > z:K` / `if < z:K`: K << (detail + s) against the distance. The
+	 * game uses the depth along its camera (-8(a6)), which is the same for
+	 * things ahead but changes as the view turns: pitched 20 degrees, Merlin's
+	 * cloud field (model 99) dropped its smaller clouds. nullopt when the
+	 * shift overflows */
 	std::optional<bool> beyond(const Run &r, int k) const
 	{
 		int sh = o.detail[k & 1] + r.s;
 		if (sh < 0 || sh > 31 || ((int64_t)k << sh) > 0x7fffffff)
 			return std::nullopt;
-		return -r.org[2] > (float)((int64_t)k << sh);
+		return len(r.org) > (float)((int64_t)k << sh);
 	}
 
 	/* `ifdist`: how far apart two vertices are on the game's screen (168
