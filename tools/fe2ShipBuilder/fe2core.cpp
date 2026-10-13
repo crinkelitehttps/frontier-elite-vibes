@@ -723,7 +723,7 @@ static void basis(const Vec3 &n0, Vec3 &n, Vec3 &u, Vec3 &v)
 	v = cross(n, u);
 }
 
-static std::vector<Vec3> disc(const Vec3 &c, const Vec3 &nrm, double r, int seg = 12)
+static std::vector<Vec3> disc(const Vec3 &c, const Vec3 &nrm, double r, int seg = 48)
 {
 	Vec3 n, u, v;
 	basis(nrm, n, u, v);
@@ -930,7 +930,9 @@ std::vector<Prim> primitives(const Model &m, const std::vector<Instr> &instrs, c
 		}
 		else if (op == 0x16)
 		{
-			auto p0 = vp(s8(w[1] >> 8)), p1 = vp(s8(w[1])), p2 = vp(s8(w[2] >> 8)), p3 = vp(s8(w[2]));
+			/* vertex bytes: start, the control point by the end, the one by
+			 * the start, end (as the game draws it: orbits, range circle) */
+			auto p0 = vp(s8(w[1] >> 8)), p1 = vp(s8(w[2] >> 8)), p2 = vp(s8(w[1])), p3 = vp(s8(w[2]));
 			if (p0 && p1 && p2 && p3)
 			{
 				Prim p;
@@ -955,7 +957,7 @@ std::vector<Prim> primitives(const Model &m, const std::vector<Instr> &instrs, c
 				{
 					Vec3 n, u, v;
 					basis(d, n, u, v);
-					const int seg = 8;
+					const int seg = 24;
 					std::vector<Vec3> ra, rb;
 					for (int i = 0; i < seg; i++)
 					{

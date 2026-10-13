@@ -1608,7 +1608,7 @@ void draw_dots(const std::vector<Dot> &dots, bool colour = true)
 			continue;
 		gd_push();
 		gd_translate(d.p[0], d.p[1], d.p[2]);
-		gd_disk(r, 16);
+		gd_disk(r, 48);
 		gd_pop();
 	}
 }
