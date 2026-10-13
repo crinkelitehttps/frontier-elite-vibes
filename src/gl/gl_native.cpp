@@ -213,7 +213,9 @@ constexpr int SKY_MODEL = 0xb0 / 2;
 struct Object
 {
 	uint32_t addr;
-	uint32_t table; /* the model table it was drawn from (L973c_game_data) */
+	uint32_t table; /* the model table it was drawn from (L973c_game_data, or
+	                   L2af80_gamedata2 through L3941a: galaxy map, tombstone) */
+	uint32_t subtable; /* sub-models' table: always L973c_game_data's */
 	int pass;       /* the scene pass it was captured in */
 	int model;
 	int scale;     /* s: view = pos + R v 2^s */
@@ -275,13 +277,25 @@ extern "C" int native_mode(void)
 	return native_enabled() ? enabled : 0;
 }
 
+/* The model table of the object at addr: L3941a_Put3DGamedata2Obj2 enters
+ * L39426 with gamedata2's, else it is L973c_game_data's. a5 = its model
+ * (the table plus the model's offset) at the hooks. */
+static uint32_t table_of(uint32_t addr)
+{
+	uint32_t a5 = (uint32_t)GetReg(REG_A5);
+	uint16_t w = (uint16_t)rdword(addr + 90);
+	if (a5 == (uint32_t)FE2_gamedata2 + (uint16_t)rdword(FE2_gamedata2 + w))
+		return FE2_gamedata2;
+	return (uint32_t)rdlong(FE2_game_data);
+}
+
 /* The object L390f2 or L39426 is at is to be captured */
 static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 {
 	if (!native_enabled() || !scene_active())
 		return false;
 	addr = (uint32_t)rdlong(a6 - 212);
-	table = (uint32_t)rdlong(FE2_game_data);
+	table = table_of(addr);
 	model = (uint16_t)rdword(addr + 90) / 2;
 	if (table == FE2_gamedata1 && model == SKY_MODEL)
 		return false; /* the sky, drawn by L39426 too */
@@ -334,10 +348,12 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 	int pass = scene_cur_pass();
 	o.addr = addr;
 	o.table = table;
+	o.subtable = (uint32_t)rdlong(FE2_game_data);
 	o.pass = pass;
 	o.model = model;
 	o.scale = (int16_t)rdword(a6 - 208);
-	o.shrink = native_frame_shrink(a6);
+	/* L39426 sets s from the model itself: never shrunk */
+	o.shrink = table == o.subtable ? native_frame_shrink(a6) : 1.0f;
 	/* the game's view space -> GL's (z flipped) -> the game's own camera
 	 * (from a turned pass) */
 	float p[3] = {(float)rdlong(a6 - 16), (float)rdlong(a6 - 12), -(float)rdlong(a6 - 8)};
@@ -412,7 +428,7 @@ static bool sky_hook(uint32_t a6)
 	if (!native_enabled() || !scene_active())
 		return false;
 	uint32_t addr = (uint32_t)rdlong(a6 - 212);
-	if ((uint32_t)rdlong(FE2_game_data) != FE2_gamedata1 || (uint16_t)rdword(addr + 90) / 2 != SKY_MODEL)
+	if (table_of(addr) != FE2_gamedata1 || (uint16_t)rdword(addr + 90) / 2 != SKY_MODEL)
 		return false;
 	if (!rec.has_sky)
 	{
@@ -1247,7 +1263,7 @@ struct Runner
 	void call(const Run &r, const fe2::Instr &ins, int depth)
 	{
 		const auto &w = ins.w;
-		const Code *child = code_for(o.table, (w[0] >> 5) & 0x7ff);
+		const Code *child = code_for(o.subtable, (w[0] >> 5) & 0x7ff);
 		if (!child || child == r.c)
 			return;
 		auto org = vertex(r, fe2::s8(w[1]));
