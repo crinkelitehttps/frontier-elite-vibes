@@ -704,7 +704,7 @@ std::string disasm(const std::vector<Instr> &instrs)
 
 /* -- primitives -------------------------------------------------------------- */
 
-static std::vector<Vec3> bezier(const Vec3 &p0, const Vec3 &p1, const Vec3 &p2, const Vec3 &p3, int n = 6)
+static std::vector<Vec3> bezier(const Vec3 &p0, const Vec3 &p1, const Vec3 &p2, const Vec3 &p3, int n = 24)
 {
 	std::vector<Vec3> pts;
 	for (int i = 1; i <= n; i++)
