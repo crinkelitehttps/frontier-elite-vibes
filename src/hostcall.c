@@ -150,5 +150,6 @@ HOSTCALL hcalls[] = {
 	[0x81] = Nu_NativeObject,
 	[0x82] = Nu_NativeCulled,
 	[0x83] = Nu_NativeFar,
+	[0x84] = Nu_NativeText,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

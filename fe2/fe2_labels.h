@@ -371,5 +371,6 @@
 #define FE2_Lnative_object                           0xa90c4 /* Lnative_object */
 #define FE2_Lnative_clip                             0xa90ee /* Lnative_clip */
 #define FE2_Lnative_culled                           0xa9152 /* Lnative_culled */
+#define FE2_Lnative_text                             0xa9154 /* Lnative_text */
 
 #endif /* FE2_LABELS_H */

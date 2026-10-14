@@ -323,6 +323,7 @@
 #define FE2_Lnative_clip                             0x831d6 /* Lnative_clip */
 #define FE2_Lnative_clip2                            0x8323a /* Lnative_clip2 */
 #define FE2_Lnative_culled                           0x8325e /* Lnative_culled */
+#define FE2_Lnative_text                             0x83260 /* Lnative_text */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

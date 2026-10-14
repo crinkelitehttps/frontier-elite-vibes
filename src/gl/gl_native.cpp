@@ -88,6 +88,7 @@ struct Face
 	P3 n;            /* unit */
 	std::vector<P3> tris;    /* 3 per triangle */
 	std::vector<P3> outline; /* for the wireframe */
+	std::vector<std::vector<P3>> more; /* ...a complex polygon's other loops */
 };
 
 struct Line
@@ -120,11 +121,122 @@ float dot(const P3 &a, const P3 &b)
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
+/* Loops in the plane with normal n filled as the game's scan fill does a
+ * complex polygon's (even-odd: an inner loop is a hole, as in a letter's
+ * B or a station's ring): trapezoids between the heights of every vertex
+ * and edge crossing, as triangles facing along n */
+std::vector<P3> even_odd(const std::vector<std::vector<fe2::Vec3>> &loops, const fe2::Vec3 &n)
+{
+	using fe2::Vec3;
+	Vec3 axis = std::fabs(n.x) < std::fabs(n.y) ? (std::fabs(n.x) < std::fabs(n.z) ? Vec3(1, 0, 0) : Vec3(0, 0, 1))
+												: (std::fabs(n.y) < std::fabs(n.z) ? Vec3(0, 1, 0) : Vec3(0, 0, 1));
+	Vec3 u = fe2::normalize(fe2::cross(n, axis)), v = fe2::cross(n, u);
+	struct Edge
+	{
+		double x0, y0, x1, y1; /* y0 < y1 */
+		double x_at(double y) const { return x0 + (x1 - x0) * (y - y0) / (y1 - y0); }
+	};
+	std::vector<Edge> edges;
+	std::vector<double> ys;
+	double h = 0;
+	int count = 0;
+	for (const auto &lp : loops)
+		for (size_t i = 0; i < lp.size(); i++)
+		{
+			const Vec3 &a = lp[i], &b = lp[(i + 1) % lp.size()];
+			h += fe2::dot(a, n);
+			count++;
+			double ax = fe2::dot(a, u), ay = fe2::dot(a, v), bx = fe2::dot(b, u), by = fe2::dot(b, v);
+			ys.push_back(ay);
+			if (ay == by)
+				continue;
+			edges.push_back(ay < by ? Edge{ax, ay, bx, by} : Edge{bx, by, ax, ay});
+		}
+	if (count == 0)
+		return {};
+	h /= count;
+	/* where edges cross */
+	for (size_t i = 0; i < edges.size(); i++)
+		for (size_t j = i + 1; j < edges.size(); j++)
+		{
+			const Edge &a = edges[i], &b = edges[j];
+			double lo = std::max(a.y0, b.y0), hi = std::min(a.y1, b.y1);
+			if (hi <= lo)
+				continue;
+			double d0 = a.x_at(lo) - b.x_at(lo), d1 = a.x_at(hi) - b.x_at(hi);
+			if ((d0 < 0 && d1 > 0) || (d0 > 0 && d1 < 0))
+				ys.push_back(lo + (hi - lo) * d0 / (d0 - d1));
+		}
+	std::sort(ys.begin(), ys.end());
+	auto at = [&](double x, double y) {
+		Vec3 p = u * x + v * y + n * h;
+		return P3{(float)p.x, (float)p.y, (float)p.z};
+	};
+	std::vector<P3> tris;
+	std::vector<std::pair<double, const Edge *>> across;
+	const double eps = 1e-9;
+	for (size_t k = 0; k + 1 < ys.size(); k++)
+	{
+		double y0 = ys[k], y1 = ys[k + 1];
+		if (y1 - y0 < eps)
+			continue;
+		double ym = (y0 + y1) / 2;
+		across.clear();
+		for (const Edge &e : edges)
+			if (e.y0 <= ym && e.y1 >= ym)
+				across.push_back({e.x_at(ym), &e});
+		std::sort(across.begin(), across.end(),
+				  [](const std::pair<double, const Edge *> &a, const std::pair<double, const Edge *> &b) {
+					  return a.first < b.first;
+				  });
+		for (size_t i = 0; i + 1 < across.size(); i += 2)
+		{
+			const Edge &l = *across[i].second, &r = *across[i + 1].second;
+			P3 q[4] = {at(l.x_at(y0), y0), at(r.x_at(y0), y0), at(r.x_at(y1), y1), at(l.x_at(y1), y1)};
+			/* u, v, n is right handed: counterclockwise in (x, y) faces n */
+			for (int t : {1, 2})
+			{
+				tris.push_back(q[0]);
+				tris.push_back(q[t]);
+				tris.push_back(q[t + 1]);
+			}
+		}
+	}
+	return tris;
+}
+
 /* An instruction's faces and lines, in the model's own units */
 void build_prims(const fe2::Model &m, const fe2::Instr &ins, const fe2::Model::ParentFn &parent,
 				 const fe2::VertexEnv *env, std::vector<Face> &faces, std::vector<Line> &lines)
 {
-	for (const fe2::Prim &p : fe2::primitives(m, {ins}, parent, env))
+	auto prims = fe2::primitives(m, {ins}, parent, env);
+	/* a complex polygon of several loops: one face, filled even-odd */
+	std::vector<std::vector<fe2::Vec3>> loops;
+	for (const fe2::Prim &p : prims)
+		if (p.kind == fe2::Prim::Face && p.pts.size() >= 3)
+			loops.push_back(p.pts);
+	if (ins.op == 0x05 && loops.size() > 1)
+	{
+		const fe2::Prim &p = prims.front();
+		Face f;
+		f.colour = p.colour;
+		f.nidx = p.normal ? p.nidx : 0;
+		f.has_normal = p.normal.has_value();
+		fe2::Vec3 n = fe2::normalize(p.normal ? *p.normal : fe2::newell(p.pts));
+		f.n = to_p3(n);
+		f.tris = even_odd(loops, n);
+		for (auto &v : loops[0])
+			f.outline.push_back(to_p3(v));
+		for (size_t i = 1; i < loops.size(); i++)
+		{
+			f.more.emplace_back();
+			for (auto &v : loops[i])
+				f.more.back().push_back(to_p3(v));
+		}
+		faces.push_back(std::move(f));
+		return;
+	}
+	for (const fe2::Prim &p : prims)
 	{
 		if (p.kind == fe2::Prim::Face && p.pts.size() >= 3)
 		{
@@ -151,10 +263,11 @@ void build_prims(const fe2::Model &m, const fe2::Instr &ins, const fe2::Model::P
 
 std::unordered_map<uint64_t, std::unique_ptr<Code>> codes;
 
-/* Model `index` of the model table at `table`, or null */
-const Code *code_for(uint32_t table, int index)
+/* Model `index` of the model table at `table`, or null; with `at`, the
+ * code there run with that model's vertices (a font's glyph) */
+const Code *code_for(uint32_t table, int index, uint32_t at = 0)
 {
-	uint64_t key = (uint64_t)table << 32 | (uint32_t)index;
+	uint64_t key = at ? 1ull << 63 | (uint64_t)at << 16 | (uint32_t)index : (uint64_t)table << 32 | (uint32_t)index;
 	auto it = codes.find(key);
 	if (it != codes.end())
 		return it->second.get();
@@ -164,7 +277,7 @@ const Code *code_for(uint32_t table, int index)
 	if (!model)
 		return nullptr;
 	bool ok = true;
-	auto ins = fe2::decode(img.data, model->code_addr(), 0x8000, &ok);
+	auto ins = fe2::decode(img.data, at ? at : model->code_addr(), 0x8000, &ok);
 	if (!ok || ins.empty())
 		return nullptr;
 	slot.reset(new Code);
@@ -255,10 +368,21 @@ struct Frame
 	/* The sky (stars, the Milky Way: L44200_DrawBGStars) */
 	Object sky;
 	bool has_sky = false;
+	/* Model text's strings by text_key (Nu_NativeText): the last the game
+	 * formatted for each, kept while it isn't run (off screen) */
+	std::unordered_map<uint64_t, std::string> texts;
 };
 Frame rec, pub, show;
 
 int enabled = -1;
+
+/* Model text (op $0a) by object and string id */
+uint64_t text_key(uint32_t addr, int sid)
+{
+	return (uint64_t)addr << 16 | (uint16_t)sid;
+}
+/* Game thread: every string seen, published with each frame */
+std::unordered_map<uint64_t, std::string> texts_seen;
 
 } // namespace
 
@@ -459,6 +583,25 @@ extern "C" void Nu_NativeObject(void)
 		scene_mute_object(a6);
 }
 
+/* Host call (Lnative_text in fe2.s): L3c676_ProjectVectorText has
+ * formatted a model text's string (into the buffer at -220(a6), its own
+ * frame's, just after the instruction at -202(a6)) */
+extern "C" void Nu_NativeText(void)
+{
+	if (!native_enabled() || !scene_active())
+		return;
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	uint32_t addr = (uint32_t)rdlong(a6 - 212);
+	int sid = (uint16_t)rdword((uint32_t)rdlong(a6 - 202) - 2);
+	uint32_t p = (uint32_t)rdlong(a6 - 220);
+	std::string str;
+	for (int c; str.size() < 255 && (c = rdbyte(p++)) != 0;)
+		str += (char)c;
+	if (texts_seen.size() > 1024)
+		texts_seen.clear();
+	texts_seen[text_key(addr, sid)] = str;
+}
+
 /* A planet object (L3cd9c, the planet command, is in these models) */
 static bool planet_model(const Object &o)
 {
@@ -539,6 +682,7 @@ extern "C" void native_reset(void)
 extern "C" void native_publish(void)
 {
 	pub = rec;
+	pub.texts = texts_seen;
 }
 
 extern "C" void native_acquire(void)
@@ -989,9 +1133,13 @@ struct Runner
 			uint16_t col = (uint16_t)colour(f.colour, sh, r.base);
 			if (wire)
 			{
-				for (size_t j = 0; j < f.outline.size(); j++)
-					out.wire.push_back(
-						{place(r, f.outline[j]), place(r, f.outline[(j + 1) % f.outline.size()]), col});
+				auto loop = [&](const std::vector<P3> &lp) {
+					for (size_t j = 0; j < lp.size(); j++)
+						out.wire.push_back({place(r, lp[j]), place(r, lp[(j + 1) % lp.size()]), col});
+				};
+				loop(f.outline);
+				for (const auto &lp : f.more)
+					loop(lp);
 				continue;
 			}
 			/* keyed on its first vertex, as the game does */
@@ -1331,6 +1479,89 @@ struct Runner
 		run(c, depth + 1);
 	}
 
+	/* vtext (L3c676_ProjectVectorText): the string the game formatted for
+	 * the id in the fourth word (Nu_NativeText), in font (w1 >> 12) of
+	 * gamedata2's, each character a model of its own (a glyph, the
+	 * font's code at the offset at +32 + 2 (c - 32)) whose closing word
+	 * >> 6 is the vertex the next one starts at. Below a space, a new line:
+	 * the start of the line moved to the vertex in the font's word at +30.
+	 * At vertex w2's low byte, the axes the parent's swapped and negated
+	 * as for a sub-model (w2's high byte) but never mirrored, scale
+	 * (w1 >> 8) & 15; skipped when normal w1's low byte faces away, its
+	 * shade lighting the colour */
+	void text(const Run &r, const fe2::Instr &ins, int depth)
+	{
+		const auto &w = ins.w;
+		if (w.size() < 4)
+			return;
+		int n = w[1] & 0xff;
+		if (!sky && n > 1 && !normal_faces(r, n))
+			return;
+		auto it = show.texts.find(text_key(o.addr, w[3]));
+		auto org = vertex(r, fe2::s8(w[2]));
+		if (it == show.texts.end() || !org)
+			return;
+		const fe2::Image &img = image_for(FE2_gamedata2);
+		int font = (w[1] >> 12) & 15;
+		auto fa = img.model_addr(font);
+		if (!fa)
+			return;
+		Run g;
+		g.org = *org;
+		int code = (w[2] >> 8) & 7;
+		if (code == 6)
+			for (int i = 0; i < 3; i++)
+				g.ax[i] = r.m[i];
+		else
+			permute(r.ax, w[2], code, g.ax);
+		/* GL view space has z flipped: an unmirrored frame's determinant
+		 * is negative */
+		const P3 &a = g.ax[0], &b = g.ax[1], &c = g.ax[2];
+		float det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) +
+					a[2] * (b[0] * c[1] - b[1] * c[0]);
+		if (det > 0)
+			for (float &x : g.ax[0])
+				x = -x;
+		for (int i = 0; i < 3; i++)
+			g.m[i] = g.ax[i];
+		g.s = (w[1] >> 8) & 15;
+		g.k = std::ldexp(1.0f, g.s);
+		g.base = colour((w[0] >> 4) & 0xfff, shade(r, n), r.base);
+		g.shade0 = o.tint[3];
+		P3 line = *org;
+		for (unsigned char ch : it->second)
+		{
+			std::memset(g.t, 0, sizeof g.t);
+			g.t[0] = (uint16_t)(r.t[0] + 1);
+			g.pv[0] = g.org;
+			int i = (int)(signed char)ch - 0x20;
+			if (i < 0)
+			{
+				g.c = code_for(FE2_gamedata2, font);
+				if (!g.c)
+					return;
+				g.org = line;
+				auto p = vertex(g, fe2::s8(img.u16(*fa + 30)));
+				if (!p)
+					return;
+				g.org = line = *p;
+				continue;
+			}
+			g.c = code_for(FE2_gamedata2, font, *fa + (uint32_t)img.u16(*fa + 32 + 2 * (uint32_t)i));
+			if (!g.c || g.c->ins.empty())
+				return;
+			run(g, depth + 1);
+			int next = g.c->ins.back().w[0] >> 6;
+			if (next)
+			{
+				auto p = vertex(g, next);
+				if (!p)
+					return;
+				g.org = *p;
+			}
+		}
+	}
+
 	void run(Run &r, int depth)
 	{
 		if (depth > 8)
@@ -1403,6 +1634,9 @@ struct Runner
 			case 0x0e:
 			case 0x1b:
 				call(r, ins, depth);
+				break;
+			case 0x0a:
+				text(r, ins, depth);
 				break;
 			case 0x06:
 				begin_batch(r, ins);

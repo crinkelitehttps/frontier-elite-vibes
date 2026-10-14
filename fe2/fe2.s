@@ -79,6 +79,7 @@ Call_CockpitVertexD	equ	$80
 Nu_NativeObject		equ	$81
 Nu_NativeCulled		equ	$82
 Nu_NativeFar		equ	$83
+Nu_NativeText		equ	$84
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -15772,8 +15773,10 @@ L3c676_ProjectVectorText:
 		lea	246(a2),a2
 		lea	L5eb6_a6_base,a6
 		lea	L45332_a5_jumptab,a5
-		bsr.w	L3e73a_GetFmtStr
-		movem.l	(a7)+,a4-6
+* Native scene: hook, same size as the code it replaced (8 bytes). See
+* Lnative_text at the end of the file.
+		jsr	Lnative_text
+		nop
 		bsr.w	L39682
 		movea.l	a7,a0
 		clr.l	(a0)+
@@ -66604,3 +66607,18 @@ lnative_clip2_keep:
 
 Lnative_culled:
 		dc.w	0
+
+******************************************************************************
+* Native scene: the strings of model text (L3c676_ProjectVectorText: ship
+* registrations, station signs, the intro's names), for the host to draw
+* the glyphs itself. Called with the string id's formatted string in the
+* buffer at -220(a6) and the saved a4-a6 under the return address. In place
+* of "bsr.w L3e73a_GetFmtStr / movem.l (a7)+,a4-6".
+******************************************************************************
+Lnative_text:
+		jsr	L3e73a_GetFmtStr
+		movem.l	4(a7),a4-6
+		hcall	#Nu_NativeText
+		move.l	(a7),12(a7)
+		lea	12(a7),a7
+		rts

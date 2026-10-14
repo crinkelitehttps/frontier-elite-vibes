@@ -52,6 +52,8 @@ void Nu_NativeCulled(void);
  * model (a sun, a far planet) that the native scene draws instead of the
  * game's disc */
 void Nu_NativeFar(void);
+/* Host call (Lnative_text): a model text's string, formatted */
+void Nu_NativeText(void);
 
 /* Game thread, in L390f2's frame a6: how much the game shrank the object
  * (l3924a). A far object's view position and scale s are both cut by 2^e
