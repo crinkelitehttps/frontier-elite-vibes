@@ -14,7 +14,8 @@ extern "C"
 #include "input.h"
 }
 
-#include "vr_hand.h"
+#include "vibe/hand.h"
+#include "vibe/surface.h"
 
 bool vr_hands = true;
 int vr_panel_distance = 50;
@@ -23,19 +24,15 @@ int vr_reach = 100;
 int vr_finger = 4;
 int vr_near_cm = 6;
 
-/* Press rule (m): no press from further behind than this, and the release
- * is this far out */
-#define BEHIND  0.08f
-#define RELEASE 0.005f
 /* The grips gesture: surface distance per metre the hands move */
 #define GESTURE_GAIN 2.0f
 /* Where the virtual screen is with lasers (m), and its size there */
 #define SCREEN_DIST  1.8f
 #define SCREEN_WIDTH 1.6f
 #define SCREEN_DROP  0.1f
-/* The dot on the surface under a near tip: this wide, this far out (m) */
-#define DOT_SIZE 0.008f
-#define DOT_LIFT 0.001f
+/* The dot on the surface under a near tip: this wide, this far out (cm) */
+#define DOT_SIZE 0.8f
+#define DOT_LIFT 0.1f
 
 namespace
 {
@@ -48,15 +45,16 @@ struct Surface
 	int y0, y1;
 };
 
+/* Everything in the play space, in cm (vibe's unit): x right, y up, -z ahead */
 struct Hand
 {
 	bool shown;
-	vr_hand::Pose pose; /* as drawn: moved back onto the surface when behind it */
+	vibe::HandPose pose; /* as drawn: moved back onto the surface when behind it */
+	vibe::FingerTouch touch;
 	bool near, down;
-	bool was_down, was_in_front;
-	float height;               /* the tip above the surface (m, + on the eye's side) */
-	float foot[3], n[3];        /* the tip's foot on the surface, its normal */
-	float su[3], sv[3];         /* the surface's axes (unit) */
+	float height;               /* the tip above the surface (cm, + on the eye's side) */
+	vibe::Vec3 foot, n;         /* the tip's foot on the surface, its normal */
+	vibe::Vec3 su, sv;          /* the surface's axes (unit) */
 	int sx, sy;                 /* the screen pixel under the tip */
 };
 
@@ -68,26 +66,6 @@ bool was_active;
 bool gesture, gesture_cockpit;
 float gesture_m0;                  /* the hands' mean forward position as it started (m) */
 int gesture_cm0, gesture_cm = -1;  /* the distance then, and now (-1: no gesture) */
-
-float dot3(const float a[3], const float b[3])
-{
-	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-void cross3(const float a[3], const float b[3], float out[3])
-{
-	out[0] = a[1] * b[2] - a[2] * b[1];
-	out[1] = a[2] * b[0] - a[0] * b[2];
-	out[2] = a[0] * b[1] - a[1] * b[0];
-}
-
-void normalize3(float v[3])
-{
-	float l = std::sqrt(dot3(v, v));
-	if (l > 1e-12f)
-		for (int k = 0; k < 3; k++)
-			v[k] /= l;
-}
 
 bool screen_surface(Surface *s)
 {
@@ -112,36 +90,17 @@ bool panel_surface(Surface *s)
 	return cockpit_panel_play(s->c);
 }
 
-/* The fingertip `tip` over surface `s`: whether it is over it, its height
- * above it, its foot and the screen pixel there (into `h`) */
-bool touch(const Surface &s, const float tip[3], Hand *h)
+/* `s` as a vibe::Surface in cm whose front faces the eye (the play
+ * space's origin). `mirrored`: its u runs the other way round then. */
+vibe::Surface to_vibe(const Surface &s, bool *mirrored)
 {
-	float u[3], v[3], rel[3], eye_rel[3];
-	for (int k = 0; k < 3; k++)
-	{
-		u[k] = s.c[1][k] - s.c[0][k];
-		v[k] = s.c[2][k] - s.c[0][k];
-		rel[k] = tip[k] - s.c[0][k];
-		eye_rel[k] = -s.c[0][k]; /* the eye point is the play space's origin */
-	}
-	cross3(u, v, h->n);
-	normalize3(h->n);
-	if (dot3(h->n, eye_rel) < 0)
-		for (float &x : h->n)
-			x = -x;
-	h->height = dot3(rel, h->n);
-	for (int k = 0; k < 3; k++)
-		h->foot[k] = tip[k] - h->n[k] * h->height;
-	float fu = dot3(rel, u) / dot3(u, u), fv = dot3(rel, v) / dot3(v, v);
-	std::memcpy(h->su, u, sizeof u);
-	std::memcpy(h->sv, v, sizeof v);
-	normalize3(h->su);
-	normalize3(h->sv);
-	if (fu < 0 || fu >= 1 || fv < 0 || fv >= 1)
-		return false;
-	h->sx = int(fu * GL_SCREEN_W);
-	h->sy = s.y0 + int(fv * float(s.y1 - s.y0));
-	return true;
+	vibe::Vec3 tl = vibe::Vec3::of(s.c[0]) * 100.0f, tr = vibe::Vec3::of(s.c[1]) * 100.0f,
+			   bl = vibe::Vec3::of(s.c[2]) * 100.0f;
+	vibe::Surface v = vibe::Surface::from_corners(tl, tr, bl);
+	*mirrored = vibe::dot(v.normal(), vibe::Vec3{} - tl) < 0;
+	if (*mirrored)
+		v = vibe::Surface::from_corners(tr, tl, vibe::Vec3::of(s.c[3]) * 100.0f);
+	return v;
 }
 
 /* Both grips held: the surface's distance follows the hands forward and
@@ -204,8 +163,12 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 
 	Surface s;
 	bool have = cockpit ? panel_surface(&s) : screen_surface(&s);
-	const float reach = float(vr_reach) / 100.0f, finger = float(vr_finger) / 100.0f;
-	const float near_m = float(vr_near_cm) / 100.0f;
+	bool mirrored = false;
+	vibe::Surface surf;
+	if (have)
+		surf = to_vibe(s, &mirrored);
+	const float reach = float(vr_reach) / 100.0f, finger = float(vr_finger);
+	const float near_cm = float(vr_near_cm);
 	bool active = false;
 	for (int i = 0; i < 2; i++)
 	{
@@ -214,40 +177,42 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		h.shown = c.active;
 		if (!c.active)
 		{
-			h.near = h.down = h.was_down = h.was_in_front = false;
+			h.near = h.down = false;
+			h.touch.reset();
 			continue;
 		}
 		active = true;
-		float pos[3], tip[3];
-		for (int k = 0; k < 3; k++)
+		vibe::HandPose &p = h.pose;
+		p = vibe::HandPose::from_aim(i == 1, vibe::Vec3::of(c.pos) * 100.0f, vibe::Vec3::of(c.dir),
+									 vibe::Vec3::of(c.up), reach);
+		const vibe::Vec3 tip = vibe::fingertip(p, finger);
+		vibe::FingerTouch::State t;
+		if (have && !board[i])
 		{
-			pos[k] = c.pos[k] * reach;
-			tip[k] = pos[k] + c.dir[k] * finger;
+			t = h.touch.update(tip, surf, near_cm);
+			h.height = surf.project(tip).height;
 		}
-		bool over = have && !board[i] && touch(s, tip, &h);
-		/* the press rule: no presses from behind, a release 5 mm out */
-		h.down = over && h.height > -BEHIND &&
-				 (h.was_down ? h.height < RELEASE : h.height <= 0 && h.was_in_front);
-		if (h.down && !h.was_down)
+		else
+			h.touch.reset(); /* at the board, or nothing to touch */
+		h.down = t.down;
+		h.near = t.near;
+		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
-		h.was_in_front = over && h.height > 0;
-		h.was_down = h.down;
-		h.near = over && h.height < near_m && h.height > -BEHIND;
-
-		/* drawn: in cm (vr_hand.h), the tip resting on the surface when
-		 * behind it */
-		vr_hand::Pose &p = h.pose;
-		p.right = i == 1;
-		for (int k = 0; k < 3; k++)
+		if (t.near)
 		{
-			float shift = over && h.height < 0 ? -h.n[k] * h.height : 0.0f;
-			p.pos[k] = (pos[k] + shift) * 100.0f;
-			p.fwd[k] = c.dir[k];
-			p.up[k] = c.up[k];
+			float u = mirrored ? 1 - t.u : t.u;
+			h.sx = int(u * GL_SCREEN_W);
+			h.sy = s.y0 + int(t.v * float(s.y1 - s.y0));
+			h.foot = t.foot;
+			h.n = surf.normal();
+			h.su = vibe::normalized(surf.right);
+			h.sv = vibe::normalized(surf.down);
 		}
-		p.touch = h.down || board[i] == 2		 ? vr_hand::Touch::Pressing
-				  : h.near || board[i] == 1 ? vr_hand::Touch::Near
-											: vr_hand::Touch::Away;
+		/* drawn: the tip resting on the surface when behind it */
+		p.pos = p.pos + t.draw_shift;
+		p.touch = h.down || board[i] == 2		 ? vibe::Touch::Pressing
+				  : h.near || board[i] == 1 ? vibe::Touch::Near
+											: vibe::Touch::Away;
 	}
 
 	/* the mouse: the pressing hand until it lets go, else the nearest */
@@ -300,12 +265,12 @@ void hands_queue(const mat4 *play_to_clip, const float eye[3])
 	gd_push();
 	gd_identity();
 	gd_set_cull(false);
-	vr_hand::Style style;
+	vibe::HandStyle style;
 	style.finger = float(vr_finger);
 	/* from above, a little behind (the play space's +z) */
 	style.light[2] = -style.light[2];
-	const float eye_cm[3] = {eye[0] * 100.0f, eye[1] * 100.0f, eye[2] * 100.0f};
-	std::vector<vr_hand::Tri> tris;
+	const vibe::Vec3 eye_cm = vibe::Vec3::of(eye) * 100.0f;
+	std::vector<vibe::HandTri> tris;
 	for (const Hand &h : hand)
 	{
 		if (!h.shown)
@@ -318,16 +283,16 @@ void hands_queue(const mat4 *play_to_clip, const float eye[3])
 			for (int j = 0; j < 4; j++)
 			{
 				float a = (j & 1) ? 0.5f : -0.5f, b = (j & 2) ? 0.5f : -0.5f;
-				for (int k = 0; k < 3; k++)
-					q[j][k] = h.foot[k] + (h.su[k] * a + h.sv[k] * b) * DOT_SIZE + h.n[k] * DOT_LIFT;
+				const vibe::Vec3 pt = h.foot + (h.su * a + h.sv * b) * DOT_SIZE + h.n * DOT_LIFT;
+				(pt * 0.01f).to(q[j]);
 			}
 			gd_tri_rgb(q[0], rgb, q[1], rgb, q[2], rgb);
 			gd_tri_rgb(q[1], rgb, q[3], rgb, q[2], rgb);
 		}
 		tris.clear();
-		vr_hand::build(h.pose, style, &tris);
-		vr_hand::cull_and_sort(eye_cm, &tris);
-		for (const vr_hand::Tri &t : tris)
+		vibe::build_hand(h.pose, style, &tris);
+		vibe::cull_and_sort(eye_cm, &tris);
+		for (const vibe::HandTri &t : tris)
 		{
 			float p[3][3];
 			for (int j = 0; j < 3; j++)

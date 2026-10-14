@@ -186,6 +186,16 @@ if(GLF_VR)
 endif()
 
 ##########################################################################################
+# vibe-lib: the cockpit features shared with the other ports (VR hands, the
+# clipboard). A sibling checkout: ~/projects/vibe-lib
+##########################################################################################
+
+set(VIBE_TESTS OFF CACHE BOOL "" FORCE)
+set(VIBE_POPPLER OFF CACHE BOOL "" FORCE) # (the manual block below finds poppler itself, for now)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib vibe)
+list(APPEND LIBRARIES vibe::vibe)
+
+##########################################################################################
 # The game manual on the cockpit clipboard (src/manual.cpp): PDF pages through
 # poppler-cpp when it is there; without it the clipboard has the controls only
 ##########################################################################################
