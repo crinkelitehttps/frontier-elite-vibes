@@ -83,6 +83,7 @@ static const struct
 static Settings saved;
 static bool loaded;
 int settings_vr_arg = -1;
+static int file_vr; /* the file's "vr", kept while --vr/--novr overrides it */
 
 #ifndef __EMSCRIPTEN__
 static const char *file_path(void)
@@ -117,7 +118,7 @@ static Settings current(void)
 	s.cockpit_fov = cockpit_fov;
 	s.headtrack = headtrack_enabled;
 	s.headtrack_port = headtrack_port;
-	s.vr = vr_enabled;
+	s.vr = settings_vr_arg >= 0 ? file_vr : vr_enabled;
 	s.vr_resolution = vr_resolution;
 	s.vr_depth = vr_depth;
 	s.vr_hands = vr_hands;
@@ -151,6 +152,7 @@ static void apply(const Settings *s)
 	headtrack_enabled = s->headtrack != 0;
 	if (s->headtrack_port > 0 && s->headtrack_port < 65536)
 		headtrack_port = s->headtrack_port;
+	file_vr = s->vr;
 	vr_enabled = settings_vr_arg >= 0 ? settings_vr_arg != 0 : s->vr != 0;
 	if (s->vr_resolution >= 25 && s->vr_resolution <= 200)
 		vr_resolution = s->vr_resolution;
