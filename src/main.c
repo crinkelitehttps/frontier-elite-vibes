@@ -305,7 +305,8 @@ static void read_parameters(int argc, char *argv[])
 				   "  --fullscreen or -f    Try to use fullscreen mode.\n"
 				   "  --nosound             Disable sound (faster!).\n"
 				   "  --size w h            Start at specified window size.\n"
-				   "  --vr                  Use a VR headset (OpenXR).\n");
+				   "  --vr                  Use a VR headset (OpenXR).\n"
+				   "  --novr                Don't, even if glfrontier.cfg says vr=1.\n");
 			exit(0);
 		}
 		else if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-f"))
@@ -314,7 +315,11 @@ static void read_parameters(int argc, char *argv[])
 		}
 		else if (!strcmp(argv[i], "--vr"))
 		{
-			vr_enabled = true;
+			settings_vr_arg = 1;
+		}
+		else if (!strcmp(argv[i], "--novr"))
+		{
+			settings_vr_arg = 0;
 		}
 		else if (!strcmp(argv[i], "--nosound"))
 		{

@@ -82,6 +82,7 @@ static const struct
 
 static Settings saved;
 static bool loaded;
+int settings_vr_arg = -1;
 
 #ifndef __EMSCRIPTEN__
 static const char *file_path(void)
@@ -150,7 +151,7 @@ static void apply(const Settings *s)
 	headtrack_enabled = s->headtrack != 0;
 	if (s->headtrack_port > 0 && s->headtrack_port < 65536)
 		headtrack_port = s->headtrack_port;
-	vr_enabled = vr_enabled || s->vr != 0; /* (--vr) */
+	vr_enabled = settings_vr_arg >= 0 ? settings_vr_arg != 0 : s->vr != 0;
 	if (s->vr_resolution >= 25 && s->vr_resolution <= 200)
 		vr_resolution = s->vr_resolution;
 	if (s->vr_depth >= 0 && s->vr_depth <= 1000)

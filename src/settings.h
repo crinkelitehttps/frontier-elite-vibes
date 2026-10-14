@@ -18,6 +18,9 @@ void settings_load(void);
  * every frame (a phone can kill the app at any moment) */
 void settings_poll(void);
 
+/* --vr / --novr: 1 or 0 overrides the file's "vr" for this run, -1 = not given */
+extern int settings_vr_arg;
+
 #ifdef __cplusplus
 }
 #endif
