@@ -7,6 +7,7 @@
 #include "gl_api.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
+#include "gl_hands.h"
 #include "gl_laser.h"
 
 #include "gamepad.h"
@@ -58,14 +59,16 @@ static void cross3(const float a[3], const float b[3], float out[3])
 /* The virtual screen (vr.h): the ray's screen pixel and distance */
 static bool ray_to_virtual_screen(const float o[3], const float d[3], int *sx, int *sy, float *dist)
 {
-	const float w = VR_SCREEN_WIDTH_M, h = VR_SCREEN_WIDTH_M * 0.75f;
+	float sd, w, drop;
+	vr_screen_place(&sd, &w, &drop);
+	const float h = w * 0.75f;
 	if (d[2] >= -1e-6f)
 		return false;
-	float t = (-VR_SCREEN_DIST_M - o[2]) / d[2];
+	float t = (-sd - o[2]) / d[2];
 	if (t <= 0.0f)
 		return false;
 	float u = (o[0] + d[0] * t + w * 0.5f) / w;
-	float v = (h * 0.5f - VR_SCREEN_DROP_M - (o[1] + d[1] * t)) / h;
+	float v = (h * 0.5f - drop - (o[1] + d[1] * t)) / h;
 	if (u < 0.0f || u >= 1.0f || v < 0.0f || v >= 1.0f)
 		return false;
 	*sx = (int)(u * GL_SCREEN_W);
@@ -135,11 +138,18 @@ void laser_update(bool cockpit)
 	bool hit[2] = {false, false}, clickable[2] = {false, false};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
+		connected = vr_controller(i, &hands[i]) || connected;
+	/* hands that touch: no beams, the triggers are the pad's */
+	bool gesture = false;
+	if (vr_hands)
+		gesture = hands_update(hands, cockpit);
+	else
+		hands_off();
+	for (int i = 0; i < 2; i++)
 	{
-		connected = vr_hand(i, &hands[i]) || connected;
 		const VrHand *h = &hands[i];
 		Beam *b = &beams[i];
-		b->on = h->active;
+		b->on = h->active && !vr_hands;
 		if (!b->on)
 			continue;
 		active = true;
@@ -174,7 +184,9 @@ void laser_update(bool cockpit)
 	if (!hands[current].active && hands[!current].active)
 		current = !current;
 
-	if (active || was_active)
+	if (vr_hands)
+		active = false; /* hands_update points the mouse */
+	else if (active || was_active)
 		Input_SetLaser(active, hit[current], (float)hx[current] + 0.5f, (float)hy[current] + 0.5f,
 					   trigger_use[current] == TRIGGER_CLICK ? 0x2 : 0);
 	was_active = active;
@@ -184,7 +196,12 @@ void laser_update(bool cockpit)
 	v.active = connected;
 	for (int i = 0; i < 2; i++)
 		if (hands[i].connected)
+		{
+			/* the grips move the panel or screen (gl_hands.h), not the pad's */
+			if (gesture)
+				hands[i].squeeze = false;
 			add_to_pad(i, &hands[i], &v);
+		}
 	if (connected || was_connected)
 		gamepad_set_virtual(&v);
 	was_connected = connected;
@@ -192,6 +209,7 @@ void laser_update(bool cockpit)
 
 void laser_off(void)
 {
+	hands_off();
 	beams[0].on = beams[1].on = false;
 	trigger_on[0] = trigger_on[1] = false;
 	trigger_use[0] = trigger_use[1] = TRIGGER_OFF;
@@ -208,7 +226,7 @@ void laser_off(void)
 
 bool laser_shown(void)
 {
-	return beams[0].on || beams[1].on;
+	return beams[0].on || beams[1].on || hands_shown();
 }
 
 /* A quad facing the eye: a..b, `half` wide either side, colours ca to cb */
@@ -240,7 +258,8 @@ static void ribbon(const float a[3], const float b[3], float half, const float e
 
 void laser_queue(const mat4 *play_to_clip, const float eye[3])
 {
-	if (!laser_shown())
+	hands_queue(play_to_clip, eye);
+	if (!beams[0].on && !beams[1].on)
 		return;
 	gd_set_projection(play_to_clip);
 	gd_push();

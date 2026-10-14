@@ -142,6 +142,11 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy);
  * the cockpit is being drawn; *dist: how far along `dir` it hits the panel
  * (-1: the HUD, at infinity) */
 bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, int *sy, float *dist);
+/* The control panel's corners in a headset's play space (top left, top
+ * right, bottom left, bottom right), as the cockpit is being drawn; it
+ * shows screen rows COCKPIT_PANEL_ROW0 .. GL_SCREEN_H */
+#define COCKPIT_PANEL_ROW0 168
+bool cockpit_panel_play(float corners[4][3]);
 
 #ifdef __cplusplus
 }

@@ -22,6 +22,7 @@
 #include "gl_native.h"
 #include "gl_draw.h"
 #include "gl_fill2d.h"
+#include "gl_hands.h"
 #include "gl_laser.h"
 #include "gl_scene.h"
 
@@ -60,7 +61,7 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
 #define PANEL_H     (PANEL_W * 32.0f / 320.0f * 1.2f)
 #define PANEL_DIST  0.62f
 #define PANEL_DOWN  24.5f
-#define PANEL_ROW0  168 /* first screen row of the panel */
+#define PANEL_ROW0  COCKPIT_PANEL_ROW0 /* first screen row of the panel */
 
 static bool active;      /* the frame being drawn is the cockpit */
 static bool game_active; /* the game's frames are (game thread) */
@@ -265,17 +266,21 @@ void cockpit_use_eye(const VrView *v)
 	}
 }
 
+/* With a headset's hands (gl_hands.h) the panel is within reach: nearer,
+ * scaled about the eye so it looks the same size */
 static void build_panel(void)
 {
-	float a = PANEL_DOWN * GLM_PI / 180.0f;
-	float c[3] = {0, -PANEL_DIST * sinf(a), -PANEL_DIST * cosf(a)};
+	float a = PANEL_DOWN * GLM_PI / 180.0f, k = 1.0f;
+	if (headset && vr_hands && hands_panel_distance() > 0)
+		k = (float)hands_panel_distance() / 100.0f / PANEL_DIST;
+	float c[3] = {0, -PANEL_DIST * k * sinf(a), -PANEL_DIST * k * cosf(a)};
 	float down[3] = {0, -cosf(a), sinf(a)}; /* in the panel's plane, towards its bottom edge */
 	for (int i = 0; i < 4; i++)
 	{
 		float u = (i & 1) ? 0.5f : -0.5f, v = (i & 2) ? 0.5f : -0.5f;
-		panel[i][0] = c[0] + u * PANEL_W;
-		panel[i][1] = c[1] + v * PANEL_H * down[1];
-		panel[i][2] = c[2] + v * PANEL_H * down[2];
+		panel[i][0] = c[0] + u * PANEL_W * k;
+		panel[i][1] = c[1] + v * PANEL_H * k * down[1];
+		panel[i][2] = c[2] + v * PANEL_H * k * down[2];
 	}
 }
 
@@ -575,7 +580,7 @@ void cockpit_draw(void)
 	queue_screen_quad(&cp, (const float(*)[3])panel, PANEL_ROW0, GL_SCREEN_H, false, false);
 	gd_pop();
 
-	/* the controllers' lasers (gl_laser.c), in front of it all */
+	/* the controllers' hands or lasers (gl_laser.c), in front of it all */
 	float eye_play[3];
 	mat4 pp = cockpit_play_projection(eye_play);
 	laser_queue(&pp, eye_play);
@@ -1050,4 +1055,14 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
 	eye_to_view_of(&look, origin, o);
 	eye_to_view_of(&look, dir, d);
 	return ray_to_screen(o, d, sx, sy, dist);
+}
+
+bool cockpit_panel_play(float corners[4][3])
+{
+	if (!active)
+		return false;
+	mat4 look = look_rotation();
+	for (int i = 0; i < 4; i++)
+		mat4_xform_dir(&look, panel[i], corners[i]);
+	return true;
 }

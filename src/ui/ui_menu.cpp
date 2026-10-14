@@ -27,6 +27,7 @@ extern "C"
 #include "freecam.h"
 #include "gamepad.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_hands.h"
 #include "headtrack.h"
 #include "vr.h"
 }
@@ -229,6 +230,16 @@ void page_settings()
 	ImGui::TextWrapped("Resolution (from the next start)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##vrres", &vr_resolution, 50, 150, "%d%%");
+	wrapped_checkbox("Hands that touch (else laser pointers)", &vr_hands);
+	if (vr_hands)
+	{
+		ImGui::TextWrapped("Panel distance (or both grips, push / pull)");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::SliderInt("##vrpanel", &vr_panel_distance, VR_DISTANCE_MIN, VR_DISTANCE_MAX, "%d cm");
+		ImGui::TextWrapped("Screen distance");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::SliderInt("##vrscreen", &vr_screen_distance, VR_DISTANCE_MIN, VR_DISTANCE_MAX, "%d cm");
+	}
 	ImGui::TextWrapped("%s", vr_status());
 	if (vr_running() && ui_button("Recentre headset (Ctrl-C)"))
 		vr_recenter();

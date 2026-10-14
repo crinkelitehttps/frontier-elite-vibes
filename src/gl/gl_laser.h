@@ -1,8 +1,10 @@
 /*
- * gl_laser.h - a VR headset's motion controllers as laser pointers.
+ * gl_laser.h - a VR headset's motion controllers: hands or laser pointers.
  *
  * HOW IT WORKS
- *   Each controller (vr.h) casts a beam from its aim pose. The one last
+ *   With vr_hands (the default) the controllers are hands that touch the
+ *   panel and the virtual screen (gl_hands.h), and the triggers are always
+ *   the pad's. Otherwise each controller (vr.h) casts a beam from its aim pose. The one last
  *   clicked with points the game's mouse: where its beam meets what the
  *   game draws on, as the window's mouse is mapped (in the cockpit: the
  *   control panel, else the HUD's directions; otherwise the virtual
@@ -12,7 +14,7 @@
  *   pad's trigger. The controllers' sticks and buttons are a virtual pad
  *   in the Xbox layout (gamepad.h), so the gamepad's bindings fly the ship.
  *
- *   The beams are drawn in the cockpit (cockpit_draw) and, over the
+ *   The beams (or hands) are drawn in the cockpit (cockpit_draw) and, over the
  *   virtual screen, in a layer of their own (laser_draw_overlay).
  *
  * Drawing thread, per headset frame:

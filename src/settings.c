@@ -16,6 +16,7 @@
 
 #include "freecam.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_hands.h"
 #include "main.h"
 #include "mods.h"
 #include "renderer.h"
@@ -42,6 +43,12 @@ typedef struct
 	int vr;
 	int vr_resolution;
 	int vr_depth;
+	int vr_hands;
+	int vr_panel_distance;
+	int vr_screen_distance;
+	int vr_reach;
+	int vr_finger;
+	int vr_near;
 } Settings;
 
 static const struct
@@ -64,6 +71,12 @@ static const struct
 	{"vr", offsetof(Settings, vr)},
 	{"vr_resolution", offsetof(Settings, vr_resolution)},
 	{"vr_depth", offsetof(Settings, vr_depth)},
+	{"vr_hands", offsetof(Settings, vr_hands)},
+	{"vr_panel_distance", offsetof(Settings, vr_panel_distance)},
+	{"vr_screen_distance", offsetof(Settings, vr_screen_distance)},
+	{"vr_reach", offsetof(Settings, vr_reach)},
+	{"vr_finger", offsetof(Settings, vr_finger)},
+	{"vr_near", offsetof(Settings, vr_near)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -106,6 +119,12 @@ static Settings current(void)
 	s.vr = vr_enabled;
 	s.vr_resolution = vr_resolution;
 	s.vr_depth = vr_depth;
+	s.vr_hands = vr_hands;
+	s.vr_panel_distance = vr_panel_distance;
+	s.vr_screen_distance = vr_screen_distance;
+	s.vr_reach = vr_reach;
+	s.vr_finger = vr_finger;
+	s.vr_near = vr_near_cm;
 	return s;
 }
 
@@ -136,6 +155,18 @@ static void apply(const Settings *s)
 		vr_resolution = s->vr_resolution;
 	if (s->vr_depth >= 0 && s->vr_depth <= 1000)
 		vr_depth = s->vr_depth;
+	vr_hands = s->vr_hands != 0;
+	if (s->vr_panel_distance == 0 ||
+		(s->vr_panel_distance >= VR_DISTANCE_MIN && s->vr_panel_distance <= VR_DISTANCE_MAX))
+		vr_panel_distance = s->vr_panel_distance;
+	if (s->vr_screen_distance >= VR_DISTANCE_MIN && s->vr_screen_distance <= VR_DISTANCE_MAX)
+		vr_screen_distance = s->vr_screen_distance;
+	if (s->vr_reach >= 50 && s->vr_reach <= 300)
+		vr_reach = s->vr_reach;
+	if (s->vr_finger >= 0 && s->vr_finger <= 20)
+		vr_finger = s->vr_finger;
+	if (s->vr_near >= 1 && s->vr_near <= 30)
+		vr_near_cm = s->vr_near;
 }
 
 void settings_load(void)

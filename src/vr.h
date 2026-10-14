@@ -14,9 +14,10 @@
  *   The window keeps showing the ordinary picture, with the cockpit
  *   turned by the headset, so the mouse works on it as before.
  *
- *   Motion controllers are laser pointers (gl_laser.c): where one points,
- *   on the control panel, the HUD or the virtual screen, is the game's
- *   mouse pointer. Their sticks and buttons are a gamepad (gamepad.c).
+ *   Motion controllers are hands that touch the control panel and the
+ *   virtual screen (gl_hands.cpp), or laser pointers (gl_laser.c): where
+ *   one touches or points is the game's mouse pointer. Their sticks and
+ *   buttons are a gamepad (gamepad.c).
  *
  *   Linux: the runtime shares the GLX context (OpenGL swapchains).
  *   Windows: Direct3D 11 swapchains, which every Windows runtime supports;
@@ -81,11 +82,10 @@ void vr_release_eye(int eye);
 /* The virtual screen: a framebuffer of VR_SCREEN_W x VR_SCREEN_H */
 #define VR_SCREEN_W 1280
 #define VR_SCREEN_H 960
-/* where it floats in the play space: this wide (m), its centre this far
- * ahead and this low (m) */
-#define VR_SCREEN_WIDTH_M 1.6f
-#define VR_SCREEN_DIST_M  1.8f
-#define VR_SCREEN_DROP_M  0.1f
+/* where it floats in the play space: its centre `dist` ahead and `drop`
+ * low, `width` wide (m); nearer with hands (gl_laser.h), the same size to
+ * the eye */
+void vr_screen_place(float *dist, float *width, float *drop);
 unsigned vr_acquire_screen(void);
 void vr_release_screen(void);
 /* Submits what was drawn this frame (the eyes or the screen) */
@@ -98,6 +98,7 @@ typedef struct
 	bool active;    /* and tracked: its aim */
 	float pos[3];   /* where its aim ray starts, metres */
 	float dir[3];   /* the way it points (unit) */
+	float up[3];    /* the back of the hand (unit, the aim pose's +y) */
 	float trigger;  /* 0..1 */
 	bool squeeze;   /* the grip button */
 	float stick[2]; /* thumbstick, -1..1, x right +, y up + */
@@ -108,7 +109,9 @@ typedef struct
 	bool lower, upper; /* face buttons (Touch, Index): A / X, B / Y */
 } VrHand;
 /* 0 left, 1 right. False (and out->connected false) if it isn't there. */
-bool vr_hand(int hand, VrHand *out);
+bool vr_controller(int hand, VrHand *out);
+/* Buzzes a controller */
+void vr_buzz(int hand, float seconds, float amplitude);
 /* Draws over the virtual screen this frame, from each eye (call between
  * vr_acquire_screen and vr_end_frame): a framebuffer cleared to nothing,
  * whose drawn pixels (alpha 1) cover the screen */

@@ -49,6 +49,10 @@ Rules (the header of `fe2/fe2_modded.s` has the full version):
 
 Key RE facts: object loop `L44480`, `L390f2` projects one object (shrinks far objects by 2^e, so raw `|pos|` is not true distance), `L39426` draws game-data objects (hangar, galaxy map via `gamedata2`). Model id at obj+90 is a byte offset (index = /2; sky = model 88). Known game variables: `fe2/NOTES.md`.
 
+## Shared folder (`~/projects/shared`)
+
+Reusable assets and feature specs shared with the user's other game ports and VR projects (F-117A, F-19, Thief2VR, ...); read its `README.md`. `assets/` holds our own models/code (never original game data), `specs/` feature specs to carry between projects. A project uses an asset by copying it in with a note of where it came from, and keeps the copies in step. Here: `src/gl/vr_hand.h` is a copy of `assets/vr-hand/vr_hand.h` (keep it unchanged; adapt around it), used by `gl_hands.cpp`, which implements `specs/vr-hand-touch-panel.md` (adapted: the whole panel and the virtual screen are touchable, no button table, no beams, two-grip distance gesture).
+
 ## Testing
 
 `../devtools/README.md` documents the test harness: `t.sh` drives a **separate** instance by PID (`BIN=` picks the binary — use a scratch build dir, not `build-original`, while the user may be playing), plus `tospace.sh`/`climb.sh`/`space.sh` flight scripts, `ot.py` fake OpenTrack, `vpad.py` virtual pad, Monado qwerty for VR, and model dump tools in `devtools/models`. Before chasing a visual "bug" in native mode, compare against `GLF_NATIVE_SCENE=0` at the same window size.

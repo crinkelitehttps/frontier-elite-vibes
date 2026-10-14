@@ -144,7 +144,7 @@ struct Vr
 	XrPath hand_paths[2] = {XR_NULL_PATH, XR_NULL_PATH};
 	XrAction aim = XR_NULL_HANDLE, trigger = XR_NULL_HANDLE, squeeze = XR_NULL_HANDLE, stick = XR_NULL_HANDLE,
 			 stick_click = XR_NULL_HANDLE, pad = XR_NULL_HANDLE, pad_click = XR_NULL_HANDLE, menu = XR_NULL_HANDLE,
-			 lower = XR_NULL_HANDLE, upper = XR_NULL_HANDLE;
+			 lower = XR_NULL_HANDLE, upper = XR_NULL_HANDLE, haptic = XR_NULL_HANDLE;
 	XrSpace aim_space[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
 	VrHand hands[2] = {};
 	bool hand_announced[2] = {};
@@ -374,10 +374,12 @@ bool Vr::make_actions()
 		!make(pad_click, "trackpad_click", "Trackpad click", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
 		!make(menu, "menu", "Menu", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
 		!make(lower, "lower_button", "Lower face button (A / X)", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
-		!make(upper, "upper_button", "Upper face button (B / Y)", XR_ACTION_TYPE_BOOLEAN_INPUT))
+		!make(upper, "upper_button", "Upper face button (B / Y)", XR_ACTION_TYPE_BOOLEAN_INPUT) ||
+		!make(haptic, "haptic", "Buzz", XR_ACTION_TYPE_VIBRATION_OUTPUT))
 		return false;
 
-	/* Inputs: "both/..." on either hand, "left/..." or "right/..." on one.
+	/* Inputs: "both/..." on either hand, "left/..." or "right/..." on one;
+	 * "haptic" is the output.
 	 * Floats bound to buttons are thresholded by the runtime and the other
 	 * way round give 0 or 1. */
 	struct Input
@@ -399,7 +401,8 @@ bool Vr::make_actions()
 		  {stick_click, "both/thumbstick/click"},
 		  {pad, "both/trackpad"},
 		  {pad_click, "both/trackpad/click"},
-		  {menu, "both/menu/click"}}},
+		  {menu, "both/menu/click"},
+		  {haptic, "both/haptic"}}},
 		{"oculus/touch_controller", /* no right menu (the system button) */
 		 {{aim, "both/aim/pose"},
 		  {trigger, "both/trigger/value"},
@@ -410,7 +413,8 @@ bool Vr::make_actions()
 		  {lower, "left/x/click"},
 		  {upper, "left/y/click"},
 		  {lower, "right/a/click"},
-		  {upper, "right/b/click"}}},
+		  {upper, "right/b/click"},
+		  {haptic, "both/haptic"}}},
 		{"valve/index_controller", /* no menu */
 		 {{aim, "both/aim/pose"},
 		  {trigger, "both/trigger/value"},
@@ -418,14 +422,16 @@ bool Vr::make_actions()
 		  {stick, "both/thumbstick"},
 		  {stick_click, "both/thumbstick/click"},
 		  {lower, "both/a/click"},
-		  {upper, "both/b/click"}}},
+		  {upper, "both/b/click"},
+		  {haptic, "both/haptic"}}},
 		{"htc/vive_controller", /* no thumbstick */
 		 {{aim, "both/aim/pose"},
 		  {trigger, "both/trigger/value"},
 		  {squeeze, "both/squeeze/click"},
 		  {pad, "both/trackpad"},
 		  {pad_click, "both/trackpad/click"},
-		  {menu, "both/menu/click"}}},
+		  {menu, "both/menu/click"},
+		  {haptic, "both/haptic"}}},
 		{"khr/simple_controller",
 		 {{aim, "both/aim/pose"}, {trigger, "both/select/click"}, {menu, "both/menu/click"}}},
 	};
@@ -442,7 +448,8 @@ bool Vr::make_actions()
 				if (!both && std::strncmp(in.input, hand, std::strlen(hand)))
 					continue;
 				char path[128];
-				snprintf(path, sizeof path, "/user/hand/%s/input/%s", hand, slash + 1);
+				snprintf(path, sizeof path, "/user/hand/%s/%s/%s", hand,
+						 std::strcmp(slash + 1, "haptic") ? "input" : "output", slash + 1);
 				XrPath xp;
 				xrStringToPath(instance, path, &xp);
 				sb.push_back({in.action, xp});
@@ -540,6 +547,10 @@ void Vr::read_hands()
 				h.dir[0] = -2 * (q.x * q.z + q.y * q.w);
 				h.dir[1] = -2 * (q.y * q.z - q.x * q.w);
 				h.dir[2] = -(1 - 2 * (q.x * q.x + q.y * q.y));
+				/* its +y */
+				h.up[0] = 2 * (q.x * q.y - q.z * q.w);
+				h.up[1] = 1 - 2 * (q.x * q.x + q.z * q.z);
+				h.up[2] = 2 * (q.y * q.z + q.x * q.w);
 				h.active = std::isfinite(h.pos[0] + h.pos[1] + h.pos[2] + h.dir[0] + h.dir[1] + h.dir[2]);
 			}
 	}
@@ -965,8 +976,10 @@ void Vr::end_frame()
 		quad.subImage.swapchain = screen.handle;
 		quad.subImage.imageRect = {{0, 0}, {screen.w, screen.h}};
 		quad.pose.orientation.w = 1;
-		quad.pose.position = {0, -VR_SCREEN_DROP_M, -VR_SCREEN_DIST_M};
-		quad.size = {VR_SCREEN_WIDTH_M, VR_SCREEN_WIDTH_M * 0.75f};
+		float dist, width, drop;
+		vr_screen_place(&dist, &width, &drop);
+		quad.pose.position = {0, -drop, -dist};
+		quad.size = {width, width * 0.75f};
 		layers[count++] = reinterpret_cast<const XrCompositionLayerBaseHeader *>(&quad);
 		if (drew_overlay)
 		{
@@ -1132,10 +1145,24 @@ void vr_release_screen(void)
 	vr->release(vr->screen);
 }
 
-bool vr_hand(int hand, VrHand *out)
+bool vr_controller(int hand, VrHand *out)
 {
 	*out = vr && vr->in_frame ? vr->hands[hand & 1] : VrHand{};
 	return out->connected;
+}
+
+void vr_buzz(int hand, float seconds, float amplitude)
+{
+	if (!vr || !vr->haptic || !vr->focused)
+		return;
+	XrHapticActionInfo hi{XR_TYPE_HAPTIC_ACTION_INFO};
+	hi.action = vr->haptic;
+	hi.subactionPath = vr->hand_paths[hand & 1];
+	XrHapticVibration v{XR_TYPE_HAPTIC_VIBRATION};
+	v.duration = XrDuration(seconds * 1e9f);
+	v.frequency = XR_FREQUENCY_UNSPECIFIED;
+	v.amplitude = amplitude;
+	xrApplyHapticFeedback(vr->session, &hi, reinterpret_cast<const XrHapticBaseHeader *>(&v));
 }
 
 unsigned vr_acquire_overlay_eye(int eye)
@@ -1184,11 +1211,12 @@ void vr_release_eye(int) {}
 unsigned vr_acquire_screen(void) { return 0; }
 void vr_release_screen(void) {}
 void vr_end_frame(void) {}
-bool vr_hand(int, VrHand *out)
+bool vr_controller(int, VrHand *out)
 {
 	*out = VrHand{};
 	return false;
 }
+void vr_buzz(int, float, float) {}
 unsigned vr_acquire_overlay_eye(int) { return 0; }
 void vr_release_overlay_eye(int) {}
 void vr_recenter(void) {}
