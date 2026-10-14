@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "gl_api.h"
+#include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_hands.h"
@@ -139,10 +140,13 @@ void laser_update(bool cockpit)
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
 		connected = vr_controller(i, &hands[i]) || connected;
+	/* the clipboard first: a grip that takes it is nobody else's */
+	int board[2] = {0, 0};
+	clipboard_hands(hands, cockpit && vr_hands, board);
 	/* hands that touch: no beams, the triggers are the pad's */
 	bool gesture = false;
 	if (vr_hands)
-		gesture = hands_update(hands, cockpit);
+		gesture = hands_update(hands, cockpit, board);
 	else
 		hands_off();
 	for (int i = 0; i < 2; i++)
@@ -209,6 +213,11 @@ void laser_update(bool cockpit)
 
 void laser_off(void)
 {
+	/* a clipboard held stays where it is */
+	VrHand none[2];
+	int board[2];
+	memset(none, 0, sizeof none);
+	clipboard_hands(none, false, board);
 	hands_off();
 	beams[0].on = beams[1].on = false;
 	trigger_on[0] = trigger_on[1] = false;

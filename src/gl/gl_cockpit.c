@@ -18,6 +18,7 @@
 #include <SDL.h>
 
 #include "gl_api.h"
+#include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_native.h"
 #include "gl_draw.h"
@@ -580,6 +581,9 @@ void cockpit_draw(void)
 	queue_screen_quad(&cp, (const float(*)[3])panel, PANEL_ROW0, GL_SCREEN_H, false, false);
 	gd_pop();
 
+	/* the clipboard (gl_clipboard.h), nearer than the panel */
+	clipboard_queue_cockpit(&cp, eye);
+
 	/* the controllers' hands or lasers (gl_laser.c), in front of it all */
 	float eye_play[3];
 	mat4 pp = cockpit_play_projection(eye_play);
@@ -1055,6 +1059,12 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
 	eye_to_view_of(&look, origin, o);
 	eye_to_view_of(&look, dir, d);
 	return ray_to_screen(o, d, sx, sy, dist);
+}
+
+void cockpit_play_to_view(const float v[3], float out[3])
+{
+	mat4 look = look_rotation();
+	eye_to_view_of(&look, v, out);
 }
 
 bool cockpit_panel_play(float corners[4][3])

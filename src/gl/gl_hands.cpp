@@ -198,7 +198,7 @@ extern "C" void vr_screen_place(float *dist, float *width, float *drop)
 	*drop = SCREEN_DROP * k;
 }
 
-bool hands_update(const VrHand hands[2], bool cockpit)
+bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 {
 	bool held = update_gesture(hands, cockpit);
 
@@ -224,7 +224,7 @@ bool hands_update(const VrHand hands[2], bool cockpit)
 			pos[k] = c.pos[k] * reach;
 			tip[k] = pos[k] + c.dir[k] * finger;
 		}
-		bool over = have && touch(s, tip, &h);
+		bool over = have && !board[i] && touch(s, tip, &h);
 		/* the press rule: no presses from behind, a release 5 mm out */
 		h.down = over && h.height > -BEHIND &&
 				 (h.was_down ? h.height < RELEASE : h.height <= 0 && h.was_in_front);
@@ -245,7 +245,9 @@ bool hands_update(const VrHand hands[2], bool cockpit)
 			p.fwd[k] = c.dir[k];
 			p.up[k] = c.up[k];
 		}
-		p.touch = h.down ? vr_hand::Touch::Pressing : h.near ? vr_hand::Touch::Near : vr_hand::Touch::Away;
+		p.touch = h.down || board[i] == 2		 ? vr_hand::Touch::Pressing
+				  : h.near || board[i] == 1 ? vr_hand::Touch::Near
+											: vr_hand::Touch::Away;
 	}
 
 	/* the mouse: the pressing hand until it lets go, else the nearest */

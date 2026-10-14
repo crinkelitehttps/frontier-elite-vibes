@@ -186,6 +186,26 @@ if(GLF_VR)
 endif()
 
 ##########################################################################################
+# The game manual on the cockpit clipboard (src/manual.cpp): PDF pages through
+# poppler-cpp when it is there; without it the clipboard has the controls only
+##########################################################################################
+
+option(GLF_MANUAL_PDF "Read the game manual's PDF for the clipboard (poppler-cpp)" ON)
+# (not when cross-compiling: pkg-config would find the build machine's poppler)
+if(GLF_MANUAL_PDF AND NOT ANDROID AND NOT PLATFORM STREQUAL "Web" AND NOT CMAKE_CROSSCOMPILING)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(POPPLER_CPP IMPORTED_TARGET poppler-cpp)
+    endif()
+    if(POPPLER_CPP_FOUND)
+        list(APPEND LIBRARIES PkgConfig::POPPLER_CPP)
+        add_compile_definitions(GLF_HAVE_POPPLER)
+    else()
+        message(STATUS "poppler-cpp not found: the clipboard shows the controls, not the manual")
+    endif()
+endif()
+
+##########################################################################################
 # Dear ImGui (emulator menu)
 ##########################################################################################
 

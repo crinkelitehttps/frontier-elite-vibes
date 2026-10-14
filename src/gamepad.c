@@ -10,12 +10,14 @@
 
 #include "gamepad.h"
 #include "game_state.h"
+#include "gl/gl_clipboard.h"
 #include "gl/gl_cockpit.h"
 #include "headtrack.h"
 #include "host.h"
 #include "input.h"
 #include "keymap.h"
 #include "main.h"
+#include "manual.h"
 #include "strafe.h"
 #include "vr.h"
 
@@ -26,7 +28,7 @@ static const char DEFAULT_CFG[] =
 	"#\n"
 	"# Delete this file to get the defaults back.\n"
 	"#\n"
-	"# One binding per line:   [shift1|shift2] <control> <action>\n"
+	"# One binding per line:   [manual] [shift1|shift2] <control> <action>\n"
 	"# A control may have several lines; '#' starts a comment.\n"
 	"#\n"
 	"# Shift layers: a control bound to `shift1` or `shift2` is held to switch\n"
@@ -35,6 +37,11 @@ static const char DEFAULT_CFG[] =
 	"# control is pressed. Axis bindings (steer, roll, yaw, look, strafe) act\n"
 	"# whatever the shifts, unless the axis has one prefixed with the shift\n"
 	"# being held.\n"
+	"#\n"
+	"# The manual layer: a binding prefixed `manual` acts only while the\n"
+	"# clipboard is out (whatever the shifts), and its control's other\n"
+	"# bindings don't then. Only key, cycle, recenter, cockpit, pointer,\n"
+	"# manual and manual-page bindings; axes keep flying the ship.\n"
 	"#\n"
 	"# Controls (SDL names):\n"
 	"#   buttons   a b x y back guide start leftstick rightstick\n"
@@ -79,6 +86,9 @@ static const char DEFAULT_CFG[] =
 	"#                              with VR motion controllers: they point)\n"
 	"#   pointer-x, pointer-y [invert] move it (full axes); while it is out,\n"
 	"#                              these axes do nothing else\n"
+	"#   manual                     the clipboard (controls and the game\n"
+	"#                              manual): up to read / put away (also F11)\n"
+	"#   manual-page <n>            turn n pages (-n: back); repeats while held\n"
 	"#   Key names as SDL spells them: a-z 0-9 f1-f10 = - , . / ; return space\n"
 	"#   escape tab backspace up down left right home end pageup pagedown\n"
 	"#   insert delete \"left shift\" \"right shift\" (aliases: enter esc lshift\n"
@@ -136,7 +146,16 @@ static const char DEFAULT_CFG[] =
 	"shift2 dpleft  key shift+f2\n"
 	"shift2 dpup    key shift+f3\n"
 	"shift2 dpright key shift+f4\n"
-	"shift2 y       key shift+f5        # fastest\n";
+	"shift2 y       key shift+f5        # fastest\n"
+	"\n"
+	"# ---- The clipboard: Right shoulder + A (VR: right grip + right trackpad\n"
+	"# down), or grab it with a VR hand. While it is out the d-pad (VR: left\n"
+	"# trackpad) turns pages.\n"
+	"shift2 a       manual              # clipboard: controls and manual\n"
+	"manual dpleft  manual-page -1      # previous page\n"
+	"manual dpright manual-page +1      # next page\n"
+	"manual dpup    manual-page -10     # 10 pages back\n"
+	"manual dpdown  manual-page +10     # 10 pages on\n";
 
 /* =========================================================================
  * Bindings
@@ -172,7 +191,9 @@ typedef enum
 	ACT_COCKPIT,
 	ACT_POINTER,   /* a button: pointer on, or click and off */
 	ACT_POINTER_X, /* axes moving it while it is on */
-	ACT_POINTER_Y
+	ACT_POINTER_Y,
+	ACT_MANUAL,     /* the clipboard up / away */
+	ACT_MANUAL_PAGE /* turn `pages` pages */
 } Action;
 
 #define MAX_CHORDS 8
@@ -196,10 +217,17 @@ typedef struct
 	int layer; /* key, cycle, recenter, cockpit, steer, look, strafe: shift layer (0 none, 1, 2); shift: which */
 	int axis_shadowed; /* axis actions without a layer: bit n set if shift n has its own binding */
 	bool pointer_axis; /* other axis actions: the control moves the pointer while it is on */
+	bool manual_layer; /* acts only while the clipboard is out */
+	bool shadowed;     /* its control has a manual layer binding, which acts instead while it is out */
+	int pages;         /* manual-page */
+	bool gap;          /* a blank line before it in the file */
+	char note[96];     /* the line's comment */
 
 	bool was_down;  /* the control, last update */
 	bool held;      /* key: sent down */
 	Chord sent;     /* the chord sent down */
+	bool repeating; /* manual-page: turning pages while held */
+	Uint64 next_repeat;
 } Binding;
 
 #define MAX_BINDINGS 128
@@ -320,15 +348,35 @@ static bool is_axis_action(Action a)
 		   a == ACT_LOOK_Y || a == ACT_STRAFE_X || a == ACT_STRAFE_Y || a == ACT_POINTER_X || a == ACT_POINTER_Y;
 }
 
-static bool parse_line(char *line, const char *source, int line_no)
+/* Bindings that take a press (and may be in the manual layer) */
+static bool is_press_action(Action a)
 {
+	return a == ACT_KEY || a == ACT_CYCLE || a == ACT_RECENTER || a == ACT_COCKPIT || a == ACT_POINTER ||
+		   a == ACT_MANUAL || a == ACT_MANUAL_PAGE;
+}
+
+/* `gap`: a blank line came before, taken by the next binding */
+static bool parse_line(char *line, const char *source, int line_no, bool *gap)
+{
+	char note[96] = "";
 	char *hash = strchr(line, '#');
 	if (hash)
+	{
 		*hash = 0;
+		char *c = hash + 1;
+		while (isspace((unsigned char)*c))
+			c++;
+		snprintf(note, sizeof note, "%s", c);
+		for (size_t l = strlen(note); l > 0 && isspace((unsigned char)note[l - 1]); l--)
+			note[l - 1] = 0;
+	}
 	char *w[16];
 	int n = split(line, w, 16);
 	if (n == 0)
+	{
+		*gap |= !hash;
 		return true;
+	}
 
 	/* settings */
 	if (n == 2)
@@ -349,9 +397,19 @@ static bool parse_line(char *line, const char *source, int line_no)
 	Binding b;
 	memset(&b, 0, sizeof b);
 	int i = 0;
-	if (!strcmp(w[0], "shift1") || !strcmp(w[0], "shift2"))
+	if (!strcmp(w[0], "manual"))
 	{
-		b.layer = w[0][5] - '0';
+		b.manual_layer = true;
+		i++;
+	}
+	if (i < n && (!strcmp(w[i], "shift1") || !strcmp(w[i], "shift2")))
+	{
+		if (b.manual_layer)
+		{
+			log_printf("%s:%d: manual layer bindings take no shift\n", source, line_no);
+			return false;
+		}
+		b.layer = w[i][5] - '0';
 		i++;
 	}
 	if (i + 2 > n || !parse_control(w[i], &b.control))
@@ -431,9 +489,33 @@ static bool parse_line(char *line, const char *source, int line_no)
 	{
 		b.action = act[0] == 'r' ? ACT_RECENTER : act[0] == 'c' ? ACT_COCKPIT : ACT_POINTER;
 	}
+	else if (!strcmp(act, "manual"))
+	{
+		b.action = ACT_MANUAL;
+	}
+	else if (!strcmp(act, "manual-page"))
+	{
+		char *end = NULL;
+		long pages = args < n ? strtol(w[args], &end, 10) : 0;
+		if (!pages || *end || pages < -1000 || pages > 1000)
+		{
+			log_printf("%s:%d: manual-page takes a page count, e.g. +1 or -10\n", source, line_no);
+			return false;
+		}
+		b.action = ACT_MANUAL_PAGE;
+		b.pages = (int)pages;
+	}
 	else
 	{
 		log_printf("%s:%d: unknown action '%s'\n", source, line_no, act);
+		return false;
+	}
+
+	if (b.manual_layer && !is_press_action(b.action))
+	{
+		log_printf("%s:%d: only key, cycle, recenter, cockpit, pointer, manual and manual-page bindings can be in "
+				   "the manual layer\n",
+				   source, line_no);
 		return false;
 	}
 
@@ -442,8 +524,16 @@ static bool parse_line(char *line, const char *source, int line_no)
 		log_printf("%s:%d: too many bindings\n", source, line_no);
 		return false;
 	}
+	b.gap = *gap;
+	*gap = false;
+	snprintf(b.note, sizeof b.note, "%s", note);
 	bindings[n_bindings++] = b;
 	return true;
+}
+
+static bool same_control(const Control *a, const Control *b)
+{
+	return a->source == b->source && a->index == b->index && a->half == b->half;
 }
 
 static void mark_shadowed(void)
@@ -451,6 +541,10 @@ static void mark_shadowed(void)
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
+		if (is_press_action(b->action) && !b->manual_layer)
+			for (int j = 0; j < n_bindings; j++)
+				if (bindings[j].manual_layer && same_control(&bindings[j].control, &b->control))
+					b->shadowed = true;
 		if (!is_axis_action(b->action))
 			continue;
 		if (b->action != ACT_POINTER_X && b->action != ACT_POINTER_Y)
@@ -476,7 +570,7 @@ static void mark_shadowed(void)
 static bool load_text(const char *text, const char *source)
 {
 	n_bindings = 0;
-	bool ok = true;
+	bool ok = true, gap = false;
 	int line_no = 0;
 	const char *p = text;
 	while (*p)
@@ -486,7 +580,7 @@ static bool load_text(const char *text, const char *source)
 		char line[256];
 		snprintf(line, sizeof line, "%.*s", (int)(len < sizeof line ? len : sizeof line - 1), p);
 		line_no++;
-		ok = parse_line(line, source, line_no) && ok;
+		ok = parse_line(line, source, line_no, &gap) && ok;
 		p += len;
 		if (*p)
 			p++;
@@ -694,6 +788,7 @@ static void release_all(void)
 			chord(&b->sent, false);
 		b->held = false;
 		b->was_down = false;
+		b->repeating = false;
 	}
 }
 
@@ -775,6 +870,7 @@ void gamepad_update(void)
 		scroll_map(0, 0);
 
 	int layer = current_layer();
+	bool out = clipboard_out();
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
@@ -835,12 +931,33 @@ void gamepad_update(void)
 			continue;
 		}
 
+		/* the manual layer while the clipboard is out, in place of the
+		 * control's other bindings */
+		bool acts = b->manual_layer ? out : b->layer == layer && !(out && b->shadowed);
+		if (b->action == ACT_MANUAL_PAGE)
+		{
+			/* turns again while held: after half a second, then faster */
+			if (!down)
+				b->repeating = false;
+			else if (pressed && acts)
+			{
+				manual_turn(b->pages);
+				b->repeating = true;
+				b->next_repeat = now + 500;
+			}
+			else if (b->repeating && now >= b->next_repeat)
+			{
+				manual_turn(b->pages);
+				b->next_repeat = now + 150;
+			}
+			continue;
+		}
 		if (b->held && !down)
 		{
 			chord(&b->sent, false);
 			b->held = false;
 		}
-		if (!pressed || b->layer != layer)
+		if (!pressed || !acts)
 			continue;
 		switch (b->action)
 		{
@@ -858,6 +975,9 @@ void gamepad_update(void)
 			break;
 		case ACT_COCKPIT:
 			cockpit_enabled = !cockpit_enabled;
+			break;
+		case ACT_MANUAL:
+			clipboard_toggle();
 			break;
 		case ACT_POINTER:
 			if (vpad.active) /* the motion controllers point */
@@ -896,4 +1016,124 @@ void gamepad_look(float *x, float *y)
 {
 	*x = look[0] * look_yaw * 0.5f;
 	*y = look[1] * look_pitch * 0.5f;
+}
+
+/* =========================================================================
+ * The bindings in words (the clipboard's controls pages)
+ * ========================================================================= */
+int gamepad_help_count(void)
+{
+	return n_bindings;
+}
+
+/* A control's name on the pad, and on VR controllers ("" if they have none
+ * that is this button of the virtual pad, gl_laser.c) */
+static void describe_control(const Control *c, char *pad_name, size_t n, char *vr_name, size_t vn)
+{
+	static const char *const BUTTONS[SDL_CONTROLLER_BUTTON_MAX][2] = {
+		[SDL_CONTROLLER_BUTTON_A] = {"A", "R pad down, A"},
+		[SDL_CONTROLLER_BUTTON_B] = {"B", "R pad right, B"},
+		[SDL_CONTROLLER_BUTTON_X] = {"X", "R pad left, X"},
+		[SDL_CONTROLLER_BUTTON_Y] = {"Y", "R pad up, Y"},
+		[SDL_CONTROLLER_BUTTON_BACK] = {"Back", "L menu"},
+		[SDL_CONTROLLER_BUTTON_GUIDE] = {"Guide", ""},
+		[SDL_CONTROLLER_BUTTON_START] = {"Start", "R menu"},
+		[SDL_CONTROLLER_BUTTON_LEFTSTICK] = {"L stick click", "L stick click"},
+		[SDL_CONTROLLER_BUTTON_RIGHTSTICK] = {"R stick click", "R stick click"},
+		[SDL_CONTROLLER_BUTTON_LEFTSHOULDER] = {"LB", "L grip"},
+		[SDL_CONTROLLER_BUTTON_RIGHTSHOULDER] = {"RB", "R grip"},
+		[SDL_CONTROLLER_BUTTON_DPAD_UP] = {"D-pad up", "L pad up"},
+		[SDL_CONTROLLER_BUTTON_DPAD_DOWN] = {"D-pad down", "L pad down"},
+		[SDL_CONTROLLER_BUTTON_DPAD_LEFT] = {"D-pad left", "L pad left"},
+		[SDL_CONTROLLER_BUTTON_DPAD_RIGHT] = {"D-pad right", "L pad right"},
+		[SDL_CONTROLLER_BUTTON_MISC1] = {"Share", ""},
+		[SDL_CONTROLLER_BUTTON_PADDLE1] = {"P1", ""},
+		[SDL_CONTROLLER_BUTTON_PADDLE2] = {"P2", ""},
+		[SDL_CONTROLLER_BUTTON_PADDLE3] = {"P3", ""},
+		[SDL_CONTROLLER_BUTTON_PADDLE4] = {"P4", ""},
+		[SDL_CONTROLLER_BUTTON_TOUCHPAD] = {"Touchpad", ""},
+	};
+	if (c->source == SRC_BUTTON)
+	{
+		const char *const *b = c->index >= 0 && c->index < SDL_CONTROLLER_BUTTON_MAX ? BUTTONS[c->index] : NULL;
+		snprintf(pad_name, n, "%s", b && b[0] ? b[0] : "?");
+		snprintf(vr_name, vn, "%s", b && b[1] ? b[1] : "");
+		return;
+	}
+	if (c->index == SDL_CONTROLLER_AXIS_TRIGGERLEFT || c->index == SDL_CONTROLLER_AXIS_TRIGGERRIGHT)
+	{
+		bool left = c->index == SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+		snprintf(pad_name, n, "%s", left ? "LT" : "RT");
+		snprintf(vr_name, vn, "%s", left ? "L trigger" : "R trigger");
+		return;
+	}
+	bool left = c->index == SDL_CONTROLLER_AXIS_LEFTX || c->index == SDL_CONTROLLER_AXIS_LEFTY;
+	bool x = c->index == SDL_CONTROLLER_AXIS_LEFTX || c->index == SDL_CONTROLLER_AXIS_RIGHTX;
+	const char *part = c->half == 0 ? (x ? "x" : "y")
+					   : x			? (c->half < 0 ? "left" : "right")
+									: (c->half < 0 ? "up" : "down");
+	snprintf(pad_name, n, "%c stick %s", left ? 'L' : 'R', part);
+	snprintf(vr_name, vn, "%s", pad_name);
+}
+
+static void describe_chord(const Chord *c, char *out, size_t n)
+{
+	snprintf(out, n, "%s%s%s", c->ctrl ? "Ctrl+" : "", c->shift ? "Shift+" : "", SDL_GetKeyName(c->key));
+}
+
+void gamepad_help(int i, GamepadHelp *h)
+{
+	memset(h, 0, sizeof *h);
+	if (i < 0 || i >= n_bindings)
+		return;
+	const Binding *b = &bindings[i];
+	h->gap = b->gap;
+	snprintf(h->note, sizeof h->note, "%s", b->note);
+
+	char pad_name[24], vr_name[24], prefix[8] = "";
+	describe_control(&b->control, pad_name, sizeof pad_name, vr_name, sizeof vr_name);
+	if (b->manual_layer)
+		strcat(prefix, "M ");
+	if (b->layer && b->action != ACT_SHIFT)
+		snprintf(prefix + strlen(prefix), sizeof prefix - strlen(prefix), "S%d ", b->layer);
+	snprintf(h->control, sizeof h->control, "%s%s", prefix, pad_name);
+	if (vr_name[0])
+		snprintf(h->vr_control, sizeof h->vr_control, "%s%s", prefix, vr_name);
+
+	static const char *const NAMES[] = {
+		[ACT_STEER_X] = "steer x", [ACT_STEER_Y] = "steer y",	  [ACT_ROLL] = "roll",
+		[ACT_YAW] = "yaw",		   [ACT_LOOK_X] = "look x",		  [ACT_LOOK_Y] = "look y",
+		[ACT_STRAFE_X] = "strafe x", [ACT_STRAFE_Y] = "strafe y", [ACT_RECENTER] = "recentre",
+		[ACT_COCKPIT] = "cockpit view", [ACT_POINTER] = "pointer", [ACT_POINTER_X] = "pointer x",
+		[ACT_POINTER_Y] = "pointer y", [ACT_MANUAL] = "clipboard",
+	};
+	switch (b->action)
+	{
+	case ACT_KEY:
+	case ACT_CYCLE:
+		h->key = true;
+		for (int k = 0; k < b->n_keys; k++)
+		{
+			char key[32];
+			describe_chord(&b->keys[k], key, sizeof key);
+			size_t l = strlen(h->action);
+			snprintf(h->action + l, sizeof h->action - l, "%s%s", k ? " " : "", key);
+		}
+		break;
+	case ACT_SHIFT:
+		snprintf(h->action, sizeof h->action, "shift %d", b->layer);
+		break;
+	case ACT_STRAFE:
+	{
+		static const char *const DIRS[2][2] = {{"left", "right"}, {"down", "up"}};
+		snprintf(h->action, sizeof h->action, "strafe %s", DIRS[b->strafe_axis][b->strafe_sign > 0]);
+		break;
+	}
+	case ACT_MANUAL_PAGE:
+		snprintf(h->action, sizeof h->action, "page %+d", b->pages);
+		break;
+	default:
+		snprintf(h->action, sizeof h->action, "%s%s", NAMES[b->action], b->invert ? " inverted" : "");
+		break;
+	}
 }

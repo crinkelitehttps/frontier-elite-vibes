@@ -10,6 +10,9 @@
  * A VR headset's motion controllers are a second, virtual pad on the same
  * bindings (gamepad_set_virtual).
  *
+ * The `manual` layer acts while the cockpit clipboard is out
+ * (gl_clipboard.h), in place of its controls' other bindings.
+ *
  * Analog steering goes straight into the game's keyboard / joystick
  * steering words (A6+14508 x, A6+14510 y: what A/Z and ,/. ramp up), so
  * the stick's position is the turn rate.
@@ -52,6 +55,20 @@ typedef struct
 	float axes[SDL_CONTROLLER_AXIS_MAX]; /* -1..1, SDL's directions (y down +), triggers 0..1 */
 } GamepadVirtual;
 void gamepad_set_virtual(const GamepadVirtual *v);
+
+/* The loaded bindings in words, in file order (the clipboard's controls
+ * pages, manual.cpp) */
+typedef struct
+{
+	bool gap;             /* a blank line before it in the file */
+	char control[32];     /* "S2 RB", "M D-pad left" */
+	char vr_control[32];  /* the same on VR controllers; "" if they have none */
+	char action[64];      /* "Shift+F1", "steer y inverted", "page +10" */
+	char note[96];        /* the line's comment */
+	bool key;             /* a key or cycle binding (action: its keys) */
+} GamepadHelp;
+int gamepad_help_count(void);
+void gamepad_help(int i, GamepadHelp *h);
 
 #ifdef __cplusplus
 }

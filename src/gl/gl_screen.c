@@ -24,6 +24,7 @@
 #include <SDL.h>
 
 #include "gl_api.h"
+#include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_native.h"
 #include "gl_draw.h"
@@ -474,6 +475,7 @@ void Screen_UnInit(void)
 	vr_shutdown();
 	ui_shutdown();
 	cockpit_shutdown();
+	clipboard_shutdown();
 	glDeleteTextures(1, &screen_tex);
 	glDeleteBuffers(1, &blit_vbo);
 	glDeleteVertexArrays(1, &blit_vao);
@@ -644,6 +646,10 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 		BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
 		if (blit)
 			blit->transparent = (scr_show.renderer != R_OLD);
+
+		/* the clipboard over the picture while it is out */
+		gd_set_viewport(GD_VP_WINDOW);
+		clipboard_queue_flat(w, h);
 	}
 
 	/* 3. overlays */

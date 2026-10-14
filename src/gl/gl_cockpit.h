@@ -147,6 +147,9 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
  * shows screen rows COCKPIT_PANEL_ROW0 .. GL_SCREEN_H */
 #define COCKPIT_PANEL_ROW0 168
 bool cockpit_panel_play(float corners[4][3]);
+/* A point or direction in a headset's play space -> view space (where the
+ * panel and the clipboard are), as the cockpit is being drawn */
+void cockpit_play_to_view(const float v[3], float out[3]);
 
 #ifdef __cplusplus
 }

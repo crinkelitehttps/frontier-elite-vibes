@@ -18,6 +18,7 @@
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "main.h"
+#include "manual.h"
 #include "mods.h"
 #include "renderer.h"
 #include "settings.h"
@@ -49,6 +50,7 @@ typedef struct
 	int vr_reach;
 	int vr_finger;
 	int vr_near;
+	int manual_page;
 } Settings;
 
 static const struct
@@ -77,6 +79,7 @@ static const struct
 	{"vr_reach", offsetof(Settings, vr_reach)},
 	{"vr_finger", offsetof(Settings, vr_finger)},
 	{"vr_near", offsetof(Settings, vr_near)},
+	{"manual_page", offsetof(Settings, manual_page)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -127,6 +130,7 @@ static Settings current(void)
 	s.vr_reach = vr_reach;
 	s.vr_finger = vr_finger;
 	s.vr_near = vr_near_cm;
+	s.manual_page = manual_page();
 	return s;
 }
 
@@ -170,6 +174,8 @@ static void apply(const Settings *s)
 		vr_finger = s->vr_finger;
 	if (s->vr_near >= 1 && s->vr_near <= 30)
 		vr_near_cm = s->vr_near;
+	if (s->manual_page != manual_page())
+		manual_set_page(s->manual_page);
 }
 
 void settings_load(void)

@@ -11,10 +11,12 @@
 #include "audio.h"
 #include "freecam.h"
 #include "gamepad.h"
+#include "gl/gl_clipboard.h"
 #include "m68000.h"
 #include "hostcall.h"
 #include "input.h"
 #include "keymap.h"
+#include "manual.h"
 #include "custom_ships.h"
 #include "renderer.h"
 #include "touch_input.h"
@@ -193,6 +195,37 @@ static bool ctrl_held(const SDL_Event *event)
 	return (event->key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)) != 0;
 }
 
+/* The clipboard (gl_clipboard.h): F11 brings it up or puts it away; while
+ * it is out the page keys and the wheel turn its pages, not the game's */
+static bool clipboard_event(const SDL_Event *event)
+{
+	if (event->type == SDL_MOUSEWHEEL)
+	{
+		if (!clipboard_out() || event->wheel.y == 0)
+			return false;
+		manual_turn(event->wheel.y > 0 ? -1 : 1);
+		return true;
+	}
+	if (event->type != SDL_KEYDOWN && event->type != SDL_KEYUP)
+		return false;
+	SDL_Keycode key = event->key.keysym.sym;
+	Uint16 mod = event->key.keysym.mod;
+	if (key == SDLK_F11 && !(mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)))
+	{
+		if (event->type == SDL_KEYDOWN && !event->key.repeat)
+			clipboard_toggle();
+		return true;
+	}
+	if (!clipboard_out() || !(key == SDLK_PAGEUP || key == SDLK_PAGEDOWN || key == SDLK_HOME || key == SDLK_END))
+		return false;
+	if (event->type == SDL_KEYDOWN)
+	{
+		int n = (mod & KMOD_SHIFT) ? 10 : 1, all = manual_pages();
+		manual_turn(key == SDLK_PAGEUP ? -n : key == SDLK_PAGEDOWN ? n : key == SDLK_HOME ? -all : all);
+	}
+	return true;
+}
+
 /* Reads SDL events and passes them to the menu, the touch controls or the
  * emulated keyboard / mouse. */
 void Main_EventHandler(void)
@@ -210,6 +243,8 @@ void Main_EventHandler(void)
 			continue;
 		/* ImGui wants window units; everything below lays out in pixels */
 		Screen_MouseToPixels(&event);
+		if (clipboard_event(&event))
+			continue;
 		if (freecam_handle_event(&event))
 			continue;
 		if (gamepad_handle_event(&event))
@@ -306,7 +341,9 @@ static void read_parameters(int argc, char *argv[])
 				   "  --nosound             Disable sound (faster!).\n"
 				   "  --size w h            Start at specified window size.\n"
 				   "  --vr                  Use a VR headset (OpenXR).\n"
-				   "  --novr                Don't, even if glfrontier.cfg says vr=1.\n");
+				   "  --novr                Don't, even if glfrontier.cfg says vr=1.\n"
+				   "  --manual FILE         The game manual (PDF) for the clipboard (F11);\n"
+				   "                        else the first *.pdf in this folder.\n");
 			exit(0);
 		}
 		else if (!strcmp(argv[i], "--fullscreen") || !strcmp(argv[i], "-f"))
@@ -320,6 +357,10 @@ static void read_parameters(int argc, char *argv[])
 		else if (!strcmp(argv[i], "--novr"))
 		{
 			settings_vr_arg = 0;
+		}
+		else if (!strcmp(argv[i], "--manual") && i + 1 < argc)
+		{
+			manual_arg = argv[++i];
 		}
 		else if (!strcmp(argv[i], "--nosound"))
 		{
@@ -417,6 +458,7 @@ int main(int argc, char *argv[])
 
 	main_init();
 	settings_load(); /* glfrontier.cfg: the settings from last time */
+	manual_init();   /* the clipboard's pages: the bindings, the PDF */
 	if (use_fullscreen && !bInFullScreen)
 		Screen_ToggleFullScreen();
 

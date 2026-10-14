@@ -55,9 +55,11 @@ int hands_panel_distance(void);
 
 /* Touches with the controllers and points the mouse; `cockpit`: the
  * cockpit is drawn per eye this frame (the panel), else the virtual
- * screen. Returns true while both grips are held (the distance gesture:
- * the grips are not the pad's then). */
-bool hands_update(const VrHand hands[2], bool cockpit);
+ * screen. board[i]: hand i is at the clipboard (1) or holds it (2)
+ * (gl_clipboard.h): it touches nothing else, and its tip shows that.
+ * Returns true while both grips are held (the distance gesture: the grips
+ * are not the pad's then). */
+bool hands_update(const VrHand hands[2], bool cockpit, const int board[2]);
 void hands_off(void);
 /* There are hands to draw */
 bool hands_shown(void);
