@@ -195,10 +195,10 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		else
 			h.touch.reset(); /* at the board, or nothing to touch */
 		h.down = t.down;
-		h.near = t.near;
+		h.near = t.is_near;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
-		if (t.near)
+		if (t.is_near)
 		{
 			float u = mirrored ? 1 - t.u : t.u;
 			h.sx = int(u * GL_SCREEN_W);
