@@ -3,7 +3,8 @@
  * game manual (the pages: manual.h).
  *
  * HOW IT WORKS
- *   The board (42 x 34 cm, clipboard.h, from the F-19 port; spec:
+ *   The board (42 x 34 cm, vibe/clipboard.h, in
+ *   ~/projects/vibe-lib, shared with the other ports; spec:
  *   ~/projects/shared/specs/cockpit-clipboard.md) is stowed upright beside
  *   the left of the seat at hip height, where it can be read by looking
  *   down to the left. The clipboard key (F11) or a `manual` binding brings
@@ -25,7 +26,7 @@
  *   without depth, then the hands.
  *
  * Board positions are in the cockpit's frame (view space, metres, -z
- * ahead); clipboard.h's are in cm with +z ahead.
+ * ahead); vibe's are in cm with +z ahead.
  */
 #ifndef GL_CLIPBOARD_H
 #define GL_CLIPBOARD_H

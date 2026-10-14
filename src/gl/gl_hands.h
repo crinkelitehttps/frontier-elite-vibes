@@ -3,8 +3,8 @@
  * control panel and the virtual screen.
  *
  * HOW IT WORKS
- *   Each controller is a low-poly pointing hand (vr_hand.h, shared with
- *   the F-117A and F-19 ports; spec: ~/projects/shared/specs/
+ *   Each controller is a low-poly pointing hand (vibe/hand.h, in
+ *   ~/projects/vibe-lib, shared with the other ports; spec: ~/projects/shared/specs/
  *   vr-hand-touch-panel.md) following its aim pose. The surface it can
  *   touch is the control panel in the cockpit, else the virtual screen;
  *   both are brought within arm's reach, scaled about the eye so they look

@@ -187,32 +187,26 @@ endif()
 
 ##########################################################################################
 # vibe-lib: the cockpit features shared with the other ports (VR hands, the
-# clipboard). A sibling checkout: ~/projects/vibe-lib
-##########################################################################################
-
-set(VIBE_TESTS OFF CACHE BOOL "" FORCE)
-set(VIBE_POPPLER OFF CACHE BOOL "" FORCE) # (the manual block below finds poppler itself, for now)
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib vibe)
-list(APPEND LIBRARIES vibe::vibe)
-
-##########################################################################################
-# The game manual on the cockpit clipboard (src/manual.cpp): PDF pages through
-# poppler-cpp when it is there; without it the clipboard has the controls only
+# clipboard). A sibling checkout: ~/projects/vibe-lib. Its vibe::poppler
+# (poppler-cpp, when found; never when cross-compiling) reads the game
+# manual's PDF for the clipboard (src/manual.cpp); without it the clipboard
+# has the controls only.
 ##########################################################################################
 
 option(GLF_MANUAL_PDF "Read the game manual's PDF for the clipboard (poppler-cpp)" ON)
-# (not when cross-compiling: pkg-config would find the build machine's poppler)
-if(GLF_MANUAL_PDF AND NOT ANDROID AND NOT PLATFORM STREQUAL "Web" AND NOT CMAKE_CROSSCOMPILING)
-    find_package(PkgConfig QUIET)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(POPPLER_CPP IMPORTED_TARGET poppler-cpp)
-    endif()
-    if(POPPLER_CPP_FOUND)
-        list(APPEND LIBRARIES PkgConfig::POPPLER_CPP)
-        add_compile_definitions(GLF_HAVE_POPPLER)
-    else()
-        message(STATUS "poppler-cpp not found: the clipboard shows the controls, not the manual")
-    endif()
+set(VIBE_TESTS OFF CACHE BOOL "" FORCE)
+if(GLF_MANUAL_PDF AND NOT ANDROID AND NOT PLATFORM STREQUAL "Web")
+    set(VIBE_POPPLER ON CACHE BOOL "" FORCE)
+else()
+    set(VIBE_POPPLER OFF CACHE BOOL "" FORCE)
+endif()
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib vibe)
+list(APPEND LIBRARIES vibe::vibe)
+if(TARGET vibe::poppler)
+    list(APPEND LIBRARIES vibe::poppler)
+    add_compile_definitions(GLF_HAVE_POPPLER)
+else()
+    message(STATUS "poppler-cpp not used: the clipboard shows the controls, not the manual")
 endif()
 
 ##########################################################################################

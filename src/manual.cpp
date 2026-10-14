@@ -1,26 +1,20 @@
 /*
- * manual.cpp - see manual.h. The page rendering follows the F-19 port's
- * native/src/host/manual.cpp, on the shared clipboard.h.
+ * manual.cpp - see manual.h. The pages, their rendering and the worker
+ * thread are vibe-lib's (vibe/manual.h); this builds the controls pages
+ * from the bindings and opens the PDF.
  */
 #include <algorithm>
 #include <atomic>
-#include <cctype>
-#include <condition_variable>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
-#include <map>
-#include <mutex>
+#include <memory>
 #include <string>
-#include <thread>
+#include <vector>
 
 #ifdef GLF_HAVE_POPPLER
-#include <poppler-document.h>
-#include <poppler-page-renderer.h>
-#include <poppler-page.h>
+#include "vibe/poppler.h"
 #endif
-
-#include "gl/clipboard.h"
 
 extern "C"
 {
@@ -36,170 +30,93 @@ const char *manual_arg;
 namespace
 {
 
-const clipboard::Font font{8, 16, clipboard_font_8x16};
+using vibe::row;
 
-struct Manual
+vibe::Font make_font()
 {
-	std::vector<clipboard::TextPage> text;
-#ifdef GLF_HAVE_POPPLER
-	std::unique_ptr<poppler::document> doc;
-#endif
-	int pdf_pages = 0; /* the document's */
-	/* the clipboard's manual pages: PDF page and half (-1 the whole page;
-	 * a two-page spread is split, 0 left, 1 right, so its text is bigger) */
+	vibe::Font f;
+	f.w = 8;
+	f.h = 16;
+	f.glyphs.assign(clipboard_font_8x16, clipboard_font_8x16 + sizeof clipboard_font_8x16);
+	return f;
+}
+
+/* The manual is a scan of two-page spreads: each wide page is shown a half
+ * at a time (0 left, 1 right) so its text is bigger. Wraps a PDF so that
+ * its pages are those halves (and the whole of the narrow ones). */
+class SpreadPdf : public vibe::PdfDocument
+{
+  public:
+	explicit SpreadPdf(std::unique_ptr<vibe::PdfDocument> doc) : doc_(std::move(doc))
+	{
+		for (int i = 0; i < doc_->pages(); i++)
+		{
+			double w = 0, h = 0;
+			if (doc_->page_size(i, &w, &h) && w > h * 1.2)
+			{
+				parts_.push_back({i, 0});
+				parts_.push_back({i, 1});
+				spreads_++;
+			}
+			else
+				parts_.push_back({i, -1});
+		}
+	}
+	int pages() const override { return int(parts_.size()); }
+	int document_pages() const { return doc_->pages(); }
+	int spreads() const { return spreads_; }
+
+	bool page_size(int index, double *w, double *h) override
+	{
+		const Part p = parts_[size_t(index)];
+		if (!doc_->page_size(p.page, w, h))
+			return false;
+		if (p.half >= 0)
+			*w /= 2;
+		return true;
+	}
+
+	bool render(int index, double dpi, int x, int y, int w, int h, std::vector<uint32_t> *out, int *out_w,
+				int *out_h) override
+	{
+		const Part p = parts_[size_t(index)];
+		if (p.half < 0)
+			return doc_->render(p.page, dpi, x, y, w, h, out, out_w, out_h);
+		double pw = 0, ph = 0;
+		if (!doc_->page_size(p.page, &pw, &ph))
+			return false;
+		const int half_px = int(std::lround(pw * dpi / 72 / 2));
+		if (w <= 0)
+			x = 0, y = 0, w = half_px, h = int(std::ceil(ph * dpi / 72));
+		return doc_->render(p.page, dpi, x + (p.half ? half_px : 0), y, w, h, out, out_w, out_h);
+	}
+
+  private:
 	struct Part
 	{
 		int page, half;
 	};
-	std::vector<Part> parts;
-	std::mutex mu;
-	std::condition_variable cv;
-	std::map<int, std::shared_ptr<const ManualImage>> cache;
-	int want = -1;
-	bool stop = false;
-	std::thread worker;
-
-	int pages() const { return int(text.size()) + int(parts.size()); }
-
-	/* The page asked for first, then its neighbours; far ones dropped */
-	void run()
-	{
-		std::unique_lock<std::mutex> lk(mu);
-		while (!stop)
-		{
-			int target = -1;
-			for (int d : {0, 1, -1, 2})
-			{
-				int pg = want + d;
-				if (want >= 0 && pg >= 0 && pg < pages() && !cache.count(pg))
-				{
-					target = pg;
-					break;
-				}
-			}
-			if (target < 0)
-			{
-				cv.wait(lk);
-				continue;
-			}
-			lk.unlock();
-			auto img = render(target);
-			lk.lock();
-			cache[target] = std::move(img);
-			for (auto it = cache.begin(); it != cache.end();)
-				it = std::abs(it->first - want) > 3 ? cache.erase(it) : std::next(it);
-		}
-	}
-
-	std::shared_ptr<const ManualImage> render(int page) const
-	{
-		auto img = std::make_shared<ManualImage>();
-		img->page = page;
-		const int nt = int(text.size());
-		if (page < nt)
-		{
-			clipboard::draw_board(img->argb, font, "CONTROLS " + std::to_string(page + 1) + "/" + std::to_string(nt));
-			clipboard::draw_text_page(img->argb, font, text[page]);
-			return img;
-		}
-		const Part part = parts[size_t(page - nt)];
-		clipboard::draw_board(img->argb, font,
-							  "MANUAL " + std::to_string(part.page + 1) + (part.half < 0 ? "" : part.half ? "R" : "L") +
-								  "/" + std::to_string(pdf_pages));
-#ifdef GLF_HAVE_POPPLER
-		std::unique_ptr<poppler::page> pg(doc->create_page(part.page));
-		if (!pg)
-			return img;
-		poppler::page_renderer r;
-		r.set_render_hints(poppler::page_renderer::antialiasing | poppler::page_renderer::text_antialiasing |
-						   poppler::page_renderer::text_hinting);
-		r.set_image_format(poppler::image::format_argb32);
-		const poppler::rectf box = pg->page_rect();
-		if (box.width() <= 0 || box.height() <= 0)
-			return img;
-		/* the printed area (of the half), from a coarse render, fitted to
-		 * the paper */
-		const double hw = part.half < 0 ? box.width() : box.width() / 2, hx = part.half > 0 ? hw : 0;
-		clipboard::Box area{hx, 0, hx + hw, box.height()};
-		poppler::image probe = r.render_page(pg.get(), clipboard::kProbeDpi, clipboard::kProbeDpi);
-		if (probe.is_valid() && probe.format() == poppler::image::format_argb32)
-		{
-			const int px = int(hx * clipboard::kProbeDpi / 72), pw = part.half < 0 ? probe.width() : probe.width() / 2;
-			area = clipboard::trim((const uint32_t *)probe.const_data() + px, pw, probe.height(),
-								   probe.bytes_per_row() / 4, hw, box.height());
-			area.x0 += hx;
-			area.x1 += hx;
-		}
-		const clipboard::Fit f = clipboard::fit(area);
-		poppler::image pi = r.render_page(pg.get(), f.dpi, f.dpi, f.x, f.y, f.w, f.h);
-		if (pi.is_valid() && pi.format() == poppler::image::format_argb32)
-			clipboard::blit(img->argb, (const uint32_t *)pi.const_data(), pi.width(), pi.height(),
-							pi.bytes_per_row() / 4);
-#endif
-		return img;
-	}
-
-	~Manual()
-	{
-		{
-			std::lock_guard<std::mutex> lk(mu);
-			stop = true;
-		}
-		cv.notify_all();
-		if (worker.joinable())
-			worker.join();
-	}
+	std::unique_ptr<vibe::PdfDocument> doc_;
+	std::vector<Part> parts_;
+	int spreads_ = 0;
 };
 
-Manual *manual;
+vibe::Manual *manual;
 std::atomic<int> page{0};
-
-/* The PDF: --manual FILE, else the first *.pdf here (by name) */
-std::string find_pdf()
-{
-	if (manual_arg)
-		return manual_arg;
-	namespace fs = std::filesystem;
-	std::vector<fs::path> pdfs;
-	std::error_code ec;
-	for (const auto &e : fs::directory_iterator(".", ec))
-	{
-		std::string ext = e.path().extension().string();
-		std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-		if (ext == ".pdf" && e.is_regular_file(ec))
-			pdfs.push_back(e.path());
-	}
-	std::sort(pdfs.begin(), pdfs.end());
-	return pdfs.empty() ? std::string() : pdfs.front().string();
-}
 
 bool open_pdf(const std::string &path)
 {
 #ifdef GLF_HAVE_POPPLER
-	std::unique_ptr<poppler::document> doc(poppler::document::load_from_file(path));
-	if (!doc || doc->is_locked() || doc->pages() <= 0)
+	std::unique_ptr<vibe::PdfDocument> doc = vibe::open_poppler_pdf(path);
+	if (!doc)
 	{
 		log_printf("Manual: can't read %s\n", path.c_str());
 		return false;
 	}
-	manual->pdf_pages = doc->pages();
-	int spreads = 0;
-	for (int i = 0; i < manual->pdf_pages; i++)
-	{
-		std::unique_ptr<poppler::page> pg(doc->create_page(i));
-		const poppler::rectf box = pg ? pg->page_rect() : poppler::rectf();
-		if (box.width() > box.height() * 1.2)
-		{
-			manual->parts.push_back({i, 0});
-			manual->parts.push_back({i, 1});
-			spreads++;
-		}
-		else
-			manual->parts.push_back({i, -1});
-	}
-	manual->doc = std::move(doc);
+	auto spread = std::make_unique<SpreadPdf>(std::move(doc));
 	log_printf("Manual: %s (%d pages, %d of them two-page spreads, shown a half at a time)\n", path.c_str(),
-			   manual->pdf_pages, spreads);
+			   spread->document_pages(), spread->spreads());
+	manual->set_pdf(std::move(spread));
 	return true;
 #else
 	log_printf("Manual: this build can't read PDFs (no poppler-cpp): %s left out\n", path.c_str());
@@ -212,9 +129,9 @@ const char LEGEND[] = "S1 / S2: hold shift 1 / 2   M: while the clipboard is out
 
 /* The bindings as seen on one device: the pad's names, or the VR
  * controllers' (bindings they can't reach left out) */
-clipboard::Section device_section(bool vr)
+vibe::Section device_section(bool vr)
 {
-	clipboard::Section s;
+	vibe::Section s;
 	s.title = vr ? "VR motion controllers" : "Gamepad (Xbox layout)";
 	s.lines = {LEGEND};
 	if (vr)
@@ -233,16 +150,15 @@ clipboard::Section device_section(bool vr)
 			continue;
 		if (h.gap && any)
 			s.lines.push_back("");
-		s.lines.push_back(clipboard::row(control, h.action, h.note));
+		s.lines.push_back(row(control, h.action, h.note));
 		any = true;
 	}
 	return s;
 }
 
-clipboard::Section keyboard_section()
+vibe::Section keyboard_section()
 {
-	using clipboard::row;
-	clipboard::Section s;
+	vibe::Section s;
 	s.title = "Keyboard";
 	s.lines = {
 		row("F11", "clipboard: up / put away", ""),
@@ -288,13 +204,14 @@ void manual_init(void)
 {
 	if (manual)
 		return;
-	manual = new Manual;
+	manual = new vibe::Manual;
 	std::atexit(manual_shutdown); /* stops the page thread */
+	manual->set_font(make_font());
 	/* the device in use first */
 	for (int k = 0; k < 2; k++)
-		clipboard::add_section(manual->text, device_section(vr_enabled ? k == 0 : k == 1), font);
-	clipboard::add_section(manual->text, keyboard_section(), font);
-	std::string pdf = find_pdf();
+		manual->add_section(device_section(vr_enabled ? k == 0 : k == 1));
+	manual->add_section(keyboard_section());
+	std::string pdf = vibe::find_pdf(manual_arg ? manual_arg : "", {"."});
 	if (!pdf.empty())
 		open_pdf(pdf);
 	else
@@ -327,23 +244,8 @@ void manual_set_page(int p)
 	}
 	p = std::clamp(p, 0, std::max(manual->pages() - 1, 0));
 	page = p;
-	{
-		std::lock_guard<std::mutex> lk(manual->mu);
-		manual->want = p;
-	}
-#if defined(__EMSCRIPTEN__)
-	/* no threads: render it here */
-	if (!manual_image(p))
-	{
-		auto img = manual->render(p);
-		std::lock_guard<std::mutex> lk(manual->mu);
-		manual->cache.clear();
-		manual->cache[p] = std::move(img);
-	}
-#else
-	if (!manual->worker.joinable())
-		manual->worker = std::thread([] { manual->run(); });
-	manual->cv.notify_all();
+#if !defined(__EMSCRIPTEN__) /* (no threads there: manual_image renders it) */
+	manual->request(p);
 #endif
 }
 
@@ -357,7 +259,12 @@ std::shared_ptr<const ManualImage> manual_image(int p)
 {
 	if (!manual)
 		return nullptr;
-	std::lock_guard<std::mutex> lk(manual->mu);
-	auto it = manual->cache.find(p);
-	return it != manual->cache.end() ? it->second : nullptr;
+#if defined(__EMSCRIPTEN__)
+	static std::shared_ptr<const ManualImage> last;
+	if (!last || last->page != p)
+		last = manual->render(p);
+	return last;
+#else
+	return manual->get(p);
+#endif
 }
