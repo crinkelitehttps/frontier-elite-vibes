@@ -8,6 +8,7 @@
 
 extern "C"
 {
+#include "gl_camera.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_hands.h"
@@ -49,11 +50,14 @@ struct Surface
 };
 
 /* The surfaces a hand can touch: the panel or the virtual screen, and in
- * the cockpit the plane of the view (or of the menu over it) */
+ * the cockpit the plane of the view (or of the menu over it) and the
+ * camera screen (gl_camera.h: a press there is its next direction, not a
+ * click) */
 enum
 {
 	SURF_MAIN,
 	SURF_VIEW,
+	SURF_CAMERA,
 	SURF_COUNT
 };
 
@@ -64,6 +68,7 @@ struct Hand
 	vibe::HandPose pose; /* as drawn: moved back onto the surface when behind it */
 	vibe::FingerTouch touch[SURF_COUNT];
 	bool near, down;
+	bool on_camera; /* the surface it is near is the camera screen */
 	float height;               /* the tip above the surface (cm, + on the eye's side) */
 	vibe::Vec3 foot, n;         /* the tip's foot on the surface, its normal */
 	vibe::Vec3 su, sv;          /* the surface's axes (unit) */
@@ -212,10 +217,13 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 	bool held = update_gesture(hands, cockpit);
 
 	Surface surfs[SURF_COUNT];
-	bool have[SURF_COUNT], mirrored[SURF_COUNT] = {false, false};
+	bool have[SURF_COUNT], mirrored[SURF_COUNT] = {false, false, false};
 	vibe::Surface surf[SURF_COUNT];
 	have[SURF_MAIN] = cockpit ? panel_surface(&surfs[SURF_MAIN]) : screen_surface(&surfs[SURF_MAIN]);
 	have[SURF_VIEW] = cockpit && view_surface(&surfs[SURF_VIEW]);
+	have[SURF_CAMERA] = cockpit && cockpit_camera_play(surfs[SURF_CAMERA].c);
+	surfs[SURF_CAMERA].y0 = surfs[SURF_CAMERA].y1 = 0;
+	surfs[SURF_CAMERA].view = false;
 	for (int k = 0; k < SURF_COUNT; k++)
 		if (have[k])
 			surf[k] = to_vibe(surfs[k], &mirrored[k]);
@@ -263,8 +271,11 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 			t = st[pick];
 		h.down = t.down;
 		h.near = t.is_near;
+		h.on_camera = pick == SURF_CAMERA;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
+		if (t.pressed && h.on_camera)
+			camera_next();
 		if (t.is_near)
 		{
 			const Surface &s = surfs[pick];
@@ -297,11 +308,12 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 	}
 
 	/* the mouse: the pressing hand until it lets go, else the nearest */
-	if (current < 0 || !hand[current].down)
+	if (current < 0 || !hand[current].down || hand[current].on_camera)
 	{
 		current = -1;
 		for (int i = 0; i < 2; i++)
-			if (hand[i].shown && hand[i].near && (current < 0 || hand[i].height < hand[current].height))
+			if (hand[i].shown && hand[i].near && !hand[i].on_camera &&
+				(current < 0 || hand[i].height < hand[current].height))
 				current = i;
 	}
 	if (active || was_active)

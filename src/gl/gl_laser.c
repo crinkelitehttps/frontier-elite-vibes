@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "gl_api.h"
+#include "gl_camera.h"
 #include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
@@ -36,7 +37,8 @@ typedef enum
 {
 	TRIGGER_OFF,
 	TRIGGER_CLICK,
-	TRIGGER_PAD
+	TRIGGER_PAD,
+	TRIGGER_CAMERA /* on the camera screen: its next direction */
 } TriggerUse;
 
 static Beam beams[2];
@@ -136,7 +138,7 @@ void laser_update(bool cockpit)
 {
 	VrHand hands[2];
 	bool connected = false, active = false;
-	bool hit[2] = {false, false}, clickable[2] = {false, false};
+	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_camera[2] = {false, false};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
 		connected = vr_controller(i, &hands[i]) || connected;
@@ -161,6 +163,13 @@ void laser_update(bool cockpit)
 		hit[i] = cockpit ? cockpit_ray_to_screen(h->pos, h->dir, &hx[i], &hy[i], &dist)
 						 : ray_to_virtual_screen(h->pos, h->dir, &hx[i], &hy[i], &dist);
 		b->hit_near = hit[i] && dist > 0.0f;
+		float cam_dist;
+		on_camera[i] = cockpit && cockpit_ray_hits_camera(h->pos, h->dir, &cam_dist);
+		if (on_camera[i])
+		{
+			b->hit_near = true;
+			dist = cam_dist;
+		}
 		/* on the panel or a screen; the HUD (out into space) only with the grip */
 		clickable[i] = hit[i] && (b->hit_near || h->squeeze);
 		b->aiming = hit[i] && !b->hit_near && h->squeeze;
@@ -180,7 +189,9 @@ void laser_update(bool cockpit)
 			trigger_use[i] = TRIGGER_OFF;
 		else if (!was)
 		{
-			trigger_use[i] = clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
+			trigger_use[i] = on_camera[i] ? TRIGGER_CAMERA : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
+			if (on_camera[i])
+				camera_next();
 			if (clickable[i])
 				current = i;
 		}

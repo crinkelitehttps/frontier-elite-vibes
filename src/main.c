@@ -12,6 +12,7 @@
 #include "freecam.h"
 #include "gamepad.h"
 #include "gl/gl_clipboard.h"
+#include "gl/gl_cockpit.h"
 #include "m68000.h"
 #include "hostcall.h"
 #include "input.h"
@@ -291,6 +292,8 @@ void Main_EventHandler(void)
 			input.abs_x = event.button.x;
 			input.abs_y = event.button.y;
 			if (!toggle_touch_controls && !toggle_m68k_menu && settings_button(&event))
+				break;
+			if (event.button.button == SDL_BUTTON_LEFT && cockpit_camera_clicked(event.button.x, event.button.y))
 				break;
 			if (!systemview_button(&event))
 				Input_MousePress(event.button.button);

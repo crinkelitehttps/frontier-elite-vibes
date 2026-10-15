@@ -18,6 +18,7 @@
 #include <SDL.h>
 
 #include "gl_api.h"
+#include "gl_camera.h"
 #include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_native.h"
@@ -73,8 +74,15 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
 #define SUB_H    (SUB_W * 168.0f / 320.0f * 1.2f)
 #define SUB_DOWN 10.8f
 
+/* The camera screen (gl_camera.h): beside it, on its right, smaller */
+#define CAM_W   0.20f
+#define CAM_H   (CAM_W * (float)CAMERA_H / (float)CAMERA_W * 1.2f)
+#define CAM_GAP 0.02f
+
 static bool active;      /* the frame being drawn is the cockpit */
 static bool sub_on;      /* ... with the cockpit's screen */
+static bool cam_on;      /* ... with the camera screen */
+static GLuint cam_tex;
 static bool flat_saved;  /* active, while cockpit_draw_flat */
 static bool game_active; /* the game's frames are (game thread) */
 static float aspect = 16.0f / 9.0f;
@@ -103,6 +111,7 @@ typedef struct
 	int n_eyes; /* a headset's, last drawn */
 	mat4 eye_view[2];
 	float eye_tan[2][4]; /* left, right, down, up */
+	bool cam_on;
 } SharedView;
 static SharedView shared = {.head_view = {{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}}, .aspect = 16.0f / 9.0f};
 static SDL_mutex *shared_lock;
@@ -120,6 +129,8 @@ static void get_shared(SharedView *out)
 static float panel[4][3];
 /* The cockpit's screen's, the same way */
 static float sub[4][3];
+/* The camera screen's */
+static float cam[4][3];
 
 /* Turned passes: rings of directions, the game's view turned up by `pitch`
  * then right by `yaw0` + i * 360 / n. With the view's edges pulled in by
@@ -306,6 +317,9 @@ static void build_panel(void)
 		k = (float)hands_panel_distance() / 100.0f / PANEL_DIST;
 	place_facing(PANEL_DOWN, PANEL_W, PANEL_H, k, panel);
 	place_facing(SUB_DOWN, SUB_W, SUB_H, k, sub);
+	place_facing(SUB_DOWN, CAM_W, CAM_H, k, cam);
+	for (int i = 0; i < 4; i++)
+		cam[i][0] += (SUB_W + CAM_W) * 0.5f * k + CAM_GAP * k;
 }
 
 /* With a headset's hands: the virtual screen's plane, where a menu over
@@ -409,6 +423,7 @@ static void publish_view(void)
 	v.head_view = head_view;
 	memcpy(v.eye, eye, sizeof v.eye);
 	v.aspect = aspect;
+	v.cam_on = cam_on;
 	v.n_eyes = headset_eyes ? 2 : 0;
 	for (int i = 0; i < v.n_eyes; i++)
 	{
@@ -438,6 +453,8 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, bool screen)
 
 	active = cockpit || screen;
 	sub_on = !cockpit && screen;
+	cam_tex = active && cockpit_camera ? camera_texture() : 0;
+	cam_on = cam_tex != 0;
 	if (window_w > 0 && window_h > 0)
 		aspect = (float)window_w / (float)window_h;
 
@@ -616,6 +633,7 @@ void cockpit_init(void)
 {
 	if (!shared_lock)
 		shared_lock = SDL_CreateMutex();
+	camera_init();
 	build_panel();
 	static const char *const attribs[] = {"aPos", "aUV"};
 	prog = gd_build_program(VS_QUAD, FS_QUAD, attribs, 2);
@@ -635,6 +653,7 @@ void cockpit_init(void)
 
 void cockpit_shutdown(void)
 {
+	camera_shutdown();
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 	glDeleteProgram(prog);
@@ -686,21 +705,22 @@ static void queue_screen_quad(const mat4 *m, const float corners[4][3], int y0, 
 	q->tex = 0;
 }
 
-/* Queues the cockpit's screen's picture (gl_screen_sub_texture) on `sub` */
-static void queue_sub_quad(const mat4 *m)
+/* Queues the whole of texture `tex` on the quad `corners`, its top edge
+ * at texture v `v_top` and its bottom at `v_bottom` */
+static void queue_tex_quad(const mat4 *m, const float corners[4][3], GLuint tex, float v_top, float v_bottom)
 {
 	TexQuad *q = gd_custom(tex_quad_pass, sizeof *q);
 	if (!q)
 		return;
 	for (int i = 0; i < 4; i++)
 	{
-		mat4_xform(m, sub[i][0], sub[i][1], sub[i][2], q->v[i]);
+		mat4_xform(m, corners[i][0], corners[i][1], corners[i][2], q->v[i]);
 		q->v[i][4] = (i & 1) ? 1.0f : 0.0f;
-		q->v[i][5] = (i & 2) ? GL_SCREEN_SUB_V0 : 1.0f; /* the texture is bottom up */
+		q->v[i][5] = (i & 2) ? v_bottom : v_top;
 	}
 	q->discard = false;
 	q->upload = false;
-	q->tex = gl_screen_sub_texture();
+	q->tex = tex;
 }
 
 void cockpit_draw(void)
@@ -744,8 +764,10 @@ void cockpit_draw(void)
 		}
 		queue_screen_quad(&cp, c, menu_y0, menu_y1, true, false);
 	}
-	if (sub_on)
-		queue_sub_quad(&cp);
+	if (sub_on) /* its texture is bottom up */
+		queue_tex_quad(&cp, (const float(*)[3])sub, gl_screen_sub_texture(), 1.0f, GL_SCREEN_SUB_V0);
+	if (cam_on)
+		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f);
 	gd_pop();
 
 	/* the clipboard (gl_clipboard.h), nearer than the panel */
@@ -1184,9 +1206,12 @@ static bool ray_hits_quad(const float q[4][3], const float eye[3], const float d
 /* The ray from `eye` (view space) along d -> emulated screen pixel: on the
  * cockpit's screen or the panel (*dist: how far along d), else on the view
  * pixel plane, held to its edges (*dist -1: at infinity) */
-static bool ray_to_screen(const float eye[3], const float d[3], int *sx, int *sy, float *dist)
+static bool ray_to_screen(const float eye[3], const float d[3], bool cam_shown, int *sx, int *sy, float *dist)
 {
 	float u, v, t;
+	/* the camera screen is no part of the game's */
+	if (cam_shown && ray_hits_quad((const float(*)[3])cam, eye, d, &u, &v, &t))
+		return false;
 	if (sub_on && ray_hits_quad((const float(*)[3])sub, eye, d, &u, &v, &t))
 	{
 		*sx = (int)(u * GL_SCREEN_W);
@@ -1230,7 +1255,24 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
 	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], dist;
 	eye_to_view_of(&sv.head_view, e, d);
-	return ray_to_screen(sv.eye, d, sx, sy, &dist);
+	return ray_to_screen(sv.eye, d, sv.cam_on, sx, sy, &dist);
+}
+
+bool cockpit_camera_clicked(int wx, int wy)
+{
+	SharedView sv;
+	get_shared(&sv);
+	if (!sv.active || !sv.cam_on || screen_w <= 0 || screen_h <= 0)
+		return false;
+	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
+	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
+	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
+	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], u, v, dist;
+	eye_to_view_of(&sv.head_view, e, d);
+	if (!ray_hits_quad((const float(*)[3])cam, sv.eye, d, &u, &v, &dist))
+		return false;
+	camera_next();
+	return true;
 }
 
 bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, int *sy, float *dist)
@@ -1241,7 +1283,18 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
 	float o[3], d[3];
 	eye_to_view_of(&look, origin, o);
 	eye_to_view_of(&look, dir, d);
-	return ray_to_screen(o, d, sx, sy, dist);
+	return ray_to_screen(o, d, cam_on, sx, sy, dist);
+}
+
+bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist)
+{
+	if (!active || !cam_on)
+		return false;
+	mat4 look = look_rotation();
+	float o[3], d[3], u, v;
+	eye_to_view_of(&look, origin, o);
+	eye_to_view_of(&look, dir, d);
+	return ray_hits_quad((const float(*)[3])cam, o, d, &u, &v, dist);
 }
 
 void cockpit_play_to_view(const float v[3], float out[3])
@@ -1320,5 +1373,15 @@ bool cockpit_screen_play(float corners[4][3])
 	mat4 look = look_rotation();
 	for (int i = 0; i < 4; i++)
 		mat4_xform_dir(&look, sub[i], corners[i]);
+	return true;
+}
+
+bool cockpit_camera_play(float corners[4][3])
+{
+	if (!active || !cam_on)
+		return false;
+	mat4 look = look_rotation();
+	for (int i = 0; i < 4; i++)
+		mat4_xform_dir(&look, cam[i], corners[i]);
 	return true;
 }

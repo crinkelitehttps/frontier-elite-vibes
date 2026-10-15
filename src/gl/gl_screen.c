@@ -24,6 +24,7 @@
 #include <SDL.h>
 
 #include "gl_api.h"
+#include "gl_camera.h"
 #include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_native.h"
@@ -844,6 +845,9 @@ static void publish_frame(void)
 		scene_publish_world();
 		SDL_UnlockMutex(frame_lock);
 	}
+	/* the camera screen's picture, the game's own (gl_camera.h) */
+	if (scr_pub.cockpit || scr_pub.sub)
+		camera_capture();
 	SDL_AtomicIncRef(&published);
 }
 
