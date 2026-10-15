@@ -153,6 +153,8 @@ Nu_NativeObject		equ	$81
 Nu_NativeCulled		equ	$82
 Nu_NativeFar		equ	$83
 Nu_NativeText		equ	$84
+* Cockpit screen: flight controls under a game screen (src/gl/gl_cockpit.c)
+Call_ScreenControls	equ	$85
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -41244,8 +41246,11 @@ L625d6:
 		rts
 
 L62606_PlayerControlUpdate:
-		tst.b	A6_mod_player_active(a6)
-		bpl.w	l62752
+* Cockpit screen: the controls also while a game screen is up. Hook, same
+* size as the code it replaced (8 bytes). See Lscreen_controls at the end
+* of the file.
+		jsr	Lscreen_controls
+		nop
 		btst	#$0,A6_plr_flight_flags(a6)
 		bne.s	l62678
 		tst.b	A6_keystate_return(a6)
@@ -67466,4 +67471,24 @@ Lnative_text:
 		hcall	#Nu_NativeText
 		move.l	(a7),12(a7)
 		lea	12(a7),a7
+		rts
+
+******************************************************************************
+* Cockpit screen: the player's controls (thrust, steering) work only while
+* the flight view is up (A6_mod_player_active(a6) negative). With a game screen on the
+* cockpit's screen the flight view is still seen round it, so the host
+* may ask for them then too: d0 = 1 from Call_ScreenControls. In place of
+* "tst.b A6_mod_player_active(a6) / bpl.w l62752" at the start of L62606_PlayerControlUpdate.
+******************************************************************************
+Lscreen_controls:
+		tst.b	A6_mod_player_active(a6)
+		bmi.s	lscreen_controls_on
+		move.l	d0,-(a7)
+		hcall	#Call_ScreenControls
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	lscreen_controls_on
+		addq.l	#4,a7
+		jmp	l62752
+lscreen_controls_on:
 		rts

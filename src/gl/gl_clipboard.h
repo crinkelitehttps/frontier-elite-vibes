@@ -14,7 +14,8 @@
  *   In VR a hand at the board (aim point within 8 cm, the fingertip turns
  *   yellow) grabs it with a fresh grip press and carries it; let go, it
  *   stays where it is, fixed in the cockpit, or goes back in if let go
- *   within 15 cm of its stowed place. That grip is the board's until it is
+ *   within 15 cm of its stowed place or beside the seat with no part of it
+ *   above the control panel's lowest edge. That grip is the board's until it is
  *   released: the bindings (the virtual pad) and the two-grip distance
  *   gesture don't see it. A hand at or holding the board doesn't touch the
  *   panel.

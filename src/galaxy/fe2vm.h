@@ -41,6 +41,9 @@ int fe2vm_init(void);
  * restores. Calls made outside a pair make their own. */
 void fe2vm_begin(void);
 void fe2vm_end(void);
+/* Batches begun from now on keep the game's own host calls (the drawing
+ * ones record the scene, gl_scene.h) instead of the atlas's; 0 back */
+void fe2vm_game_hcalls(int on);
 /* for testing in the standalone viewer: work the way the game does */
 void fe2vm_set_live(int on);
 /* runs the subroutine at addr until it returns; 0 on success, else -1, or

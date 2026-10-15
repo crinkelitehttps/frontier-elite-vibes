@@ -38,11 +38,23 @@ namespace
 {
 
 /* A surface to touch: corners in the play space (top left, top right,
- * bottom left, bottom right) and the screen rows it shows */
+ * bottom left, bottom right) and the screen rows it shows, or `view`: it is
+ * the view's pixel plane, a point on it meaning the view pixel the eye sees
+ * through it (a ship out in space, touched where its direction crosses) */
 struct Surface
 {
 	float c[4][3];
 	int y0, y1;
+	bool view;
+};
+
+/* The surfaces a hand can touch: the panel or the virtual screen, and in
+ * the cockpit the plane of the view (or of the menu over it) */
+enum
+{
+	SURF_MAIN,
+	SURF_VIEW,
+	SURF_COUNT
 };
 
 /* Everything in the play space, in cm (vibe's unit): x right, y up, -z ahead */
@@ -50,7 +62,7 @@ struct Hand
 {
 	bool shown;
 	vibe::HandPose pose; /* as drawn: moved back onto the surface when behind it */
-	vibe::FingerTouch touch;
+	vibe::FingerTouch touch[SURF_COUNT];
 	bool near, down;
 	float height;               /* the tip above the surface (cm, + on the eye's side) */
 	vibe::Vec3 foot, n;         /* the tip's foot on the surface, its normal */
@@ -80,6 +92,7 @@ bool screen_surface(Surface *s)
 	}
 	s->y0 = 0;
 	s->y1 = GL_SCREEN_H;
+	s->view = false;
 	return true;
 }
 
@@ -87,7 +100,44 @@ bool panel_surface(Surface *s)
 {
 	s->y0 = COCKPIT_PANEL_ROW0;
 	s->y1 = GL_SCREEN_H;
+	s->view = false;
 	return cockpit_panel_play(s->c);
+}
+
+/* The cockpit's screen while one of the game's other screens is on it;
+ * else a menu over the view is drawn on the virtual screen's plane, its
+ * rows where they are on the screen; else the view's plane lets the game's
+ * pointer click what is out in space */
+bool view_surface(Surface *s)
+{
+	if (cockpit_screen_play(s->c))
+	{
+		s->y0 = 0;
+		s->y1 = COCKPIT_PANEL_ROW0;
+		s->view = false;
+		return true;
+	}
+	int y0, y1;
+	if (cockpit_menu(&y0, &y1))
+	{
+		float p[4][3];
+		if (!cockpit_screen_plane_play(p))
+			return false;
+		for (int i = 0; i < 4; i++)
+		{
+			float t = float((i & 2) ? y1 : y0) / float(GL_SCREEN_H);
+			for (int k = 0; k < 3; k++)
+				s->c[i][k] = p[i & 1][k] + (p[2 + (i & 1)][k] - p[i & 1][k]) * t;
+		}
+		s->y0 = y0;
+		s->y1 = y1;
+		s->view = false;
+		return true;
+	}
+	s->y0 = 0;
+	s->y1 = COCKPIT_PANEL_ROW0;
+	s->view = true;
+	return cockpit_view_plane_play(s->c);
 }
 
 /* `s` as a vibe::Surface in cm whose front faces the eye (the play
@@ -161,12 +211,14 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 {
 	bool held = update_gesture(hands, cockpit);
 
-	Surface s;
-	bool have = cockpit ? panel_surface(&s) : screen_surface(&s);
-	bool mirrored = false;
-	vibe::Surface surf;
-	if (have)
-		surf = to_vibe(s, &mirrored);
+	Surface surfs[SURF_COUNT];
+	bool have[SURF_COUNT], mirrored[SURF_COUNT] = {false, false};
+	vibe::Surface surf[SURF_COUNT];
+	have[SURF_MAIN] = cockpit ? panel_surface(&surfs[SURF_MAIN]) : screen_surface(&surfs[SURF_MAIN]);
+	have[SURF_VIEW] = cockpit && view_surface(&surfs[SURF_VIEW]);
+	for (int k = 0; k < SURF_COUNT; k++)
+		if (have[k])
+			surf[k] = to_vibe(surfs[k], &mirrored[k]);
 	const float reach = float(vr_reach) / 100.0f, finger = float(vr_finger);
 	const float near_cm = float(vr_near_cm);
 	bool active = false;
@@ -178,7 +230,8 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		if (!c.active)
 		{
 			h.near = h.down = false;
-			h.touch.reset();
+			for (auto &t : h.touch)
+				t.reset();
 			continue;
 		}
 		active = true;
@@ -186,27 +239,55 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		p = vibe::HandPose::from_aim(i == 1, vibe::Vec3::of(c.pos) * 100.0f, vibe::Vec3::of(c.dir),
 									 vibe::Vec3::of(c.up), reach);
 		const vibe::Vec3 tip = vibe::fingertip(p, finger);
-		vibe::FingerTouch::State t;
-		if (have && !board[i])
+		/* every surface keeps its own press history; the one pressed, else
+		 * the nearest the tip is over, is the pointer's */
+		vibe::FingerTouch::State t, st[SURF_COUNT];
+		int pick = -1;
+		for (int k = 0; k < SURF_COUNT; k++)
 		{
-			t = h.touch.update(tip, surf, near_cm);
-			h.height = surf.project(tip).height;
+			if (have[k] && !board[i])
+			{
+				st[k] = h.touch[k].update(tip, surf[k], near_cm);
+				float height = surf[k].project(tip).height;
+				if (st[k].is_near && (pick < 0 || (st[k].down && !st[pick].down) ||
+									  (st[k].down == st[pick].down && height < h.height)))
+				{
+					pick = k;
+					h.height = height;
+				}
+			}
+			else
+				h.touch[k].reset(); /* at the board, or nothing to touch */
 		}
-		else
-			h.touch.reset(); /* at the board, or nothing to touch */
+		if (pick >= 0)
+			t = st[pick];
 		h.down = t.down;
 		h.near = t.is_near;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
 		if (t.is_near)
 		{
-			float u = mirrored ? 1 - t.u : t.u;
-			h.sx = int(u * GL_SCREEN_W);
-			h.sy = s.y0 + int(t.v * float(s.y1 - s.y0));
+			const Surface &s = surfs[pick];
+			if (s.view)
+			{
+				float q[3];
+				(t.foot * 0.01f).to(q);
+				if (!cockpit_play_point_to_pixel(q, &h.sx, &h.sy))
+				{
+					h.near = h.down = false;
+					h.sx = h.sy = 0;
+				}
+			}
+			else
+			{
+				float u = mirrored[pick] ? 1 - t.u : t.u;
+				h.sx = int(u * GL_SCREEN_W);
+				h.sy = s.y0 + int(t.v * float(s.y1 - s.y0));
+			}
 			h.foot = t.foot;
-			h.n = surf.normal();
-			h.su = vibe::normalized(surf.right);
-			h.sv = vibe::normalized(surf.down);
+			h.n = surf[pick].normal();
+			h.su = vibe::normalized(surf[pick].right);
+			h.sv = vibe::normalized(surf[pick].down);
 		}
 		/* drawn: the tip resting on the surface when behind it */
 		p.pos = p.pos + t.draw_shift;

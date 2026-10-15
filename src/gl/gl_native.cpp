@@ -372,7 +372,11 @@ struct Frame
 	 * formatted for each, kept while it isn't run (off screen) */
 	std::unordered_map<uint64_t, std::string> texts;
 };
-Frame rec, pub, show;
+/* shows[0]: the world, shows[1]: the last frame of the game's other
+ * screens, which leaves the world as it was (native_acquire) */
+Frame rec, pub, pub_world, shows[2];
+Frame *shown = &shows[0];
+bool screen_only = false; /* drawing shows[1]: no planets or haze */
 
 int enabled = -1;
 
@@ -685,9 +689,28 @@ extern "C" void native_publish(void)
 	pub.texts = texts_seen;
 }
 
-extern "C" void native_acquire(void)
+extern "C" void native_publish_world(void)
 {
-	show = pub;
+	pub_world = rec;
+	pub_world.texts = texts_seen;
+}
+
+extern "C" void native_acquire(bool screen, bool world)
+{
+	if (!screen)
+		shows[0] = pub;
+	else
+	{
+		shows[1] = pub;
+		if (world)
+			shows[0] = pub_world;
+	}
+}
+
+extern "C" void native_use_screen(bool screen)
+{
+	shown = &shows[screen ? 1 : 0];
+	screen_only = screen;
 }
 
 /* ---- running a model --------------------------------------------------------
@@ -1497,9 +1520,9 @@ struct Runner
 		int n = w[1] & 0xff;
 		if (!sky && n > 1 && !normal_faces(r, n))
 			return;
-		auto it = show.texts.find(text_key(o.addr, w[3]));
+		auto it = shown->texts.find(text_key(o.addr, w[3]));
 		auto org = vertex(r, fe2::s8(w[2]));
-		if (it == show.texts.end() || !org)
+		if (it == shown->texts.end() || !org)
 			return;
 		const fe2::Image &img = image_for(FE2_gamedata2);
 		int font = (w[1] >> 12) & 15;
@@ -1730,10 +1753,10 @@ void run_object(const Object &o, Drawn &d, bool wire, bool sky)
 void run_objects(bool wire)
 {
 	frame_seed++;
-	drawn.resize((size_t)show.n);
-	for (int i = 0; i < show.n; i++)
+	drawn.resize((size_t)shown->n);
+	for (int i = 0; i < shown->n; i++)
 	{
-		const Object &o = show.obj[i];
+		const Object &o = shown->obj[i];
 		const Code *c = code_for(o.table, o.model);
 		/* filled, planets are drawn with the sky (draw_fars) */
 		if (c && c->planet && !wire)
@@ -2015,9 +2038,9 @@ void draw_planet_object(const Object &o, int sphere)
 /* Far bodies and planets, farthest first */
 void draw_fars()
 {
-	for (int i = 0; i < show.n; i++)
+	for (int i = 0; i < shown->n && !screen_only; i++)
 	{
-		const Object &o = show.obj[i];
+		const Object &o = shown->obj[i];
 		const Code *c = code_for(o.table, o.model);
 		if (c && c->planet)
 			planet_native_object(o.addr, o.pos, o.cols);
@@ -2033,10 +2056,11 @@ void draw_fars()
 	};
 	std::vector<Item> order;
 	auto dist = [](const float *p) { return std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]); };
-	for (int i = 0; i < show.nfar; i++)
-		order.push_back({dist(show.far[i].pos) * show.far[i].shrink, i, -1, nullptr});
+	for (int i = 0; i < shown->nfar; i++)
+		order.push_back({dist(shown->far[i].pos) * shown->far[i].shrink, i, -1, nullptr});
 	double nearest_planet = 1e300;
-	for (int i = 0; i < planet_native_count(); i++)
+	/* the planets kept are the world's */
+	for (int i = 0; i < (screen_only ? 0 : planet_native_count()); i++)
 	{
 		order.push_back({planet_native_dist(i) * planet_native_shrink(i), -1, i, nullptr});
 		nearest_planet = std::min(nearest_planet, order.back().d);
@@ -2044,18 +2068,18 @@ void draw_fars()
 	/* An object farther than a planet's centre (a nebula in the intro, a
 	 * station round the far side) goes before it, as the game sorts them,
 	 * not over it with the rest of the scene */
-	for (size_t j = 0; j < drawn.size() && (int)j < show.n; j++)
+	for (size_t j = 0; j < drawn.size() && (int)j < shown->n; j++)
 	{
-		double d = dist(show.obj[j].pos) * show.obj[j].shrink;
+		double d = dist(shown->obj[j].pos) * shown->obj[j].shrink;
 		if (d > nearest_planet && drawn[j].far > 1.0f)
 		{
 			drawn[j].back = true;
 			order.push_back({d, -1, -1, nullptr, (int)j});
 		}
 	}
-	for (int j = 0; j < show.n; j++)
+	for (int j = 0; j < shown->n; j++)
 	{
-		const Object &o = show.obj[j];
+		const Object &o = shown->obj[j];
 		const Code *c = code_for(o.table, o.model);
 		if (!c || !c->planet)
 			continue;
@@ -2073,7 +2097,7 @@ void draw_fars()
 			draw_nodes(drawn[(size_t)e.obj].nodes);
 		}
 		else if (e.far >= 0)
-			draw_far(show.far[e.far]);
+			draw_far(shown->far[e.far]);
 		else if (e.o)
 			draw_planet_object(*e.o, e.sphere);
 		else
@@ -2094,15 +2118,16 @@ extern "C" void native_draw_sky(void)
 	gd_push();
 	gd_identity();
 	prepare(false);
-	if (show.has_sky)
+	if (shown->has_sky)
 	{
 		Drawn d;
-		run_object(show.sky, d, false, true);
+		run_object(shown->sky, d, false, true);
 		draw_nodes(d.nodes);
 	}
 	for (const Drawn &d : drawn)
 		draw_nodes(d.before_planet);
-	atmos_draw_native();
+	if (!screen_only)
+		atmos_draw_native();
 	draw_fars();
 	gd_pop();
 }
@@ -2119,10 +2144,10 @@ extern "C" void native_draw(void)
 	if (wire)
 	{
 		/* the sky in blue, over the game's */
-		if (show.has_sky)
+		if (shown->has_sky)
 		{
 			Drawn d;
-			run_object(show.sky, d, true, true);
+			run_object(shown->sky, d, true, true);
 			gd_color3ub(96, 128, 255);
 			for (const Seg &s : d.wire)
 				gd_line(s.a.data(), s.b.data());
@@ -2130,9 +2155,9 @@ extern "C" void native_draw(void)
 		}
 		/* far bodies as orange rings */
 		gd_color3ub(255, 160, 64);
-		for (int i = 0; i < show.nfar; i++)
+		for (int i = 0; i < shown->nfar; i++)
 		{
-			const Far &f = show.far[i];
+			const Far &f = shown->far[i];
 			float r = std::max(f.radius, 3 * px_at(f.pos));
 			float ring[32][3];
 			for (int j = 0; j < 32; j++)

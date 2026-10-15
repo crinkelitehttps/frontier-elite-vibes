@@ -38,6 +38,21 @@ FlightView game_flight_view(void)
 	return v < VIEW_COUNT ? (FlightView)v : VIEW_FRONT;
 }
 
+/* Records of five words (x0, y0, x1, y1, id) every 10 bytes, a negative
+ * x0 ending the list (L422d0_UISetIconPositions) */
+int game_icon_rects(int rects[][4], int max)
+{
+	int n = 0;
+	for (u32 p = GAME_A6 + A6_ICON_POSITIONS; n < max && n < 64; p += 10, n++)
+	{
+		if (rdword(p) < 0)
+			break;
+		for (int i = 0; i < 4; i++)
+			rects[n][i] = rdword(p + 2 * i);
+	}
+	return n;
+}
+
 FlightStatus game_flight_status(void)
 {
 	switch ((u8)rdbyte(GAME_A6 + A6_FLIGHT_STATE))

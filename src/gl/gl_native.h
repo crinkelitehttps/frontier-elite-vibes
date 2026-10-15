@@ -62,10 +62,19 @@ void Nu_NativeText(void);
 float native_frame_shrink(uint32_t a6);
 
 /* With the scene (gl_scene.c): a new frame, the frame is done (game
- * thread), the latest frame is taken for drawing (render thread) */
+ * thread), the latest frame is taken for drawing (render thread).
+ * `screen`: a frame of the game's other screens shown on the cockpit's
+ * screen (gl_cockpit.h), kept apart from the world: the last cockpit
+ * frame's, or the one captured under the screen. */
 void native_reset(void);
 void native_publish(void);
-void native_acquire(void);
+/* (game thread) the world captured under a screen (scene_publish_world);
+ * `world`: one was published since the last acquire */
+void native_publish_world(void);
+void native_acquire(bool screen, bool world);
+/* Render thread: draw that screen frame (true), without the world's
+ * planets and haze, or the world (false, the default) */
+void native_use_screen(bool screen);
 
 /* Render thread, after the scene, with the 3D view's viewport and its
  * un-turned projection set */

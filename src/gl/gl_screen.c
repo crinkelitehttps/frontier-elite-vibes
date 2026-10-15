@@ -34,6 +34,7 @@
 #include "gl_prims.h"
 #include "gl_scene.h"
 
+#include "game_state.h"
 #include "input.h"
 #include "main.h"
 #include "m68000.h"
@@ -295,6 +296,7 @@ typedef struct
 	int bgcol;
 	int renderer; /* enum RENDERERS */
 	bool cockpit;
+	bool sub; /* one of the game's other screens, for the cockpit's screen */
 	bool mouse_shown;
 } ScreenFrame;
 static ScreenFrame scr_pub, scr_show;
@@ -417,6 +419,39 @@ void gl_screen_upload(void)
 GLuint gl_screen_texture(void)
 {
 	return screen_tex;
+}
+
+/* The comms menu of the flight view: its check boxes are icon rectangles
+ * (above the panel) with something drawn in them. The rows they take with
+ * the text beside them. */
+bool gl_screen_menu_rows(int *y0, int *y1)
+{
+	int rects[64][4], n = game_icon_rects(rects, 64);
+	int top = SCR_H, bottom = -1;
+	for (int i = 0; i < n; i++)
+	{
+		int *r = rects[i];
+		if (r[1] < 0 || r[3] >= COCKPIT_PANEL_ROW0 || r[0] < 0 || r[2] >= SCR_W || r[1] > r[3] || r[0] > r[2])
+			continue;
+		bool drawn = false;
+		for (int y = r[1]; y <= r[3] && !drawn; y++)
+			for (int x = r[0]; x <= r[2]; x++)
+				if (scr_show.screen[y * SCR_W + x] != 255)
+				{
+					drawn = true;
+					break;
+				}
+		if (drawn)
+		{
+			top = r[1] < top ? r[1] : top;
+			bottom = r[3] > bottom ? r[3] : bottom;
+		}
+	}
+	if (bottom < 0)
+		return false;
+	*y0 = top > 4 ? top - 4 : 0;
+	*y1 = bottom + 10 < COCKPIT_PANEL_ROW0 ? bottom + 10 : COCKPIT_PANEL_ROW0;
+	return true;
 }
 
 typedef struct
@@ -593,6 +628,9 @@ static void update_cursor(void)
 	}
 }
 
+static bool drawing_sub; /* draw_sub: the cockpit's screen's picture */
+static unsigned int world_bg; /* the last cockpit frame's sky, kept under the cockpit's screen */
+
 /* Draws the frame into the bound framebuffer, w x h pixels: the window's,
  * or a headset's (no touch overlays there) */
 static void draw_frame(int w, int h, bool cockpit, bool window)
@@ -611,7 +649,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	glDepthMask(GL_TRUE);
 	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	if (scr_show.renderer != R_GLWIRE)
-		clear_rect(rects[GD_VP_GAME], scr_show.main_rgb[scr_show.bgcol & 0xff]);
+		clear_rect(rects[GD_VP_GAME], cockpit && scr_show.sub ? world_bg : scr_show.main_rgb[scr_show.bgcol & 0xff]);
 
 	gd_begin_frame(rects);
 
@@ -649,7 +687,8 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 
 		/* the clipboard over the picture while it is out */
 		gd_set_viewport(GD_VP_WINDOW);
-		clipboard_queue_flat(w, h);
+		if (!drawing_sub)
+			clipboard_queue_flat(w, h);
 	}
 
 	/* 3. overlays */
@@ -684,7 +723,7 @@ static bool draw_vr(void)
 	{
 		laser_off();
 		cockpit_set_headset(NULL, NULL);
-		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
+		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub);
 	}
 
 	bool render = vr_begin_frame();
@@ -701,7 +740,7 @@ static bool draw_vr(void)
 	{
 		cockpit_set_headset(NULL, NULL);
 	}
-	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit);
+	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub);
 	laser_update(cockpit && tracked);
 
 	if (render)
@@ -763,10 +802,27 @@ static bool draw_vr(void)
  * ========================================================================= */
 static SDL_atomic_t published; /* frames, for GLF_FRAME_LOG */
 
+/* Game thread: frames for the cockpit's screen no faster than about this.
+ * The game's FPS display turns its own 50 a second limit off, so a screen,
+ * quick to draw, comes a thousand or more times a second, each now with
+ * the world captured: wasted work, as the drawing shows at most one a
+ * picture. A ceiling, not a beat: the drawing is not waited for. */
+#define SCREEN_FPS 60
+static void pace_screen_frames(void)
+{
+	static Uint64 last;
+	Uint64 freq = SDL_GetPerformanceFrequency(), gap = freq / SCREEN_FPS;
+	Uint64 now = SDL_GetPerformanceCounter();
+	if (last && now - last < gap)
+		SDL_Delay((Uint32)((gap - (now - last)) * 1000 / freq));
+	last = SDL_GetPerformanceCounter();
+}
+
 /* Game thread: makes the frame the game just flipped the latest */
 static void publish_frame(void)
 {
 	scr_pub.cockpit = cockpit_game_frame();
+	scr_pub.sub = !scr_pub.cockpit && cockpit_screen_frame();
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
 	scr_pub.bgcol = fe2_bgcol;
@@ -775,9 +831,19 @@ static void publish_frame(void)
 
 	SDL_LockMutex(frame_lock);
 	memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
-	scene_publish();
+	scene_publish(scr_pub.sub);
 	frame_new = true;
 	SDL_UnlockMutex(frame_lock);
+
+	/* the world round the cockpit's screen, live */
+	if (scr_pub.sub)
+		pace_screen_frames();
+	if (scr_pub.sub && cockpit_capture_world())
+	{
+		SDL_LockMutex(frame_lock);
+		scene_publish_world();
+		SDL_UnlockMutex(frame_lock);
+	}
 	SDL_AtomicIncRef(&published);
 }
 
@@ -789,7 +855,9 @@ static bool acquire_frame(void)
 	if (frame_new)
 	{
 		scr_show = scr_pub;
-		scene_acquire();
+		if (scr_show.cockpit)
+			world_bg = scr_show.main_rgb[scr_show.bgcol & 0xff];
+		scene_acquire(scr_show.sub);
 		frame_new = false;
 	}
 	SDL_UnlockMutex(frame_lock);
@@ -821,10 +889,59 @@ static void log_rates(bool new_frame)
 	}
 }
 
+/* The cockpit's screen's picture (gl_cockpit.h): the game's screen drawn
+ * the classic way, as the window would show it without the cockpit, into
+ * a texture of its own; mipmapped, as it is seen small */
+#define SUB_W 1280
+#define SUB_H 960
+static GLuint sub_fbo, sub_tex, sub_depth;
+
+GLuint gl_screen_sub_texture(void)
+{
+	return sub_tex;
+}
+
+static void draw_sub(void)
+{
+	if (!sub_fbo)
+	{
+		glGenTextures(1, &sub_tex);
+		glBindTexture(GL_TEXTURE_2D, sub_tex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SUB_W, SUB_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenRenderbuffers(1, &sub_depth);
+		glBindRenderbuffer(GL_RENDERBUFFER, sub_depth);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SUB_W, SUB_H);
+		glGenFramebuffers(1, &sub_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, sub_fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sub_tex, 0);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, sub_depth);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			log_printf("The cockpit's screen's framebuffer is incomplete\n");
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, sub_fbo);
+	cockpit_draw_flat(true);
+	native_use_screen(true);
+	drawing_sub = true;
+	draw_frame(SUB_W, SUB_H, false, false);
+	drawing_sub = false;
+	native_use_screen(false);
+	cockpit_draw_flat(false);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, sub_tex);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
 	log_rates(acquire_frame());
+	if (scr_show.sub)
+		draw_sub();
 	bool cockpit = draw_vr();
 	draw_frame(screen_w, screen_h, cockpit, true);
 	if (with_menu)

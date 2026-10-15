@@ -18,6 +18,16 @@
  *   its edge, never presses; one behind it is drawn moved back so its tip
  *   rests on it.
  *
+ *   In the cockpit the view is touchable too, on the plane the virtual
+ *   screen would have (vr_screen_distance): the game's pointer is the view
+ *   pixel the eye sees through the fingertip, so a ship, station or planet
+ *   out in space is targeted by pressing where its direction crosses the
+ *   plane. A menu over the view (the comms menu, from the red phone) is
+ *   drawn on that plane instead of out in space (gl_cockpit.c), and
+ *   touched there where it is drawn. While the cockpit's screen shows one
+ *   of the game's other screens (a map, the station's: gl_cockpit.h), that
+ *   screen is touched instead of the view.
+ *
  *   Both grips held: moving the hands forward or back pushes the surface
  *   away or pulls it nearer (vr_panel_distance / vr_screen_distance).
  *

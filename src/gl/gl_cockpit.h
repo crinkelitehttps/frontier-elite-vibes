@@ -9,7 +9,9 @@
  *   lives in "view pixels": x 0..320, y 0..168 downwards, each pixel a
  *   direction through the game's original projection. In the cockpit those
  *   pixels are put back on that direction, far away and turning with the
- *   world, so they stay on what they mark (a collimated display). The
+ *   world, so they stay on what they mark (a collimated display). (With a
+ *   headset's hands a menu in them, the comms menu, is on the virtual
+ *   screen's plane within reach instead: see gl_hands.h.) The
  *   control panel (screen rows 168..200) is a texture on a panel below,
  *   which also moves with the head's position. Mouse positions are mapped
  *   back through the same surfaces.
@@ -26,7 +28,13 @@
  *   atmosphere bands as rings round them (gl_atmos.c) instead.
  *
  *   Only in the front flight view, when the cockpit is enabled and the free
- *   camera is off; everything else keeps the classic letterboxed layout.
+ *   camera is off; everything else keeps the classic letterboxed layout,
+ *   except the game's other screens (maps, the station's, the ship's,
+ *   options) with the native scene (gl_native.h) and cockpit_screen on:
+ *   the cockpit stays, with the world as the last cockpit frame left it,
+ *   and the screen's picture (drawn the classic way into a texture,
+ *   gl_screen.c) is on a screen in the cockpit, above the panel, its top
+ *   168 rows. It is touched like the panel (mouse, lasers, hands).
  *
  *   With a VR headset (vr.h) the head pose is the headset's, and the
  *   frame is drawn again for each eye (cockpit_use_eye: its off-centre
@@ -59,9 +67,18 @@ extern "C"
 #define GL_SCREEN_TEX_H 256
 void gl_screen_upload(void);
 GLuint gl_screen_texture(void);
+/* A menu drawn over the flight view (the comms menu) takes screen rows
+ * *y0 .. *y1 */
+bool gl_screen_menu_rows(int *y0, int *y1);
+/* The game's screen drawn the classic way for the cockpit's screen, this
+ * picture: the 3D view and its 2D layer (rows 0..168) between texture v
+ * GL_SCREEN_SUB_V0 and 1 */
+GLuint gl_screen_sub_texture(void);
+#define GL_SCREEN_SUB_V0 (1.0f - 168.0f / 200.0f)
 
 /* Settings */
 extern bool cockpit_enabled;
+extern bool cockpit_screen; /* the game's other screens on the cockpit's screen */
 extern int cockpit_fov;      /* vertical field of view, degrees */
 extern int vr_depth;         /* stereo depth, percent: 100 = the game's world at life size */
 extern bool headtrack_enabled;
@@ -74,11 +91,27 @@ void cockpit_shutdown(void);
 /* Game thread, at the end of each frame the game draws: whether it is
  * drawn as the cockpit (and the next one gets the turned passes) */
 bool cockpit_game_frame(void);
+/* Game thread, the same: whether the frame is one of the game's other
+ * screens, for the cockpit's screen (see HOW IT WORKS) */
+bool cockpit_screen_frame(void);
+/* Game thread, for such a frame, once the game has drawn it (in a host
+ * call): runs the game's flight view as the cockpit would have it, with
+ * the game's machine put back as it was afterwards (fe2vm.h), so the
+ * world is recorded (gl_scene.h, scene_publish_world) though the game
+ * shows the screen. False if there is none to capture. */
+bool cockpit_capture_world(void);
+/* Host call (Lscreen_controls in fe2.s): d0 = 1 if the player's controls
+ * are to work though a game screen is up, as it is on the cockpit's */
+void Call_ScreenControls(void);
 
 /* Once per drawing, before it: polls the head tracker and sets up the
- * view for a frame the game drew as the cockpit (`cockpit`) or not.
- * Returns `cockpit`. */
-bool cockpit_begin_frame(int window_w, int window_h, bool cockpit);
+ * view for a frame the game drew as the cockpit (`cockpit`), or for the
+ * cockpit's screen (`screen`), or neither. Returns whether it is the
+ * cockpit. */
+bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, bool screen);
+/* Draws what follows as not the cockpit (the cockpit's screen's picture),
+ * until called with false */
+void cockpit_draw_flat(bool flat);
 /* What the last cockpit_begin_frame was told */
 bool cockpit_active(void);
 /* Whether the frame last shown is the cockpit; any thread */
@@ -147,6 +180,23 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
  * shows screen rows COCKPIT_PANEL_ROW0 .. GL_SCREEN_H */
 #define COCKPIT_PANEL_ROW0 168
 bool cockpit_panel_play(float corners[4][3]);
+/* The same for the cockpit's screen while it is shown (screen rows
+ * 0 .. COCKPIT_PANEL_ROW0) */
+bool cockpit_screen_play(float corners[4][3]);
+/* With a headset's hands (gl_hands.h), as the cockpit is being drawn: a
+ * menu over the flight view (the comms menu) is drawn on the virtual
+ * screen's plane instead of out in space; its screen rows. */
+bool cockpit_menu(int *y0, int *y1);
+/* That plane's corners in the play space, and the view's pixel plane at
+ * the same distance (what the game sees through each of its points), in the
+ * order of cockpit_panel_play */
+bool cockpit_screen_plane_play(float corners[4][3]);
+bool cockpit_view_plane_play(float corners[4][3]);
+/* The view pixel (0..320 x 0..168) the eye sees in the direction of a
+ * point in the play space (metres): what a finger there points at */
+bool cockpit_play_point_to_pixel(const float p[3], int *sx, int *sy);
+/* The height of the control panel's lowest edge in view space (metres) */
+float cockpit_panel_bottom(void);
 /* A point or direction in a headset's play space -> view space (where the
  * panel and the clipboard are), as the cockpit is being drawn */
 void cockpit_play_to_view(const float v[3], float out[3]);

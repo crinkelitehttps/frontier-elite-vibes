@@ -195,6 +195,8 @@ void clipboard_hands(VrHand hands[2], bool grab, int board[2])
 		cockpit_play_to_view(hands[i].up, v);
 		h[i].up = from_view(v, 1.0f);
 	}
+	/* let go beside the seat below the panel: stowed */
+	state.stow_below = cockpit_panel_bottom() * 100.0f;
 	vibe::ClipboardHolder::HandState st[2];
 	state.update(now, h, st);
 	out_now = state.out();

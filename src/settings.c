@@ -38,6 +38,7 @@ typedef struct
 	int emulation_speed;
 	int touch_pads_hidden;
 	int cockpit;
+	int cockpit_screen;
 	int cockpit_fov;
 	int headtrack;
 	int headtrack_port;
@@ -67,6 +68,7 @@ static const struct
 	{"emulation_speed", offsetof(Settings, emulation_speed)},
 	{"touch_pads_hidden", offsetof(Settings, touch_pads_hidden)},
 	{"cockpit", offsetof(Settings, cockpit)},
+	{"cockpit_screen", offsetof(Settings, cockpit_screen)},
 	{"cockpit_fov", offsetof(Settings, cockpit_fov)},
 	{"headtrack", offsetof(Settings, headtrack)},
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
@@ -118,6 +120,7 @@ static Settings current(void)
 	s.emulation_speed = emulation_speed;
 	s.touch_pads_hidden = touch_pads_hidden();
 	s.cockpit = cockpit_enabled;
+	s.cockpit_screen = cockpit_screen;
 	s.cockpit_fov = cockpit_fov;
 	s.headtrack = headtrack_enabled;
 	s.headtrack_port = headtrack_port;
@@ -151,6 +154,7 @@ static void apply(const Settings *s)
 		emulation_speed = s->emulation_speed;
 	touch_set_pads_hidden(s->touch_pads_hidden != 0);
 	cockpit_enabled = s->cockpit != 0;
+	cockpit_screen = s->cockpit_screen != 0;
 	if (s->cockpit_fov >= 30 && s->cockpit_fov <= 120)
 		cockpit_fov = s->cockpit_fov;
 	headtrack_enabled = s->headtrack != 0;

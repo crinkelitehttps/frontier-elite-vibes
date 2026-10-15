@@ -41,6 +41,7 @@ extern "C"
 #define A6_3DVIEW_MODE  706   /* byte: A6_plr_3dview_mode, see FlightView */
 #define A6_GAME_DATA    14470 /* long: A6_game_data, ship models etc */
 #define A6_OPT_ELITE_CONTROLS 10445 /* byte: $ff steering x rolls, 0 it yaws */
+#define A6_ICON_POSITIONS     14514 /* the clickable icon rectangles, see game_icon_rects */
 
 /* Values of A6_SCREEN_OWNER: the owning module's offset in the module
  * table (set with 66(a5) - L45318) */
@@ -96,6 +97,12 @@ int game_screen_owner(void); /* raw A6_SCREEN_OWNER, for debugging */
 FlightView game_flight_view(void);
 FlightStatus game_flight_status(void);
 bool game_engines_off(void);
+/* The clickable icon rectangles the game holds now (x0, y0, x1, y1 in
+ * screen pixels, up to `max`): the control panel's icons and, on a menu,
+ * its check boxes (the flight comms menu's, in the view). Returns how
+ * many. */
+int game_icon_rects(int rects[][4], int max);
+
 /* The player's ship object, 0 when there is none yet */
 unsigned int game_player_ship(void);
 

@@ -325,22 +325,48 @@ static void copy_scene(SceneBuf *dst, const SceneBuf *src)
 	memcpy(dst->data, src->data, src->data_pos);
 }
 
-void scene_publish(void)
+/* A world captured under a screen (scene_publish_world) waits for the
+ * drawing to take it */
+static bool world_new;
+
+void scene_publish(bool screen)
 {
 	close_current();
 	scene_capture_soft_nodes();
 	copy_scene(&pub, &rec);
-	atmos_publish();
-	planet_dists_publish();
+	/* a screen's planets and haze: none, the world's are kept */
+	if (!screen)
+	{
+		atmos_publish();
+		planet_dists_publish();
+	}
 	native_publish();
 }
 
-void scene_acquire(void)
+void scene_publish_world(void)
+{
+	close_current();
+	scene_capture_soft_nodes();
+	atmos_publish();
+	planet_dists_publish();
+	native_publish_world();
+	world_new = true;
+	/* the screen's next frame starts empty, as if the game had cleared it */
+	scene_reset();
+}
+
+void scene_acquire(bool screen)
 {
 	copy_scene(&show, &pub);
-	atmos_acquire();
-	planet_dists_acquire();
-	native_acquire();
+	/* under a screen the world's planets and haze stay as they were, unless
+	 * a new world was captured */
+	if (!screen || world_new)
+	{
+		atmos_acquire();
+		planet_dists_acquire();
+	}
+	native_acquire(screen, world_new);
+	world_new = false;
 	gl_prims_new_scene();
 }
 

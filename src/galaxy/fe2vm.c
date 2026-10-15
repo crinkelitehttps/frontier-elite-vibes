@@ -267,6 +267,13 @@ static union Reg saved_regs[16];
 static s32 saved_flags[10], saved_rdest, saved_pending;
 static u32 saved_handlers[32];
 static HOSTCALL *saved_hcalls; /* hcalls_count of them */
+static int game_hcalls, swapped; /* fe2vm_game_hcalls; the batch swapped them */
+
+void fe2vm_game_hcalls(int on)
+{
+	game_hcalls = on;
+}
+
 /* All of the game's RAM. The calls write the galaxy map's globals, the body
    list, string buffers, the screens, the stack below the game's, and a few
    other odd globals (the mouse redraw's frame counter...): a copy of the
@@ -302,10 +309,14 @@ void fe2vm_begin(void)
 		saved_ram = (u8 *)malloc(MEM_SIZE);
 	memcpy(saved_ram, m68kram, MEM_SIZE);
 
-	if (!saved_hcalls)
-		saved_hcalls = (HOSTCALL *)malloc(hcalls_count * sizeof(HOSTCALL));
-	memcpy(saved_hcalls, hcalls, hcalls_count * sizeof(HOSTCALL));
-	atlas_hcalls(hcalls);
+	swapped = !game_hcalls;
+	if (swapped)
+	{
+		if (!saved_hcalls)
+			saved_hcalls = (HOSTCALL *)malloc(hcalls_count * sizeof(HOSTCALL));
+		memcpy(saved_hcalls, hcalls, hcalls_count * sizeof(HOSTCALL));
+		atlas_hcalls(hcalls);
+	}
 	fe2vm_depth = 1;
 }
 
@@ -314,7 +325,8 @@ void fe2vm_end(void)
 	if (!live || !batch || --batch)
 		return;
 	fe2vm_depth = 0;
-	memcpy(hcalls, saved_hcalls, hcalls_count * sizeof(HOSTCALL));
+	if (swapped)
+		memcpy(hcalls, saved_hcalls, hcalls_count * sizeof(HOSTCALL));
 	memcpy(m68kram, saved_ram, MEM_SIZE);
 
 	memcpy(Regs, saved_regs, sizeof(saved_regs));

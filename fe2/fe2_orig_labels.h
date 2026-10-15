@@ -324,6 +324,7 @@
 #define FE2_Lnative_clip2                            0x8323a /* Lnative_clip2 */
 #define FE2_Lnative_culled                           0x8325e /* Lnative_culled */
 #define FE2_Lnative_text                             0x83260 /* Lnative_text */
+#define FE2_Lscreen_controls                         0x8327a /* Lscreen_controls */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

@@ -153,9 +153,15 @@ void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
  * The game records a frame while the last one it finished is drawn (on the
  * render thread, gl_screen.c). scene_publish (game thread, at the end of
  * the frame) makes the recorded frame the latest; scene_acquire (whoever
- * draws) takes the latest to draw. gl_screen.c holds a lock around both. */
-void scene_publish(void);
-void scene_acquire(void);
+ * draws) takes the latest to draw. gl_screen.c holds a lock around both.
+ * `screen`: the frame is one of the game's other screens for the cockpit's
+ * screen (native_acquire), which leaves the world's planets as they were. */
+void scene_publish(bool screen);
+void scene_acquire(bool screen);
+/* Game thread, after scene_publish(true): the world as the cockpit sees it
+ * has been recorded for that screen frame (cockpit_capture_world); it is
+ * published apart, for scene_acquire to take with the screen's */
+void scene_publish_world(void);
 
 /* ---- replay (called from Nu_DrawScreen) -------------------------------- */
 /* The acquired frame: pass 0, then the further passes (each set up by

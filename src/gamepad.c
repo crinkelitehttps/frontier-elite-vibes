@@ -857,8 +857,9 @@ void gamepad_update(void)
 	}
 
 	/* on the galaxy map the sticks scroll it instead of flying (the right
-	 * one unless it moves the pointer) */
-	bool map = game_screen() == SCREEN_GALAXY_MAP;
+	 * one unless it moves the pointer), but not on the cockpit's screen:
+	 * the ship flies on round it */
+	bool map = game_screen() == SCREEN_GALAXY_MAP && !cockpit_screen_frame();
 	if (map)
 	{
 		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
