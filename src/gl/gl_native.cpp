@@ -376,7 +376,7 @@ struct Frame
  * screens, which leaves the world as it was (native_acquire) */
 Frame rec, pub, pub_world, shows[2];
 Frame *shown = &shows[0];
-bool screen_only = false; /* drawing shows[1]: no planets or haze */
+bool screen_only = false; /* drawing shows[1]: its own planets, no haze */
 
 int enabled = -1;
 
@@ -711,6 +711,7 @@ extern "C" void native_use_screen(bool screen)
 {
 	shown = &shows[screen ? 1 : 0];
 	screen_only = screen;
+	planet_use_screen(screen);
 }
 
 /* ---- running a model --------------------------------------------------------
@@ -2059,8 +2060,7 @@ void draw_fars()
 	for (int i = 0; i < shown->nfar; i++)
 		order.push_back({dist(shown->far[i].pos) * shown->far[i].shrink, i, -1, nullptr});
 	double nearest_planet = 1e300;
-	/* the planets kept are the world's */
-	for (int i = 0; i < (screen_only ? 0 : planet_native_count()); i++)
+	for (int i = 0; i < planet_native_count(); i++)
 	{
 		order.push_back({planet_native_dist(i) * planet_native_shrink(i), -1, i, nullptr});
 		nearest_planet = std::min(nearest_planet, order.back().d);

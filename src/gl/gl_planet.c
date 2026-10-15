@@ -232,6 +232,10 @@ typedef struct
 } NativePlanets;
 
 static NativePlanets native_rec, native_pub, native_show, native_last;
+/* the cockpit screen's own (its maps' planets), drawn instead of the
+ * world's while its picture is drawn (planet_use_screen) */
+static NativePlanets screen_pub, screen_show;
+static NativePlanets *drawn_planets = &native_show;
 static uint32_t native_frame;
 
 /* Where each planet was when last seen, for the cockpit's capture passes
@@ -271,6 +275,23 @@ void planet_dists_acquire(void)
 	native_show.n = native_pub.n;
 	memcpy(native_show.p, native_pub.p, sizeof native_pub.p[0] * (size_t)native_pub.n);
 	native_frame++;
+}
+
+void planet_screen_publish(void)
+{
+	screen_pub.n = native_rec.n;
+	memcpy(screen_pub.p, native_rec.p, sizeof native_rec.p[0] * (size_t)native_rec.n);
+}
+
+void planet_screen_acquire(void)
+{
+	screen_show.n = screen_pub.n;
+	memcpy(screen_show.p, screen_pub.p, sizeof screen_pub.p[0] * (size_t)screen_pub.n);
+}
+
+void planet_use_screen(bool screen)
+{
+	drawn_planets = screen ? &screen_show : &native_show;
 }
 
 /* A turned pass's game view vector (z ahead) in the game camera's */
@@ -434,22 +455,22 @@ bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3
 
 uint32_t planet_native_object_addr(int i)
 {
-	return native_show.p[i].obj;
+	return drawn_planets->p[i].obj;
 }
 
 int planet_native_count(void)
 {
-	return native_mode() == 2 ? native_show.n : 0;
+	return native_mode() == 2 ? drawn_planets->n : 0;
 }
 
 float planet_native_shrink(int i)
 {
-	return native_show.p[i].shrink;
+	return drawn_planets->p[i].shrink;
 }
 
 double planet_native_dist(int i)
 {
-	const double *p = native_show.p[i].pos;
+	const double *p = drawn_planets->p[i].pos;
 	return sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
 }
 
@@ -956,7 +977,7 @@ void draw_planet(const void *payload)
 
 void planet_native_draw(int i)
 {
-	const NativePlanet *n = &native_show.p[i];
+	const NativePlanet *n = &drawn_planets->p[i];
 	SphereIn in = {{n->pos[0], n->pos[1], n->pos[2]},
 				   n->radius,
 				   {n->light[0], n->light[1], n->light[2]},

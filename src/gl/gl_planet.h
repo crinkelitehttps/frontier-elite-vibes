@@ -92,6 +92,8 @@ uint32_t planet_native_object_addr(int i); /* its planet object */
 double planet_native_dist(int i);   /* as drawn (shrunk, native_frame_shrink) */
 float planet_native_shrink(int i); /* true distance = dist * shrink */
 void planet_native_draw(int i);
+/* drawing the cockpit screen's picture: its planets, not the world's */
+void planet_use_screen(bool screen);
 /* The atmosphere bands round them (gl_atmos.c), before the planets */
 void atmos_draw_native(void);
 

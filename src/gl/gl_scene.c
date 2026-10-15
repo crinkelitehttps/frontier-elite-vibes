@@ -334,12 +334,14 @@ void scene_publish(bool screen)
 	close_current();
 	scene_capture_soft_nodes();
 	copy_scene(&pub, &rec);
-	/* a screen's planets and haze: none, the world's are kept */
+	/* a screen's haze: none, the world's is kept; its planets are its own */
 	if (!screen)
 	{
 		atmos_publish();
 		planet_dists_publish();
 	}
+	else
+		planet_screen_publish();
 	native_publish();
 }
 
@@ -365,6 +367,8 @@ void scene_acquire(bool screen)
 		atmos_acquire();
 		planet_dists_acquire();
 	}
+	if (screen)
+		planet_screen_acquire();
 	native_acquire(screen, world_new);
 	world_new = false;
 	gl_prims_new_scene();

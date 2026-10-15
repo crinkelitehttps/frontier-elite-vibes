@@ -147,6 +147,8 @@ void atmos_acquire(void);            /* gl_atmos.c, with scene_acquire */
 void scene_mute_object(uint32_t a6);
 void planet_dists_reset(void);       /* gl_planet.c, with scene_reset */
 void planet_dists_publish(void);     /* gl_planet.c, with scene_publish */
+void planet_screen_publish(void);    /* the same for a cockpit screen's frame */
+void planet_screen_acquire(void);
 void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
 
 /* ---- hand over --------------------------------------------------------- *
