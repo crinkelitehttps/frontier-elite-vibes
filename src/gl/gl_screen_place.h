@@ -16,10 +16,12 @@
  *   usual place above the panel. screen_place_reset() puts both back.
  *
  *   While a map (the galaxy's or the system's) is on the cockpit's
- *   screen, the left trigger pulled with the left hand within ROTATE_REACH
- *   of it turns the map: as long as it is held the hand's movement across
- *   the screen is a right-button mouse drag (the game turns its maps by
- *   dragging with the right button).
+ *   screen, the left trigger is the map's: held, either hand touching the
+ *   screen (within TURN_TOUCH) turns the map, its movement across the
+ *   screen a right-button mouse drag (the game turns its maps by dragging
+ *   with the right button), until it leaves (TURN_KEEP). The turning hand
+ *   presses nothing. Under a screen the ship ignores mouse steering
+ *   (Call_ScreenControls), so the drag doesn't turn it too.
  *
  *   A grip or trigger taken this way is the screen's until it is let go:
  *   the bindings (the virtual pad: left grip and trigger are flight
@@ -72,7 +74,7 @@ void screen_place_corners(int screen, float c[4][3]);
 /* Drawing thread, per headset frame: grabs, carries and lets go, and turns
  * the maps. `cockpit`: the cockpit is drawn per eye. Clears the squeeze /
  * trigger of controls the screens have taken; held[i]: hand i holds a
- * screen (it touches nothing else). */
+ * screen (2) or turns a map (1): it touches nothing else. */
 void screen_place_hands(VrHand hands[2], bool cockpit, int held[2]);
 
 #ifdef __cplusplus

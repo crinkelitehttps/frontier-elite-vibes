@@ -20,8 +20,10 @@ ScreenPlace screen_place[PLACE_COUNT];
 
 /* A grip grabs a screen with the palm or fingertip this near it (m) */
 #define PLACE_REACH 0.10f
-/* The left trigger turns a map with the left hand this near it (m) */
-#define ROTATE_REACH 0.25f
+/* With the left trigger held, a hand this near a map's screen turns it
+ * (its palm or fingertip, m), and keeps turning it out to the farther */
+#define TURN_TOUCH 0.06f
+#define TURN_KEEP  0.15f
 /* Mouse motion per metre the hand moves across the map's screen */
 #define ROTATE_GAIN 1000.0f
 /* Screen widths (m) the two hands can size it to */
@@ -189,8 +191,9 @@ std::atomic<bool> reset_wanted{false};
 
 /* The map turning */
 bool trigger_was;
-bool rotating;
-Vec3 rotate_last;
+bool trigger_taken; /* pulled with a map on the screen: the map's */
+int turner = -1;    /* the hand turning it */
+Vec3 turn_last;
 
 /* Hand i in view space: palm, fingertip and its frame */
 struct HandAt
@@ -324,11 +327,11 @@ void drop_all(void)
 	grip_owner[0] = grip_owner[1] = -1;
 }
 
-void stop_rotating(void)
+void stop_turning(void)
 {
-	if (rotating)
+	if (turner >= 0)
 		Input_SetDrag(false, 0, 0);
-	rotating = false;
+	turner = -1;
 }
 
 bool map_on_screen(void)
@@ -372,9 +375,9 @@ void screen_place_hands(VrHand hands[2], bool cockpit, int held[2])
 	if (!cockpit)
 	{
 		drop_all();
-		stop_rotating();
+		stop_turning();
 		grip_was[0] = grip_was[1] = false;
-		trigger_was = false;
+		trigger_was = trigger_taken = false;
 		return;
 	}
 	HandAt h[2] = {hand_at(hands[0]), hand_at(hands[1])};
@@ -442,26 +445,44 @@ void screen_place_hands(VrHand hands[2], bool cockpit, int held[2])
 			held[i] = 2;
 		}
 
-	/* the left trigger near a map: a right-button drag across it */
+	/* the left trigger held with a map on the screen: the hand touching
+	 * it drags across it with the right button */
 	const VrHand &l = hands[0];
 	const bool trig = l.connected && l.trigger > (trigger_was ? TRIGGER_UP : TRIGGER_DOWN);
-	const bool pulled = trig && !trigger_was;
+	const bool map = have[PLACE_SCREEN] && map_on_screen();
+	if (trig && !trigger_was)
+		trigger_taken = map;
 	trigger_was = trig;
-	if (rotating && (!trig || !h[0].on || !have[PLACE_SCREEN]))
-		stop_rotating();
-	if (pulled && h[0].on && have[PLACE_SCREEN] && map_on_screen() &&
-		hand_distance(shown[PLACE_SCREEN], aspect[PLACE_SCREEN], h[0]) < ROTATE_REACH)
+	if (!trig || !map)
+		trigger_taken = false;
+	if (!trigger_taken)
 	{
-		rotating = true;
-		rotate_last = h[0].palm;
+		stop_turning();
+		return;
+	}
+	hands[0].trigger = 0; /* the map's, not the pad's */
+	const Pose &screen = shown[PLACE_SCREEN];
+	const float asp = aspect[PLACE_SCREEN];
+	if (turner >= 0 && (!h[turner].on || grip_owner[turner] >= 0 || hand_distance(screen, asp, h[turner]) > TURN_KEEP))
+		stop_turning();
+	if (turner < 0)
+	{
+		float best_d = TURN_TOUCH;
+		for (int i = 0; i < 2; i++)
+		{
+			if (!h[i].on || grip_owner[i] >= 0)
+				continue;
+			const float d = hand_distance(screen, asp, h[i]);
+			if (d < best_d)
+				turner = i, best_d = d;
+		}
+		if (turner < 0)
+			return;
+		turn_last = h[turner].tip;
 		Input_SetDrag(true, 0, 0);
 	}
-	if (rotating)
-	{
-		const Vec3 d = h[0].palm - rotate_last;
-		rotate_last = h[0].palm;
-		const Frame &f = shown[PLACE_SCREEN].f;
-		Input_SetDrag(true, vibe::dot(d, f.x) * ROTATE_GAIN, -vibe::dot(d, f.y) * ROTATE_GAIN);
-		hands[0].trigger = 0; /* the map's, not the pad's */
-	}
+	const Vec3 d = h[turner].tip - turn_last;
+	turn_last = h[turner].tip;
+	Input_SetDrag(true, vibe::dot(d, screen.f.x) * ROTATE_GAIN, -vibe::dot(d, screen.f.y) * ROTATE_GAIN);
+	held[turner] = std::max(held[turner], 1); /* it turns, it doesn't press */
 }

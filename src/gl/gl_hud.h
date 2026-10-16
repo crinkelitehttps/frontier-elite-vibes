@@ -1,6 +1,7 @@
 /*
- * gl_hud.h - our own crosshair and velocity (trajectory) marker in the
- * flight view, in place of the game's.
+ * gl_hud.h - our own crosshair, velocity (trajectory) marker, target
+ * tunnel and range, and labels on things in the flight view, in place of
+ * the game's.
  *
  * HOW IT WORKS
  *   The game draws both into its 2D screen (L63574_mod3_fn20_DrawPlayerHUD):
@@ -18,11 +19,25 @@
  *   turns the full 32 bit velocity with floats, has no bias, and marks
  *   the reverse direction (retrograde) as well; nothing under 1 m/s.
  *
- *   Both are drawn as directions, on the world's projection: in the
+ *   The target and the labels (L63990, and L6393c for each thing on the
+ *   game's screen) likewise: Call_HudTarget gets the target with its range
+ *   formatted by the game and whether it has a tunnel, Call_HudLabels says
+ *   skip and the host goes through the things itself, all of them, not
+ *   only those on the game's screen. Where each is comes from the native
+ *   scene (native_object_pos); without it, or when it has not got the
+ *   thing, the game draws its own. The text is the game's font, a quad a
+ *   run of pixels.
+ *
+ *   All are drawn as directions, on the world's projection: in the
  *   classic view they sit where the game's would (sharp, at any window
  *   size); in the cockpit they are at infinity like the world, the
- *   crosshair along the ship's nose, the velocity markers wherever they
- *   are, also outside the classic view (look round for them).
+ *   crosshair along the ship's nose, the velocity markers, the target and
+ *   the labels wherever they are, also outside the classic view (look
+ *   round for them). The tunnel's squares go from the target towards the
+ *   middle of the view, as the game's do, along the sphere.
+ *
+ *   The camera screen (gl_camera.h) is the game's own picture: there the
+ *   game draws its own target and labels.
  */
 #ifndef GL_HUD_H
 #define GL_HUD_H
@@ -36,15 +51,19 @@ extern "C"
 {
 #endif
 
-/* Setting: our crosshair and velocity marker instead of the game's */
+/* Setting: our crosshair, velocity marker, target and labels instead of
+ * the game's */
 extern bool own_hud;
 
 /* Host calls from the hooks (game thread): d0 = 1 to skip the game's */
 void Call_HudCross(void);
 void Call_HudVelocity(void);
+void Call_HudTarget(void);
+void Call_HudLabels(void);
 
 /* Game thread, under the frame lock: what the hooks noted this frame
- * becomes the latest; nothing for the cockpit's screen's frames */
+ * becomes the latest; for the cockpit's screen's frames (no HUD drawn by
+ * the game) the last flight frame's crosshair and the velocity now */
 void hud_publish(bool screen);
 /* Game thread, at the end of the frame's work (after any world capture,
  * whose hooks must not count) */

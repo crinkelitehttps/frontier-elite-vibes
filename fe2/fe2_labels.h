@@ -373,7 +373,10 @@
 #define FE2_Lnative_culled                           0xa9152 /* Lnative_culled */
 #define FE2_Lnative_text                             0xa9154 /* Lnative_text */
 #define FE2_Lscreen_controls                         0xa916e /* Lscreen_controls */
-#define FE2_Lhud_cross                               0xa918c /* Lhud_cross */
-#define FE2_Lhud_velocity                            0xa91a4 /* Lhud_velocity */
+#define FE2_Lhud_cross                               0xa91a2 /* Lhud_cross */
+#define FE2_Lhud_velocity                            0xa91ba /* Lhud_velocity */
+#define FE2_Lhud_target                              0xa91d8 /* Lhud_target */
+#define FE2_Lhud_labels                              0xa925e /* Lhud_labels */
+#define FE2_Lcam_hud                                 0xa9280 /* Lcam_hud */
 
 #endif /* FE2_LABELS_H */

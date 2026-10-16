@@ -676,6 +676,25 @@ extern "C" int native_capture_dirs(float dirs[][3], int max)
 	return n;
 }
 
+extern "C" bool native_object_pos(uint32_t addr, float pos[3], float *shrink)
+{
+	for (int i = 0; i < rec.n; i++)
+		if (rec.obj[i].addr == addr && rec.obj[i].table == rec.obj[i].subtable)
+		{
+			memcpy(pos, rec.obj[i].pos, sizeof rec.obj[i].pos);
+			*shrink = rec.obj[i].shrink;
+			return true;
+		}
+	for (int i = 0; i < rec.nfar; i++)
+		if (rec.far[i].addr == addr)
+		{
+			memcpy(pos, rec.far[i].pos, sizeof rec.far[i].pos);
+			*shrink = rec.far[i].shrink;
+			return true;
+		}
+	return false;
+}
+
 extern "C" void native_reset(void)
 {
 	rec.n = 0;

@@ -76,6 +76,10 @@ bool gl_screen_menu_rows(int *y0, int *y1);
  * GL_SCREEN_SUB_V0 and 1 */
 GLuint gl_screen_sub_texture(void);
 #define GL_SCREEN_SUB_V0 (1.0f - 168.0f / 200.0f)
+/* With the cockpit's screen: the labels on things in the world round it,
+ * the flight view's text layer, laid out as the emulated screen's
+ * texture (transparent where there is none); 0 when there are none */
+GLuint gl_screen_labels_texture(void);
 
 /* Settings */
 extern bool cockpit_enabled;
@@ -99,7 +103,8 @@ bool cockpit_screen_frame(void);
  * call): runs the game's flight view as the cockpit would have it, with
  * the game's machine put back as it was afterwards (fe2vm.h), so the
  * world is recorded (gl_scene.h, scene_publish_world) though the game
- * shows the screen. False if there is none to capture. */
+ * shows the screen. False if there is none to capture. The flight view's
+ * text (labels on things) is left queued (screen_text.h) for the caller. */
 bool cockpit_capture_world(void);
 /* Host call (Lscreen_controls in fe2.s): d0 = 1 if the player's controls
  * are to work though a game screen is up, as it is on the cockpit's */

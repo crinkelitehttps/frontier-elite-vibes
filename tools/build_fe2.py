@@ -80,6 +80,7 @@ VARIANTS = {
         # fe2_modded.s gave them. Host code (src/cheats.c) reads them by
         # FE2_<name> in both builds, so export them under the same names.
         "aliases": {
+            "obj_offsets": "L44b02",
             "equipment_list": "L7655c",
             "fuel_tank_sizes": "L7e398",
             "elite_rating_points": "L7e87a",

@@ -14,6 +14,7 @@
 #include "hostcall.h"
 #include "m68000.h"
 #include "main.h"
+#include "renderer.h" /* logscreen2 */
 
 bool cockpit_camera = true;
 
@@ -28,8 +29,10 @@ bool cockpit_camera = true;
 /* fe2.s: "gl_renderer_on: dc.w 1" just before L41b2e_FlipScreen; 0 = the
  * game's software renderer */
 #define GL_RENDERER_ON (FE2_FlipScreen - 2)
-#define A6_MAIN_PALETTE1       15876
+#define A6_MAIN_PALETTE1       15876 /* 16 words, then A6_main_palette2's 16 */
 #define A6_DO_CLR_2_SPACE_COLS 536
+#define A6_SPACE_BG_COL        16004 /* word, as L41a3a_SetDefaultPalette sets them */
+#define A6_DYN_COLS_FIRST      16006 /* word */
 
 enum
 {
@@ -129,6 +132,24 @@ static void cam_ext_palette(void)
 	}
 }
 
+/* Text (labels on things, drawn by the software renderer's text
+ * primitive): into the screen the view is drawn in, not the 2D layer's */
+static void cam_draw_str(void)
+{
+	unsigned long saved = logscreen2;
+	logscreen2 = FE2_logscreen; /* where the batch draws (camera_capture) */
+	Call_DrawStr();
+	logscreen2 = saved;
+}
+
+static void cam_draw_str_shadowed(void)
+{
+	unsigned long saved = logscreen2;
+	logscreen2 = FE2_logscreen; /* where the batch draws (camera_capture) */
+	Call_DrawStrShadowed();
+	logscreen2 = saved;
+}
+
 /* Call_CockpitPass (Lcockpit_world): one pass, the camera object at a3
  * (3x3 words, 1.0 = 32767, row major, columns right, up, ahead) turned to
  * the camera's axes, then put back */
@@ -174,6 +195,8 @@ static void batch_hcalls(void)
 	hcalls[0x0b] = Call_FillLine;
 	hcalls[0x11] = cam_ext_palette;
 	hcalls[0x16] = Call_HLine;
+	hcalls[0x1b] = cam_draw_str_shadowed;
+	hcalls[0x1c] = cam_draw_str;
 	hcalls[0x73] = cam_no; /* Nu_IsGLRenderer */
 	hcalls[0x7a] = cam_pass;
 	hcalls[0x82] = cam_no; /* Nu_NativeCulled */
@@ -181,6 +204,8 @@ static void batch_hcalls(void)
 	hcalls[0x85] = cam_no; /* Call_ScreenControls */
 	hcalls[0x86] = cam_no; /* Call_HudCross */
 	hcalls[0x87] = cam_no; /* Call_HudVelocity */
+	hcalls[0x88] = cam_no; /* Call_HudTarget */
+	hcalls[0x89] = cam_no; /* Call_HudLabels */
 }
 
 /* =========================================================================
@@ -218,8 +243,42 @@ static bool run(uint32_t addr, uint32_t a1)
 	return fe2vm_call(addr, &r) == 0;
 }
 
-void camera_capture(void)
+/* The flight view's colours: a game screen (a map, the station) puts its
+ * own palette and background in the same places, so under the cockpit's
+ * screen the batch draws with the last flight frame's */
+static struct
 {
+	bool have;
+	uint8_t pal[64];
+	uint16_t bg, first;
+	uint8_t clr;
+} flight;
+
+static void note_flight_colours(void)
+{
+	for (uint32_t i = 0; i < sizeof flight.pal; i++)
+		flight.pal[i] = (uint8_t)rdbyte(GAME_A6 + A6_MAIN_PALETTE1 + i);
+	flight.bg = (uint16_t)rdword(GAME_A6 + A6_SPACE_BG_COL);
+	flight.first = (uint16_t)rdword(GAME_A6 + A6_DYN_COLS_FIRST);
+	flight.clr = (uint8_t)rdbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS);
+	flight.have = true;
+}
+
+static void use_flight_colours(void)
+{
+	if (!flight.have)
+		return;
+	for (uint32_t i = 0; i < sizeof flight.pal; i++)
+		wrbyte(GAME_A6 + A6_MAIN_PALETTE1 + i, flight.pal[i]);
+	wrword(GAME_A6 + A6_SPACE_BG_COL, flight.bg);
+	wrword(GAME_A6 + A6_DYN_COLS_FIRST, flight.first);
+	wrbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS, flight.clr);
+}
+
+void camera_capture(bool screen)
+{
+	if (!screen)
+		note_flight_colours();
 	if (!cockpit_camera || !lock || !game_player_ship())
 		return;
 	static Uint64 last;
@@ -238,13 +297,17 @@ void camera_capture(void)
 	batch_hcalls();
 	wrword(GL_RENDERER_ON, 0);
 	wrbyte(GAME_A6 + A6_3DVIEW_MODE, VIEW_FRONT);
+	if (screen)
+		use_flight_colours();
 	uint32_t scr = (uint32_t)rdlong(FE2_logscreen);
 	bool ok = run(FE2_Clear3DView, 0) && run(FLIGHT_VIEW, 0) && run(FE2_MakePalette, GAME_A6 + A6_MAIN_PALETTE1);
 	if (ok)
 	{
 		/* the background as the game's frame loop has it, then the view */
 		memset(STRam + scr, (rdbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS) & 1) ? 0xe : 0, CAMERA_W * CAMERA_H);
-		ok = run(FE2_Draw3DView, 0);
+		/* then the target and the labels on things, as the game's HUD
+		 * draws them (Lcam_hud) */
+		ok = run(FE2_Draw3DView, 0) && run(FE2_Lcam_hud, 0);
 	}
 	if (ok)
 	{

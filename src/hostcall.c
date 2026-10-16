@@ -155,5 +155,7 @@ HOSTCALL hcalls[] = {
 	[0x85] = Call_ScreenControls,
 	[0x86] = Call_HudCross,
 	[0x87] = Call_HudVelocity,
+	[0x88] = Call_HudTarget,
+	[0x89] = Call_HudLabels,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

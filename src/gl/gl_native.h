@@ -90,6 +90,12 @@ void native_draw_sky(void);
  * planet's sphere and its atmosphere. Returns how many, up to `max`. */
 int native_capture_dirs(float dirs[][3], int max);
 
+/* Game thread, after the game's 3D view this frame (its HUD): where the
+ * object at `addr` is, GL view space of the game's own camera (x right, y
+ * up, -z ahead; view units, the true distance is |pos| * *shrink). False if
+ * this frame did not capture it. */
+bool native_object_pos(uint32_t addr, float pos[3], float *shrink);
+
 /* The native scene is on (GLF_NATIVE_SCENE unset or non-zero) */
 bool native_enabled(void);
 /* Its value: 1 wireframe, 2 filled (the default), 0 off */

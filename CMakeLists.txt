@@ -188,7 +188,8 @@ endif()
 ##########################################################################################
 # vibe-lib: the cockpit features shared with the other ports (VR hands, the
 # clipboard). A sibling checkout: ~/projects/vibe-lib. Its vibe::poppler
-# (poppler-cpp, when found; never when cross-compiling) reads the game
+# (poppler-cpp, when found; for MinGW, vibe-lib's static build from
+# tools/build-poppler-windows.sh) reads the game
 # manual's PDF for the clipboard (src/manual.cpp); without it the clipboard
 # has the controls only.
 ##########################################################################################

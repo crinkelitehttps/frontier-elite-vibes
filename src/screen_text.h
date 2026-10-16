@@ -23,6 +23,9 @@ const unsigned char *screen_text_glyph(int ch);
 void Nu_QueueDrawStr(void);
 void screen_text_clear_queue(void);
 void screen_text_draw_queue(void);
+/* The queue drawn into `buf` (320x200 colour indices) instead, 0xff where
+ * there is no text; false if there was none */
+bool screen_text_render_queue(unsigned char *buf);
 
 #ifdef __cplusplus
 }

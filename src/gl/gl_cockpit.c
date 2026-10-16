@@ -401,9 +401,21 @@ bool cockpit_screen_frame(void)
 #define FLIGHT_VIEW 0x57060 /* L62966 in fe2.s, L62966_SetupPlayerCamera in fe2_modded.s */
 #endif
 
+/* Mouse steering (L62678) turns the ship by how far the mouse control moved
+ * since the last frame (A6+682); under a screen the mouse is the screen's
+ * (a right-button drag turns the maps), so no motion is left for it */
+#define MOUSE_CTRL      14488 /* A6_mouse_motion_ctrl_x, _y */
+#define MOUSE_CTRL_LAST 682
+
 void Call_ScreenControls(void)
 {
-	SetReg(REG_D0, cockpit_screen_frame());
+	bool on = cockpit_screen_frame();
+	if (on)
+	{
+		uint32_t a6 = (uint32_t)GetReg(REG_A6);
+		wrlong(a6 + MOUSE_CTRL_LAST, rdlong(a6 + MOUSE_CTRL));
+	}
+	SetReg(REG_D0, on);
 }
 
 bool cockpit_capture_world(void)
@@ -427,7 +439,7 @@ bool cockpit_capture_world(void)
 	game_active = was;
 	fe2vm_end();
 	fe2vm_game_hcalls(0);
-	screen_text_clear_queue(); /* the flight view's own text: not shown */
+	/* the flight view's own text (labels on things): the caller's to take */
 	if (err && !failed)
 		log_printf("Cockpit screen: no world under it (%s)\n", fe2vm_error());
 	failed = err != 0;
@@ -712,8 +724,10 @@ static void tex_quad_pass(const void *data)
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-/* Queues screen rows y0..y1 on the quad `corners` (through `m`) */
-static void queue_screen_quad(const mat4 *m, const float corners[4][3], int y0, int y1, bool discard, bool upload)
+/* Queues screen rows y0..y1 on the quad `corners` (through `m`), from
+ * `tex` laid out as the screen's texture (0: the screen's) */
+static void queue_layer_quad(const mat4 *m, const float corners[4][3], GLuint tex, int y0, int y1, bool discard,
+							 bool upload)
 {
 	TexQuad *q = gd_custom(tex_quad_pass, sizeof *q);
 	if (!q)
@@ -727,7 +741,12 @@ static void queue_screen_quad(const mat4 *m, const float corners[4][3], int y0, 
 	}
 	q->discard = discard;
 	q->upload = upload;
-	q->tex = 0;
+	q->tex = tex;
+}
+
+static void queue_screen_quad(const mat4 *m, const float corners[4][3], int y0, int y1, bool discard, bool upload)
+{
+	queue_layer_quad(m, corners, 0, y0, y1, discard, upload);
 }
 
 /* Queues the whole of texture `tex` on the quad `corners`, its top edge
@@ -768,6 +787,13 @@ void cockpit_draw(void)
 		const float rows[4][3] = {{0, a, 0}, {VIEW_W, a, 0}, {0, b, 0}, {VIEW_W, b, 0}};
 		queue_screen_quad(&hud, rows, a, b, true, upload);
 		upload = false;
+	}
+	/* under the cockpit's screen the world's labels, as the 2D layer had them */
+	GLuint labels = sub_on ? gl_screen_labels_texture() : 0;
+	if (labels)
+	{
+		const float rows[4][3] = {{0, 0, 0}, {VIEW_W, 0, 0}, {0, PANEL_ROW0, 0}, {VIEW_W, PANEL_ROW0, 0}};
+		queue_layer_quad(&hud, rows, labels, 0, PANEL_ROW0, true, false);
 	}
 
 	/* the control panel (with the scanner), on its own in front of the eye */

@@ -303,6 +303,20 @@ typedef struct
 } ScreenFrame;
 static ScreenFrame scr_pub, scr_show;
 
+/* The flight view's text under the cockpit's screen (the world capture's
+ * labels), in the flight view's palette: the game thread fills `lab_pub`
+ * (new: lab_new), drawing takes it into `lab_show` */
+typedef struct
+{
+	bool on;
+	uint8_t px[SCR_W * SCR_H];
+	unsigned int rgb[256];
+} LabelFrame;
+static LabelFrame lab_pub, lab_show;
+static bool lab_new, lab_uploaded;
+static unsigned int flight_rgb[256]; /* game thread: the last flight frame's palette */
+static GLuint label_tex;
+
 /* The render thread and the hand over of frames, see "Frames" below */
 #if defined(__EMSCRIPTEN__) || defined(ANDROID)
 #define USE_RENDER_THREAD 0
@@ -423,6 +437,40 @@ GLuint gl_screen_texture(void)
 	return screen_tex;
 }
 
+GLuint gl_screen_labels_texture(void)
+{
+	if (!lab_show.on || !scr_show.sub)
+		return 0;
+	if (!label_tex)
+	{
+		glGenTextures(1, &label_tex);
+		glBindTexture(GL_TEXTURE_2D, label_tex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SCR_TEX_W, SCR_TEX_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		lab_uploaded = false;
+	}
+	if (!lab_uploaded)
+	{
+		static uint32_t px[SCR_W * SCR_H];
+		for (int i = 0; i < SCR_W * SCR_H; i++)
+		{
+			unsigned int c = lab_show.rgb[lab_show.px[i]];
+			/* no flight frame seen yet: the game's white */
+			px[i] = lab_show.px[i] == 0xff ? 0 : c ? c : 0xffffffffu;
+		}
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, label_tex);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, SCR_W, SCR_H, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		lab_uploaded = true;
+	}
+	return label_tex;
+}
+
 /* The comms menu of the flight view: its check boxes are icon rectangles
  * (above the panel) with something drawn in them. The rows they take with
  * the text beside them. */
@@ -514,6 +562,9 @@ void Screen_UnInit(void)
 	cockpit_shutdown();
 	clipboard_shutdown();
 	glDeleteTextures(1, &screen_tex);
+	if (label_tex)
+		glDeleteTextures(1, &label_tex);
+	label_tex = 0;
 	glDeleteBuffers(1, &blit_vbo);
 	glDeleteVertexArrays(1, &blit_vao);
 	glDeleteProgram(blit_prog);
@@ -668,9 +719,11 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gl_prims_finish();
 	native_draw();
 	gd_set_wireframe(false);
-	/* our crosshair and velocity marker (gl_hud.h), on the world */
+	/* our crosshair and velocity marker (gl_hud.h), on the world (not on
+	 * the cockpit's screen's picture) */
 	mat4 dirs = cockpit_direction_projection();
-	hud_draw(&dirs);
+	if (!drawing_sub)
+		hud_draw(&dirs);
 
 	/* 2. emulated screen */
 	if (cockpit)
@@ -839,20 +892,31 @@ static void publish_frame(void)
 	scene_publish(scr_pub.sub);
 	hud_publish(scr_pub.sub);
 	frame_new = true;
+	if (scr_pub.cockpit)
+		memcpy(flight_rgb, scr_pub.main_rgb, sizeof flight_rgb);
+	if (!scr_pub.sub && lab_pub.on)
+	{
+		lab_pub.on = false;
+		lab_new = true;
+	}
 	SDL_UnlockMutex(frame_lock);
 
-	/* the world round the cockpit's screen, live */
+	/* the world round the cockpit's screen, live, with its labels */
 	if (scr_pub.sub)
 		pace_screen_frames();
 	if (scr_pub.sub && cockpit_capture_world())
 	{
 		SDL_LockMutex(frame_lock);
 		scene_publish_world();
+		lab_pub.on = screen_text_render_queue(lab_pub.px);
+		memcpy(lab_pub.rgb, flight_rgb, sizeof lab_pub.rgb);
+		lab_new = true;
 		SDL_UnlockMutex(frame_lock);
 	}
+	screen_text_clear_queue();
 	/* the camera screen's picture, the game's own (gl_camera.h) */
 	if (scr_pub.cockpit || scr_pub.sub)
-		camera_capture();
+		camera_capture(scr_pub.sub);
 	hud_frame_end();
 	SDL_AtomicIncRef(&published);
 }
@@ -870,6 +934,12 @@ static bool acquire_frame(void)
 		scene_acquire(scr_show.sub);
 		hud_acquire();
 		frame_new = false;
+	}
+	if (lab_new)
+	{
+		lab_show = lab_pub;
+		lab_new = false;
+		lab_uploaded = false;
 	}
 	SDL_UnlockMutex(frame_lock);
 	return got;

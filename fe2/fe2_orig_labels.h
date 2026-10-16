@@ -325,13 +325,17 @@
 #define FE2_Lnative_culled                           0x8325e /* Lnative_culled */
 #define FE2_Lnative_text                             0x83260 /* Lnative_text */
 #define FE2_Lscreen_controls                         0x8327a /* Lscreen_controls */
-#define FE2_Lhud_cross                               0x83298 /* Lhud_cross */
-#define FE2_Lhud_velocity                            0x832b0 /* Lhud_velocity */
+#define FE2_Lhud_cross                               0x832ae /* Lhud_cross */
+#define FE2_Lhud_velocity                            0x832c6 /* Lhud_velocity */
+#define FE2_Lhud_target                              0x832e4 /* Lhud_target */
+#define FE2_Lhud_labels                              0x8336a /* Lhud_labels */
+#define FE2_Lcam_hud                                 0x8338c /* Lcam_hud */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */
 #define FE2_equipment_list                           0x6ac50 /* L7655c */
 #define FE2_fuel_tank_sizes                          0x72a58 /* L7e398 */
 #define FE2_military_rank_points                     0x72f70 /* L7e8b0 */
+#define FE2_obj_offsets                              0x391f6 /* L44b02 */
 
 #endif /* FE2_ORIG_LABELS_H */

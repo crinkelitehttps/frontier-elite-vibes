@@ -37,6 +37,8 @@ static int draw_char(int col, int xoffset, char *scrline, int chr)
 	return xoffset + glyph[9];
 }
 
+static char *text_base; /* screen_text_render_queue's buffer, else the logical screen */
+
 int DrawStr(int xpos, int ypos, int col, unsigned char *str, bool shadowed)
 {
 	int x = xpos, y = ypos, chr;
@@ -44,7 +46,7 @@ int DrawStr(int xpos, int ypos, int col, unsigned char *str, bool shadowed)
 	if (y > 192 || y < 0)
 		return x;
 set_line:
-	screen = LOGSCREEN2 + SCREENBYTES_LINE * y;
+	screen = (text_base ? text_base : LOGSCREEN2) + SCREENBYTES_LINE * y;
 	while (*str)
 	{
 		chr = *(str++);
@@ -117,4 +119,14 @@ void screen_text_draw_queue(void)
 	for (int i = 0; i < n_queued; i++)
 		DrawStr(queued[i].x, queued[i].y, queued[i].col, queued[i].str, false);
 	logscreen2 = saved;
+}
+
+bool screen_text_render_queue(unsigned char *buf)
+{
+	memset(buf, 0xff, SCREENBYTES_LINE * 200);
+	text_base = (char *)buf;
+	for (int i = 0; i < n_queued; i++)
+		DrawStr(queued[i].x, queued[i].y, queued[i].col, queued[i].str, false);
+	text_base = NULL;
+	return n_queued > 0;
 }

@@ -158,6 +158,8 @@ Call_ScreenControls	equ	$85
 * Own HUD: the host draws the crosshair and velocity marker (src/gl/gl_hud.c)
 Call_HudCross		equ	$86
 Call_HudVelocity	equ	$87
+Call_HudTarget		equ	$88
+Call_HudLabels		equ	$89
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -42588,8 +42590,8 @@ L63574_mod3_fn20_DrawPlayerHUD:
 		jsr	A5_FmtDrawStrShadowed(a5)
 		btst	#$2,A6_plr_flight_flags(a6)
 		beq.s	l636bc
-		movea.l	A6_big_space(a6),a4
-		lea	L6393c(pc),a3
+		jsr	Lhud_labels
+		nop
 		jsr	624(a5)
 	l636bc:	movea.l	A6_plr_ship(a6),a0
 		move.w	180(a0),d1
@@ -42829,7 +42831,8 @@ L63990:
 		addq.w	#1,d7
 		lsr.w	#1,d0
 	l639e8:	movem.w	d0/d7,718(a6)
-		cmpi.b	#$4,A6_plr_3dview_mode(a6)
+		jmp	Lhud_target
+	lhud_target_back:
 		beq.s	l63a38
 		tst.b	A6_opt_target_tunnls(a6)
 		beq.s	l63a38
@@ -67492,9 +67495,17 @@ Lscreen_controls:
 		hcall	#Call_ScreenControls
 		tst.w	d0
 		movem.l	(a7)+,d0
-		bne.s	lscreen_controls_on
+		bne.s	lscreen_controls_fire
 		addq.l	#4,a7
 		jmp	l62752
+* The flight view fires the lasers in its key handling (L62be6, not run
+* under a screen): do it here then, as it does.
+lscreen_controls_fire:
+		btst	#$0,A6_game_flags(a6)
+		bne.s	lscreen_controls_on
+		movem.l	d0-7/a0-6,-(a7)
+		jsr	L62772
+		movem.l	(a7)+,d0-7/a0-6
 lscreen_controls_on:
 		rts
 
@@ -67525,4 +67536,95 @@ Lhud_velocity:
 		subi.w	#$e,d0
 		jmp	lhud_velocity_back
 lhud_velocity_own:
+		rts
+
+******************************************************************************
+* Own HUD: the target (its tunnel and range) and the labels on things, drawn
+* by the host as directions (src/gl/gl_hud.c), so they are seen wherever
+* the thing is, not only within the game's view. d0 = 1 from the call
+* skips the game's.
+* The target: in place of "cmpi.b #$4,A6_plr_3dview_mode(a6)" after l639e8
+* in L63990 (a0 = the target, d0/d7 at 718(a6) its distance, d1 = 1 if the
+* game would draw its tunnel). The range is formatted first, as l63a38 does,
+* into the buffer at 16832(a6).
+* The labels: in place of "movea.l A6_big_space(a6),a4 / lea L6393c(pc),a3"
+* before L63574_mod3_fn20_DrawPlayerHUD's "jsr 624(a5)", which then runs an
+* rts for each thing instead of L6393c.
+******************************************************************************
+Lhud_target:
+		movem.l	d0-7/a0-6,-(a7)
+		movem.w	718(a6),d0/d2
+		move.l	d0,d1
+		moveq	#0,d7
+		move.w	#$8604,d4
+		subi.w	#$1d,d2
+		neg.w	d2
+		bmi.s	lhud_target_far
+		mulu	#$d1d0,d1
+		lsr.l	d2,d1
+		bra.s	lhud_target_fmt
+lhud_target_far:
+		moveq	#1,d7
+		mulu	#$eb54,d1
+		addi.w	#$18,d2
+		lsr.l	d2,d1
+lhud_target_fmt:
+		move.w	d4,d0
+		add.w	d7,d0
+		moveq	#0,d7
+		lea	16832(a6),a0
+		jsr	L3e7aa_FmtStr
+* d1 = 1 if the game would draw the tunnel (its tests after l639e8)
+		movea.l	32(a7),a0
+		moveq	#0,d1
+		cmpi.b	#$4,A6_plr_3dview_mode(a6)
+		beq.s	lhud_target_call
+		tst.b	A6_opt_target_tunnls(a6)
+		beq.s	lhud_target_call
+		tst.b	A6_opt_tunnls_4_ships(a6)
+		bne.s	lhud_target_tunnel
+		move.w	90(a0),d0
+		jsr	A5_GetGameDataObj(a5)
+		movea.l	32(a7),a0
+		tst.w	28(a3)
+		bne.s	lhud_target_call
+lhud_target_tunnel:
+		moveq	#1,d1
+lhud_target_call:
+		hcall	#Call_HudTarget
+		tst.w	d0
+		movem.l	(a7)+,d0-7/a0-6
+		bne.s	lhud_target_own
+		cmpi.b	#$4,A6_plr_3dview_mode(a6)
+		jmp	lhud_target_back
+lhud_target_own:
+		rts
+
+Lhud_labels:
+		movea.l	A6_big_space(a6),a4
+		lea	L6393c,a3
+		move.l	d0,-(a7)
+		hcall	#Call_HudLabels
+		tst.w	d0
+		movem.l	(a7)+,d0
+		beq.s	lhud_labels_game
+		lea	lhud_labels_none,a3
+lhud_labels_game:
+		rts
+lhud_labels_none:
+		rts
+
+******************************************************************************
+* Camera screen (src/gl/gl_camera.c): the target and the labels as
+* L63574_mod3_fn20_DrawPlayerHUD draws them, after Draw3DView in the
+* camera's batch.
+******************************************************************************
+Lcam_hud:
+		jsr	L63990
+		btst	#$2,705(a6)
+		beq.s	lcam_hud_done
+		movea.l	A6_big_space(a6),a4
+		lea	L6393c,a3
+		jsr	624(a5)
+lcam_hud_done:
 		rts
