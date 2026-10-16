@@ -60,5 +60,5 @@ Reusable assets and feature specs shared with the user's other game ports and VR
 ## Working conventions (from the user)
 
 - Don't modernise the codebase; match surrounding style (`.clang-format`).
-- Commit only when asked; each new feature on its own branch.
+- Commit only when asked; committing straight to `main` is fine.
 - The user tests visuals in-game faster than automated screenshots — build into `build-original` and let them look rather than burning effort on self-testing.
