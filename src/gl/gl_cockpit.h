@@ -34,7 +34,8 @@
  *   the cockpit stays, with the world as the last cockpit frame left it,
  *   and the screen's picture (drawn the classic way into a texture,
  *   gl_screen.c) is on a screen in the cockpit, above the panel, its top
- *   168 rows. It is touched like the panel (mouse, lasers, hands).
+ *   168 rows. It is touched like the panel (mouse, lasers, hands). VR
+ *   hands can move it and the camera screen anywhere (gl_screen_place.h).
  *
  *   With a VR headset (vr.h) the head pose is the headset's, and the
  *   frame is drawn again for each eye (cockpit_use_eye: its off-centre
@@ -189,6 +190,8 @@ bool cockpit_panel_play(float corners[4][3]);
 bool cockpit_screen_play(float corners[4][3]);
 /* The camera screen (gl_camera.h) while it is shown, the same way */
 bool cockpit_camera_play(float corners[4][3]);
+/* Places the screens again, after one was moved (gl_screen_place.h) */
+void cockpit_place_screens(void);
 /* A ray in the play space, as cockpit_ray_to_screen: does it hit the
  * camera screen, and how far along `dir` */
 bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist);

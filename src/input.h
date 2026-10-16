@@ -39,6 +39,10 @@ bool Input_PadPointer(int *x, int *y); /* on: where it is */
  * clicks it has the game's pointer, until the mouse moves. */
 void Input_SetLaser(bool active, bool hit, float x, float y, int buttons);
 bool Input_LaserPointer(int *x, int *y); /* it has the pointer: where */
+/* A right-button drag from the drawing thread (a VR hand turning a map,
+ * gl_screen_place.h): `held` holds the right button, dx/dy (mouse units)
+ * add to the motion the game polls next */
+void Input_SetDrag(bool held, float dx, float dy);
 void Input_MouseMoved(void);             /* the mouse moved (main.c) */
 
 /* Host calls: the game polls the mouse and keyboard */

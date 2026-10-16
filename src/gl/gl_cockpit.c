@@ -25,6 +25,7 @@
 #include "gl_draw.h"
 #include "gl_fill2d.h"
 #include "gl_hands.h"
+#include "gl_screen_place.h"
 #include "gl_laser.h"
 #include "gl_scene.h"
 
@@ -307,6 +308,20 @@ static void place_facing(float down_deg, float w, float h, float k, float out[4]
 	}
 }
 
+/* The screens: in their usual places above the panel (scaled with it by
+ * `k`), unless moved (gl_screen_place.h) */
+static float panel_scale = 1.0f;
+static void place_screens(float k)
+{
+	panel_scale = k;
+	place_facing(SUB_DOWN, SUB_W, SUB_H, k, sub);
+	place_facing(SUB_DOWN, CAM_W, CAM_H, k, cam);
+	for (int i = 0; i < 4; i++)
+		cam[i][0] += (SUB_W + CAM_W) * 0.5f * k + CAM_GAP * k;
+	screen_place_corners(PLACE_SCREEN, sub);
+	screen_place_corners(PLACE_CAMERA, cam);
+}
+
 /* With a headset's hands (gl_hands.h) the panel is within reach: nearer,
  * scaled about the eye so it looks the same size. The cockpit's screen
  * goes with it. */
@@ -316,10 +331,13 @@ static void build_panel(void)
 	if (headset && vr_hands && hands_panel_distance() > 0)
 		k = (float)hands_panel_distance() / 100.0f / PANEL_DIST;
 	place_facing(PANEL_DOWN, PANEL_W, PANEL_H, k, panel);
-	place_facing(SUB_DOWN, SUB_W, SUB_H, k, sub);
-	place_facing(SUB_DOWN, CAM_W, CAM_H, k, cam);
-	for (int i = 0; i < 4; i++)
-		cam[i][0] += (SUB_W + CAM_W) * 0.5f * k + CAM_GAP * k;
+	place_screens(k);
+}
+
+void cockpit_place_screens(void)
+{
+	if (active)
+		place_screens(panel_scale);
 }
 
 /* With a headset's hands: the virtual screen's plane, where a menu over

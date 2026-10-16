@@ -11,6 +11,7 @@
 #include "gl_draw.h"
 #include "gl_hands.h"
 #include "gl_laser.h"
+#include "gl_screen_place.h"
 
 #include "gamepad.h"
 #include "input.h"
@@ -145,6 +146,13 @@ void laser_update(bool cockpit)
 	/* the clipboard first: a grip that takes it is nobody else's */
 	int board[2] = {0, 0};
 	clipboard_hands(hands, cockpit && vr_hands, board);
+	/* then the screens: grips that move them, the left trigger turning a map */
+	int held[2];
+	screen_place_hands(hands, cockpit, held);
+	cockpit_place_screens();
+	for (int i = 0; i < 2; i++)
+		if (held[i] > board[i])
+			board[i] = held[i];
 	/* hands that touch: no beams, the triggers are the pad's */
 	bool gesture = false;
 	if (vr_hands)
@@ -229,6 +237,7 @@ void laser_off(void)
 	int board[2];
 	memset(none, 0, sizeof none);
 	clipboard_hands(none, false, board);
+	screen_place_hands(none, false, board);
 	hands_off();
 	beams[0].on = beams[1].on = false;
 	trigger_on[0] = trigger_on[1] = false;

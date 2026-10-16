@@ -29,6 +29,7 @@ extern "C"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
+#include "gl/gl_screen_place.h"
 #include "headtrack.h"
 #include "vr.h"
 }
@@ -244,6 +245,9 @@ void page_settings()
 		ImGui::TextWrapped("Screen distance");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::SliderInt("##vrscreen", &vr_screen_distance, VR_DISTANCE_MIN, VR_DISTANCE_MAX, "%d cm");
+		ImGui::TextWrapped("Cockpit screens: grip one to move it, both grips to size it");
+		if (ui_button("Screens back above the panel"))
+			screen_place_reset();
 	}
 	ImGui::TextWrapped("%s", vr_status());
 	if (vr_running() && ui_button("Recentre headset (Ctrl-C)"))

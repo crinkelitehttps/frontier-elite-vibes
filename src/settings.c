@@ -18,6 +18,7 @@
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
+#include "gl/gl_screen_place.h"
 #include "main.h"
 #include "manual.h"
 #include "mods.h"
@@ -54,6 +55,7 @@ typedef struct
 	int vr_finger;
 	int vr_near;
 	int manual_page;
+	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
 
 static const struct
@@ -85,6 +87,24 @@ static const struct
 	{"vr_finger", offsetof(Settings, vr_finger)},
 	{"vr_near", offsetof(Settings, vr_near)},
 	{"manual_page", offsetof(Settings, manual_page)},
+	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
+	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
+	{"screen_place_screen_y", offsetof(Settings, screen_place[0].y)},
+	{"screen_place_screen_z", offsetof(Settings, screen_place[0].z)},
+	{"screen_place_screen_qx", offsetof(Settings, screen_place[0].qx)},
+	{"screen_place_screen_qy", offsetof(Settings, screen_place[0].qy)},
+	{"screen_place_screen_qz", offsetof(Settings, screen_place[0].qz)},
+	{"screen_place_screen_qw", offsetof(Settings, screen_place[0].qw)},
+	{"screen_place_screen_w", offsetof(Settings, screen_place[0].w)},
+	{"screen_place_camera_on", offsetof(Settings, screen_place[1].on)},
+	{"screen_place_camera_x", offsetof(Settings, screen_place[1].x)},
+	{"screen_place_camera_y", offsetof(Settings, screen_place[1].y)},
+	{"screen_place_camera_z", offsetof(Settings, screen_place[1].z)},
+	{"screen_place_camera_qx", offsetof(Settings, screen_place[1].qx)},
+	{"screen_place_camera_qy", offsetof(Settings, screen_place[1].qy)},
+	{"screen_place_camera_qz", offsetof(Settings, screen_place[1].qz)},
+	{"screen_place_camera_qw", offsetof(Settings, screen_place[1].qw)},
+	{"screen_place_camera_w", offsetof(Settings, screen_place[1].w)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -138,6 +158,7 @@ static Settings current(void)
 	s.vr_finger = vr_finger;
 	s.vr_near = vr_near_cm;
 	s.manual_page = manual_page();
+	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
 }
 
@@ -185,6 +206,7 @@ static void apply(const Settings *s)
 		vr_near_cm = s->vr_near;
 	if (s->manual_page != manual_page())
 		manual_set_page(s->manual_page);
+	memcpy(screen_place, s->screen_place, sizeof screen_place);
 }
 
 void settings_load(void)

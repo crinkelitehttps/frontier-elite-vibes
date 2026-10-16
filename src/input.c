@@ -30,6 +30,8 @@ static struct
 	bool active, hit;
 	float x, y;
 	int buttons, pressed; /* held, and pressed since the last poll */
+	bool drag, drag_pressed; /* the right button: held, pressed since the last poll */
+	float drag_x, drag_y;    /* its motion not yet polled */
 } laser;
 /* The laser, rather than the mouse, has the pointer: since it last moved
  * (LASER_TAKE screen pixels) or clicked, until the mouse moves */
@@ -89,6 +91,16 @@ void Input_SetLaser(bool active, bool hit, float x, float y, int buttons)
 	SDL_AtomicUnlock(&laser_lock);
 }
 
+void Input_SetDrag(bool held, float dx, float dy)
+{
+	SDL_AtomicLock(&laser_lock);
+	laser.drag_pressed |= held && !laser.drag;
+	laser.drag = held;
+	laser.drag_x += dx;
+	laser.drag_y += dy;
+	SDL_AtomicUnlock(&laser_lock);
+}
+
 bool Input_LaserPointer(int *x, int *y)
 {
 	SDL_AtomicLock(&laser_lock);
@@ -106,14 +118,21 @@ void Input_MouseMoved(void)
 	SDL_AtomicUnlock(&laser_lock);
 }
 
-/* Main thread, at each poll: the laser's buttons for the game */
-static int take_laser(void)
+/* Main thread, at each poll: the laser's buttons for the game, and a
+ * drag's motion */
+static int take_laser(int *mx, int *my)
 {
 	SDL_AtomicLock(&laser_lock);
 	bool active = laser.active;
 	float x = laser.x, y = laser.y;
 	int pressed = laser.pressed, buttons = laser.buttons | pressed;
 	laser.pressed = 0;
+	int drag = (laser.drag || laser.drag_pressed) ? 0x1 : 0;
+	laser.drag_pressed = false;
+	*mx = (int)laser.drag_x;
+	*my = (int)laser.drag_y;
+	laser.drag_x -= (float)*mx; /* the fractions kept for the next poll */
+	laser.drag_y -= (float)*my;
 	if (!active)
 		laser_owns = false;
 	else if (pressed || fabsf(x - laser_x) >= LASER_TAKE || fabsf(y - laser_y) >= LASER_TAKE)
@@ -135,7 +154,7 @@ static int take_laser(void)
 		laser_x = x;
 		laser_y = y;
 	}
-	return buttons;
+	return buttons | drag;
 }
 
 /* Host call: fills the game's mouse structures (big endian words)
@@ -146,14 +165,15 @@ void Call_GetMouseInput(void)
 	unsigned long params = GetReg(REG_A7) - SIZE_WORD;
 	short *mouse_mov = (short *)(STRam + STMemory_ReadLong(params + SIZE_WORD));
 	short *mouse_abs = (short *)(STRam + STMemory_ReadLong(params + SIZE_WORD + SIZE_LONG));
-	int laser_btn = take_laser();
+	int drag_x, drag_y;
+	int laser_btn = take_laser(&drag_x, &drag_y);
 
 	/* SDL occasionally reports a huge jump (e.g. when grabbing the mouse) */
 	if (abs(input.motion_x) > 100 || abs(input.motion_y) > 100)
 		input.motion_x = input.motion_y = 0;
 
-	mouse_mov[0] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[0]) + input.motion_x);
-	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y);
+	mouse_mov[0] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[0]) + input.motion_x + drag_x);
+	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y + drag_y);
 	mouse_mov[2] = SDL_SwapBE16(0xf8 | input.cur_mousebut_state | laser_btn);
 
 	/* window pixels -> game screen (letterboxed game area, or the cockpit),
