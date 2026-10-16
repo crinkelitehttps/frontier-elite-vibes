@@ -975,6 +975,7 @@ void Call_CockpitPass(void)
 	{
 		pass_step = 0;
 		n_pass_order = 0;
+		camera_note_shots();
 		if (game_active && scene_active())
 			choose_passes();
 		/* the game draws some things differently for the passes
@@ -1322,7 +1323,7 @@ bool cockpit_camera_clicked(int wx, int wy)
 	eye_to_view_of(&sv.head_view, e, d);
 	if (!ray_hits_quad((const float(*)[3])cam, sv.eye, d, &u, &v, &dist))
 		return false;
-	camera_next();
+	camera_tap(u, v);
 	return true;
 }
 
@@ -1337,15 +1338,15 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
 	return ray_to_screen(o, d, cam_on, sx, sy, dist);
 }
 
-bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist)
+bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist, float *u, float *v)
 {
 	if (!active || !cam_on)
 		return false;
 	mat4 look = look_rotation();
-	float o[3], d[3], u, v;
+	float o[3], d[3];
 	eye_to_view_of(&look, origin, o);
 	eye_to_view_of(&look, dir, d);
-	return ray_hits_quad((const float(*)[3])cam, o, d, &u, &v, dist);
+	return ray_hits_quad((const float(*)[3])cam, o, d, u, v, dist);
 }
 
 void cockpit_play_to_view(const float v[3], float out[3])

@@ -39,7 +39,7 @@ typedef enum
 	TRIGGER_OFF,
 	TRIGGER_CLICK,
 	TRIGGER_PAD,
-	TRIGGER_CAMERA /* on the camera screen: its next direction */
+	TRIGGER_CAMERA /* on the camera screen: camera_tap */
 } TriggerUse;
 
 static Beam beams[2];
@@ -140,6 +140,7 @@ void laser_update(bool cockpit)
 	VrHand hands[2];
 	bool connected = false, active = false;
 	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_camera[2] = {false, false};
+	float cam_u[2] = {0, 0}, cam_v[2] = {0, 0};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
 		connected = vr_controller(i, &hands[i]) || connected;
@@ -172,7 +173,7 @@ void laser_update(bool cockpit)
 						 : ray_to_virtual_screen(h->pos, h->dir, &hx[i], &hy[i], &dist);
 		b->hit_near = hit[i] && dist > 0.0f;
 		float cam_dist;
-		on_camera[i] = cockpit && cockpit_ray_hits_camera(h->pos, h->dir, &cam_dist);
+		on_camera[i] = cockpit && cockpit_ray_hits_camera(h->pos, h->dir, &cam_dist, &cam_u[i], &cam_v[i]);
 		if (on_camera[i])
 		{
 			b->hit_near = true;
@@ -199,7 +200,7 @@ void laser_update(bool cockpit)
 		{
 			trigger_use[i] = on_camera[i] ? TRIGGER_CAMERA : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
 			if (on_camera[i])
-				camera_next();
+				camera_tap(cam_u[i], cam_v[i]);
 			if (clickable[i])
 				current = i;
 		}

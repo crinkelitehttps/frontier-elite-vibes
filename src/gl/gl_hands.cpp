@@ -51,7 +51,7 @@ struct Surface
 
 /* The surfaces a hand can touch: the panel or the virtual screen, and in
  * the cockpit the plane of the view (or of the menu over it) and the
- * camera screen (gl_camera.h: a press there is its next direction, not a
+ * camera screen (gl_camera.h: a press there is camera_tap, not a
  * click) */
 enum
 {
@@ -275,7 +275,7 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
 		if (t.pressed && h.on_camera)
-			camera_next();
+			camera_tap(mirrored[pick] ? 1 - t.u : t.u, t.v);
 		if (t.is_near)
 		{
 			const Surface &s = surfs[pick];

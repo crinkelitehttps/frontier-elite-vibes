@@ -198,10 +198,10 @@ bool cockpit_camera_play(float corners[4][3]);
 /* Places the screens again, after one was moved (gl_screen_place.h) */
 void cockpit_place_screens(void);
 /* A ray in the play space, as cockpit_ray_to_screen: does it hit the
- * camera screen, and how far along `dir` */
-bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist);
+ * camera screen, how far along `dir`, and where on it (camera_tap's u, v) */
+bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist, float *u, float *v);
 /* Main thread, a mouse click at window pixel (wx, wy): if it is on the
- * camera screen, on to its next direction, and true */
+ * camera screen, a tap there (camera_tap), and true */
 bool cockpit_camera_clicked(int wx, int wy);
 /* With a headset's hands (gl_hands.h), as the cockpit is being drawn: a
  * menu over the flight view (the comms menu) is drawn on the virtual

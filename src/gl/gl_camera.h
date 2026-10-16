@@ -19,8 +19,15 @@
  *   colour. It
  *   does not depend on the head or on the cockpit's own view.
  *
+ *   The flight view's drawing clears the shots it shows (lasers, hits:
+ *   object byte +285), so the batch puts back what the frame had first
+ *   (camera_note_shots). The native scene's far hook (Nu_NativeFar, every
+ *   object before the cull) says no too, but notes where each thing the
+ *   flight view lets you click on is in the picture, and how big.
+ *
  *   gl_cockpit.c shows it on a screen beside the cockpit's screen; a tap
- *   on it (mouse, laser, hand) goes to the next direction.
+ *   on it (mouse, laser, hand) on a thing makes that the target, else goes
+ *   to the next direction.
  */
 #ifndef GL_CAMERA_H
 #define GL_CAMERA_H
@@ -50,8 +57,18 @@ void camera_shutdown(void);
  * has the last flight frame's colours) */
 void camera_capture(bool screen);
 
-/* Any thread: on to the next direction */
-void camera_next(void);
+/* Any thread: a tap on the picture at (u, v) (0..1, from its top left):
+ * on a planet, a ship, a station, cargo..., that becomes the target, as
+ * clicking it in the flight view does; else on to the next direction */
+void camera_tap(float u, float v);
+
+/* Game thread, as the flight view starts drawing its objects
+ * (Call_CockpitPass): notes the shots they are to show, which the drawing
+ * clears, for the picture drawn after it */
+void camera_note_shots(void);
+/* Game thread, under the cockpit's screen after the world round it was
+ * drawn: the shots cleared as the flight view's drawing would */
+void camera_shots_drawn(void);
 
 /* Whoever draws: the latest picture's texture (top row first), 0 while
  * there is none */

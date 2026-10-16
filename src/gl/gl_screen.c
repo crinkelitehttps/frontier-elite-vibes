@@ -904,7 +904,8 @@ static void publish_frame(void)
 	/* the world round the cockpit's screen, live, with its labels */
 	if (scr_pub.sub)
 		pace_screen_frames();
-	if (scr_pub.sub && cockpit_capture_world())
+	bool world = scr_pub.sub && cockpit_capture_world();
+	if (world)
 	{
 		SDL_LockMutex(frame_lock);
 		scene_publish_world();
@@ -917,6 +918,8 @@ static void publish_frame(void)
 	/* the camera screen's picture, the game's own (gl_camera.h) */
 	if (scr_pub.cockpit || scr_pub.sub)
 		camera_capture(scr_pub.sub);
+	if (world)
+		camera_shots_drawn();
 	hud_frame_end();
 	SDL_AtomicIncRef(&published);
 }
