@@ -27,7 +27,7 @@
 #include <memory>
 #include <vector>
 
-#include "vibe/manual.h"
+#include "vibe/cockpit_clipboard.h"
 
 extern "C"
 {
@@ -39,7 +39,6 @@ extern const char *manual_arg;
 /* Main thread, once the bindings and settings are loaded: makes the
  * controls pages, opens the PDF and asks for the page being read */
 void manual_init(void);
-void manual_shutdown(void);
 
 /* Pages: controls, then the PDF's */
 int manual_pages(void);
@@ -53,11 +52,9 @@ void manual_turn(int n);
 #ifdef __cplusplus
 }
 
-/* A page's clipboard image (vibe::kClipboardW x kClipboardH, 0xAARRGGBB,
- * top row first) */
-using ManualImage = vibe::Manual::Image;
-/* The image of `page`, if it is ready (any thread) */
-std::shared_ptr<const ManualImage> manual_image(int page);
+/* The clipboard: the board, its pages and the page being read
+ * (gl_clipboard.cpp moves and draws it) */
+vibe::Clipboard &clipboard();
 #endif
 
 #endif /* MANUAL_H */

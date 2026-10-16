@@ -1,11 +1,9 @@
 /*
- * manual.cpp - see manual.h. The pages, their rendering and the worker
- * thread are vibe-lib's (vibe/manual.h); this builds the controls pages
- * from the bindings and opens the PDF.
+ * manual.cpp - see manual.h. The pages, their rendering, the page being
+ * read and the worker thread are vibe-lib's (vibe/cockpit_clipboard.h);
+ * this builds the controls pages from the bindings and opens the PDF.
  */
 #include <algorithm>
-#include <atomic>
-#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -41,68 +39,7 @@ vibe::Font make_font()
 	return f;
 }
 
-/* The manual is a scan of two-page spreads: each wide page is shown a half
- * at a time (0 left, 1 right) so its text is bigger. Wraps a PDF so that
- * its pages are those halves (and the whole of the narrow ones). */
-class SpreadPdf : public vibe::PdfDocument
-{
-  public:
-	explicit SpreadPdf(std::unique_ptr<vibe::PdfDocument> doc) : doc_(std::move(doc))
-	{
-		for (int i = 0; i < doc_->pages(); i++)
-		{
-			double w = 0, h = 0;
-			if (doc_->page_size(i, &w, &h) && w > h * 1.2)
-			{
-				parts_.push_back({i, 0});
-				parts_.push_back({i, 1});
-				spreads_++;
-			}
-			else
-				parts_.push_back({i, -1});
-		}
-	}
-	int pages() const override { return int(parts_.size()); }
-	int document_pages() const { return doc_->pages(); }
-	int spreads() const { return spreads_; }
-
-	bool page_size(int index, double *w, double *h) override
-	{
-		const Part p = parts_[size_t(index)];
-		if (!doc_->page_size(p.page, w, h))
-			return false;
-		if (p.half >= 0)
-			*w /= 2;
-		return true;
-	}
-
-	bool render(int index, double dpi, int x, int y, int w, int h, std::vector<uint32_t> *out, int *out_w,
-				int *out_h) override
-	{
-		const Part p = parts_[size_t(index)];
-		if (p.half < 0)
-			return doc_->render(p.page, dpi, x, y, w, h, out, out_w, out_h);
-		double pw = 0, ph = 0;
-		if (!doc_->page_size(p.page, &pw, &ph))
-			return false;
-		const int half_px = int(std::lround(pw * dpi / 72 / 2));
-		if (w <= 0)
-			x = 0, y = 0, w = half_px, h = int(std::ceil(ph * dpi / 72));
-		return doc_->render(p.page, dpi, x + (p.half ? half_px : 0), y, w, h, out, out_w, out_h);
-	}
-
-  private:
-	struct Part
-	{
-		int page, half;
-	};
-	std::unique_ptr<vibe::PdfDocument> doc_;
-	std::vector<Part> parts_;
-	int spreads_ = 0;
-};
-
-vibe::Manual *manual;
-std::atomic<int> page{0};
+vibe::Clipboard board;
 
 bool open_pdf(const std::string &path)
 {
@@ -113,10 +50,12 @@ bool open_pdf(const std::string &path)
 		log_printf("Manual: can't read %s\n", path.c_str());
 		return false;
 	}
-	auto spread = std::make_unique<SpreadPdf>(std::move(doc));
-	log_printf("Manual: %s (%d pages, %d of them two-page spreads, shown a half at a time)\n", path.c_str(),
-			   spread->document_pages(), spread->spreads());
-	manual->set_pdf(std::move(spread));
+	/* a scan of two-page spreads: each shown a half at a time */
+	const int pages = doc->pages();
+	int spreads = 0;
+	board.manual.set_pdf(vibe::split_spreads(std::move(doc), &spreads));
+	log_printf("Manual: %s (%d pages, %d of them two-page spreads, shown a half at a time)\n", path.c_str(), pages,
+			   spreads);
 	return true;
 #else
 	log_printf("Manual: this build can't read PDFs (no poppler-cpp): %s left out\n", path.c_str());
@@ -200,71 +139,48 @@ vibe::Section keyboard_section()
 
 } /* namespace */
 
+vibe::Clipboard &clipboard()
+{
+	return board;
+}
+
 void manual_init(void)
 {
-	if (manual)
+	if (board.started())
 		return;
-	manual = new vibe::Manual;
-	std::atexit(manual_shutdown); /* stops the page thread */
-	manual->set_font(make_font());
+	vibe::Manual &manual = board.manual;
+	manual.set_font(make_font());
 	/* the device in use first */
 	for (int k = 0; k < 2; k++)
-		manual->add_section(device_section(vr_enabled ? k == 0 : k == 1));
-	manual->add_section(keyboard_section());
+		manual.add_section(device_section(vr_enabled ? k == 0 : k == 1));
+	manual.add_section(keyboard_section());
 	std::string pdf = vibe::find_pdf(manual_arg ? manual_arg : "", {"."});
 	if (!pdf.empty())
 		open_pdf(pdf);
 	else
 		log_printf("Manual: no PDF (put one in the game folder, or --manual FILE): controls pages only\n");
-	manual_set_page(page);
-}
-
-void manual_shutdown(void)
-{
-	delete manual;
-	manual = nullptr;
+#if defined(__EMSCRIPTEN__) /* no threads: drawing renders the page */
+	board.render_here = true;
+#endif
+	board.start();
 }
 
 int manual_pages(void)
 {
-	return manual ? manual->pages() : 0;
+	return board.pages();
 }
 
 int manual_page(void)
 {
-	return page;
+	return board.page();
 }
 
 void manual_set_page(int p)
 {
-	if (!manual)
-	{
-		page = std::max(p, 0);
-		return;
-	}
-	p = std::clamp(p, 0, std::max(manual->pages() - 1, 0));
-	page = p;
-#if !defined(__EMSCRIPTEN__) /* (no threads there: manual_image renders it) */
-	manual->request(p);
-#endif
+	board.set_page(p);
 }
 
 void manual_turn(int n)
 {
-	if (manual && n)
-		manual_set_page(page + n);
-}
-
-std::shared_ptr<const ManualImage> manual_image(int p)
-{
-	if (!manual)
-		return nullptr;
-#if defined(__EMSCRIPTEN__)
-	static std::shared_ptr<const ManualImage> last;
-	if (!last || last->page != p)
-		last = manual->render(p);
-	return last;
-#else
-	return manual->get(p);
-#endif
+	board.turn(n);
 }

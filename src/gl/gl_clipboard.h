@@ -17,8 +17,10 @@
  *   within 15 cm of its stowed place or beside the seat with no part of it
  *   above the control panel's lowest edge. That grip is the board's until it is
  *   released: the bindings (the virtual pad) and the two-grip distance
- *   gesture don't see it. A hand at or holding the board doesn't touch the
- *   panel.
+ *   gesture don't see it. While one hand holds it, the other hand's
+ *   fingertip stroked across its face turns the page (right to left: the
+ *   next; one page a stroke). A hand at, holding or swiping the board
+ *   doesn't touch the panel.
  *
  *   While it is out of its place (held, left somewhere, or reading) the
  *   `manual` binding layer and the page keys act, and pictures that are
@@ -50,8 +52,8 @@ bool clipboard_out(void);
 /* Drawing thread, per headset frame before the hands (gl_laser.c), with
  * the controllers as read (play space): grabs and carries the board.
  * `grab`: hands can grab it this frame (the cockpit, with hands). Clears
- * the squeeze of a grip the board has taken; board[i]: hand i is at the
- * board (1) or holds it (2), else 0. */
+ * the squeeze of a grip the board has taken; swipes turn the page;
+ * board[i]: hand i is at the board (1) or holds or swipes it (2), else 0. */
 void clipboard_hands(VrHand hands[2], bool grab, int board[2]);
 
 /* Queues the board in the cockpit, through `view_to_clip`, seen from

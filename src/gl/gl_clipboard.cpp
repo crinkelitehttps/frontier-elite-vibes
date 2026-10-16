@@ -1,10 +1,9 @@
 /*
- * gl_clipboard.cpp - see gl_clipboard.h. Where the board is, and grabbing
- * it, are vibe-lib's (vibe/clipboard.h); this converts to and from the
- * cockpit's frame, and draws it.
+ * gl_clipboard.cpp - see gl_clipboard.h. Where the board is, grabbing it
+ * and its pages are vibe-lib's (vibe/cockpit_clipboard.h, kept in
+ * manual.cpp); this converts to and from the cockpit's frame, and draws it.
  */
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <memory>
@@ -32,9 +31,6 @@ namespace
 
 using vibe::Board;
 
-/* The board's state (drawing thread) */
-vibe::ClipboardHolder state;
-
 /* Nanoseconds on the performance counter */
 uint64_t now_ns()
 {
@@ -42,23 +38,18 @@ uint64_t now_ns()
 	return t / f * 1000000000ull + t % f * 1000000000ull / f;
 }
 
-std::atomic<int> toggles{0};
-std::atomic<bool> out_now{false};
-
-/* Pending toggles, then publishes whether it is out */
+/* Pending toggles */
 uint64_t step()
 {
 	const uint64_t now = now_ns();
-	for (int n = toggles.exchange(0); n > 0; n--)
-		state.toggle(now);
-	out_now = state.out();
+	clipboard().step(now);
 	return now;
 }
 
 /* ---- the texture ---------------------------------------------------------- */
 GLuint prog, vao, vbo, tex;
 GLint u_tex;
-int tex_page = -1;
+bool have_page = false; /* a page is in the texture */
 
 const char *VS = "in vec4 aPos;\n"
 				 "in vec2 aUV;\n"
@@ -112,19 +103,17 @@ bool ready()
 			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, 8.0f);
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
-	const int want = manual_page();
-	if (want != tex_page)
-		if (std::shared_ptr<const ManualImage> img = manual_image(want))
-		{
-			glBindTexture(GL_TEXTURE_2D, tex);
-			glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, vibe::kClipboardW, vibe::kClipboardH, 0, GL_RGBA,
-						 GL_UNSIGNED_BYTE, img->argb.data());
-			glGenerateMipmap(GL_TEXTURE_2D);
-			glBindTexture(GL_TEXTURE_2D, 0);
-			tex_page = want;
-		}
-	return tex_page >= 0;
+	if (std::shared_ptr<const vibe::Manual::Image> img = clipboard().fresh_image())
+	{
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, vibe::kClipboardW, vibe::kClipboardH, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+					 img->argb.data());
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		have_page = true;
+	}
+	return have_page;
 }
 
 /* Clip space corners (top left, top right, bottom right, bottom left) and
@@ -166,17 +155,18 @@ vibe::Vec3 from_view(const float v[3], float scale)
 
 void clipboard_toggle(void)
 {
-	toggles++;
+	clipboard().toggle();
 }
 
 bool clipboard_out(void)
 {
-	return out_now;
+	return clipboard().out();
 }
 
 void clipboard_hands(VrHand hands[2], bool grab, int board[2])
 {
-	const uint64_t now = step();
+	const uint64_t now = now_ns();
+	vibe::Clipboard &clip = clipboard();
 	vibe::ClipboardHolder::Hand h[2];
 	const float reach = float(vr_reach) / 100.0f;
 	for (int i = 0; i < 2; i++)
@@ -196,13 +186,14 @@ void clipboard_hands(VrHand hands[2], bool grab, int board[2])
 		h[i].up = from_view(v, 1.0f);
 	}
 	/* let go beside the seat below the panel: stowed */
-	state.stow_below = cockpit_panel_bottom() * 100.0f;
+	clip.holder.stow_below = cockpit_panel_bottom() * 100.0f;
+	/* (a swipe across the held board turns the page in there) */
 	vibe::ClipboardHolder::HandState st[2];
-	state.update(now, h, st);
-	out_now = state.out();
+	clip.update(now, h, st);
 	for (int i = 0; i < 2; i++)
 	{
-		board[i] = st[i].holding ? 2 : st[i].in_reach ? 1 : 0;
+		/* holding it, or the fingertip on it: the hand touches nothing else */
+		board[i] = st[i].holding || st[i].on_board ? 2 : st[i].in_reach ? 1 : 0;
 		if (st[i].take_grip)
 			hands[i].squeeze = false;
 		if (st[i].pulse)
@@ -215,10 +206,10 @@ void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3])
 	const uint64_t now = step();
 	if (!ready())
 		return;
-	const Board b = state.pose(now);
+	const Board b = clipboard().pose(now);
 	const bool back = vibe::back_facing(b, from_view(eye, 100.0f));
 	float c[4][5];
-	vibe::corners(b, state.width, c);
+	vibe::corners(b, clipboard().holder.width, c);
 	Quad *q = (Quad *)gd_custom(quad_pass, sizeof(Quad));
 	if (!q)
 		return;
@@ -236,7 +227,7 @@ void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3])
 void clipboard_queue_flat(int w, int h)
 {
 	step();
-	if (!state.out() || w <= 0 || h <= 0 || !ready())
+	if (!clipboard().out() || w <= 0 || h <= 0 || !ready())
 		return;
 	float hw, hh;
 	vibe::flat_extent(w, h, &hw, &hh);
@@ -264,5 +255,6 @@ void clipboard_shutdown(void)
 	glDeleteVertexArrays(1, &vao);
 	glDeleteProgram(prog);
 	prog = vao = vbo = tex = 0;
-	tex_page = -1;
+	have_page = false;
+	clipboard().image_lost();
 }
