@@ -38,6 +38,7 @@ static struct
 static bool laser_owns;
 static float laser_x, laser_y; /* as the game last had it */
 static int laser_swallowed;    /* held buttons whose press went elsewhere */
+static SDL_atomic_t key_tap;   /* Input_TapSTKey's, 0: none */
 #define LASER_TAKE 3.0f
 
 void Input_PadPointerBegin(void)
@@ -146,6 +147,12 @@ static int take_laser(int *mx, int *my)
 		Input_PressSTKey(0x3c, FALSE);
 		laser_swallowed |= 0x2;
 	}
+	int tap = SDL_AtomicSet(&key_tap, 0);
+	if (tap)
+	{
+		Input_PressSTKey((unsigned char)tap, TRUE);
+		Input_PressSTKey((unsigned char)tap, FALSE);
+	}
 	laser_swallowed &= buttons;
 	buttons &= ~laser_swallowed;
 
@@ -212,6 +219,11 @@ void Call_GetKeyboardEvent(void)
 	{
 		SetReg(REG_D0, 0);
 	}
+}
+
+void Input_TapSTKey(unsigned char scancode)
+{
+	SDL_AtomicSet(&key_tap, scancode);
 }
 
 void Input_PressSTKey(unsigned char scancode, BOOL press)

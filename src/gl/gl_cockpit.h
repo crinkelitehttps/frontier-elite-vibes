@@ -31,11 +31,17 @@
  *   camera is off; everything else keeps the classic letterboxed layout,
  *   except the game's other screens (maps, the station's, the ship's,
  *   options) with the native scene (gl_native.h) and cockpit_screen on:
- *   the cockpit stays, with the world as the last cockpit frame left it,
+ *   the cockpit stays, with the world live round it (cockpit_capture_world),
  *   and the screen's picture (drawn the classic way into a texture,
  *   gl_screen.c) is on a screen in the cockpit, above the panel, its top
- *   168 rows. It is touched like the panel (mouse, lasers, hands). VR
- *   hands can move it and the camera screen anywhere (gl_screen_place.h).
+ *   168 rows. Each group of the game's screens (COCKPIT_SCREEN_*: what its
+ *   keys 2, 3 and 4 cycle through) has a screen of its own; the game only
+ *   runs one at a time, so the others show the last picture they had,
+ *   dimmed, and a tap on one is the host's: it presses that group's key,
+ *   which brings it up. The live screen is touched like the panel (mouse,
+ *   lasers, hands); on the SHIP group's, a tap on none of the game's
+ *   buttons presses its key too, which shows the next page. VR hands can
+ *   move them and the camera screen anywhere (gl_screen_place.h).
  *
  *   With a VR headset (vr.h) the head pose is the headset's, and the
  *   frame is drawn again for each eye (cockpit_use_eye: its off-centre
@@ -71,10 +77,11 @@ GLuint gl_screen_texture(void);
 /* A menu drawn over the flight view (the comms menu) takes screen rows
  * *y0 .. *y1 */
 bool gl_screen_menu_rows(int *y0, int *y1);
-/* The game's screen drawn the classic way for the cockpit's screen, this
- * picture: the 3D view and its 2D layer (rows 0..168) between texture v
- * GL_SCREEN_SUB_V0 and 1 */
-GLuint gl_screen_sub_texture(void);
+/* The game's screen drawn the classic way for the cockpit's screen of its
+ * group (COCKPIT_SCREEN_*), the last picture it had: the 3D view and its
+ * 2D layer (rows 0..168) between texture v GL_SCREEN_SUB_V0 and 1; 0 if it
+ * never had one */
+GLuint gl_screen_sub_texture(int group);
 #define GL_SCREEN_SUB_V0 (1.0f - 168.0f / 200.0f)
 /* With the cockpit's screen: the labels on things in the world round it,
  * the flight view's text layer, laid out as the emulated screen's
@@ -97,11 +104,20 @@ void cockpit_shutdown(void);
  * drawn as the cockpit (and the next one gets the turned passes) */
 bool cockpit_game_frame(void);
 /* Game thread, the same: whether the frame is one of the game's other
- * screens, for the cockpit's screen (see HOW IT WORKS) */
+ * screens, for the cockpit's screens (see HOW IT WORKS), and which
+ * group's (-1: none) */
 bool cockpit_screen_frame(void);
 /* Whether the cockpit's screens are in use at all (the group a game
  * screen would go to, though the flight view is up now) */
 bool cockpit_screens_on(void);
+enum
+{
+	COCKPIT_SCREEN_MAP,  /* the galaxy and system maps (key 2) */
+	COCKPIT_SCREEN_SHIP, /* the ship's pages (key 3) */
+	COCKPIT_SCREEN_COMS, /* the station's services (key 4), and options */
+	COCKPIT_SCREENS
+};
+int cockpit_screen_group(void);
 /* Game thread, for such a frame, once the game has drawn it (in a host
  * call): runs the game's flight view as the cockpit would have it, with
  * the game's machine put back as it was afterwards (fe2vm.h), so the
@@ -115,9 +131,9 @@ void Call_ScreenControls(void);
 
 /* Once per drawing, before it: polls the head tracker and sets up the
  * view for a frame the game drew as the cockpit (`cockpit`), or for the
- * cockpit's screen (`screen`), or neither. Returns whether it is the
- * cockpit. */
-bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, bool screen);
+ * cockpit's screens with group `screen` live (COCKPIT_SCREEN_*), or
+ * neither (-1). Returns whether it is the cockpit. */
+bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen);
 /* Draws what follows as not the cockpit (the cockpit's screen's picture),
  * until called with false */
 void cockpit_draw_flat(bool flat);
@@ -193,19 +209,35 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
  * shows screen rows COCKPIT_PANEL_ROW0 .. GL_SCREEN_H */
 #define COCKPIT_PANEL_ROW0 168
 bool cockpit_panel_play(float corners[4][3]);
-/* The same for the cockpit's screen while it is shown (screen rows
+/* The same for the cockpit's live screen while it is shown (screen rows
  * 0 .. COCKPIT_PANEL_ROW0) */
 bool cockpit_screen_play(float corners[4][3]);
 /* The camera screen (gl_camera.h) while it is shown, the same way */
 bool cockpit_camera_play(float corners[4][3]);
+/* The same for screen `place` of gl_screen_place.h (PLACE_*), live or not */
+bool cockpit_place_play(int place, float corners[4][3]);
+/* The screens a tap on is the host's, not the game's: the camera screen
+ * and the groups' screens that aren't live, while shown, the same way,
+ * up to COCKPIT_HOST_MAX; ids for cockpit_host_tap. Returns how many. */
+#define COCKPIT_HOST_MAX 3
+#define COCKPIT_HOST_IDS (COCKPIT_SCREENS + 1) /* ids are 0 .. this - 1 */
+int cockpit_host_screens(float corners[][4][3], int ids[], int max);
+/* A tap on host screen `id` at u, v (0..1 from its top left): the camera
+ * screen's camera_tap, or a group's key. Any thread. */
+void cockpit_host_tap(int id, float u, float v);
+/* A press on the live screen at screen pixel (sx, sy): true if it is the
+ * host's (on none of the game's buttons on a screen whose pages a tap
+ * cycles), and then done: the game is not to see it. Any thread. */
+bool cockpit_screen_press(int sx, int sy);
 /* Places the screens again, after one was moved (gl_screen_place.h) */
 void cockpit_place_screens(void);
-/* A ray in the play space, as cockpit_ray_to_screen: does it hit the
- * camera screen, how far along `dir`, and where on it (camera_tap's u, v) */
-bool cockpit_ray_hits_camera(const float origin[3], const float dir[3], float *dist, float *u, float *v);
-/* Main thread, a mouse click at window pixel (wx, wy): if it is on the
- * camera screen, a tap there (camera_tap), and true */
-bool cockpit_camera_clicked(int wx, int wy);
+/* A ray in the play space, as cockpit_ray_to_screen: does it hit a host
+ * screen (cockpit_host_screens), which (*id), how far along `dir`, and
+ * where on it (cockpit_host_tap's u, v) */
+bool cockpit_ray_hits_host(const float origin[3], const float dir[3], float *dist, float *u, float *v, int *id);
+/* Main thread, a mouse click at window pixel (wx, wy): if it is the
+ * host's (a host screen, or cockpit_screen_press), done, and true */
+bool cockpit_host_clicked(int wx, int wy);
 /* With a headset's hands (gl_hands.h), as the cockpit is being drawn: a
  * menu over the flight view (the comms menu) is drawn on the virtual
  * screen's plane instead of out in space; its screen rows. */

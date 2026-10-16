@@ -184,7 +184,7 @@ struct Carry
 };
 
 Carry carry[PLACE_COUNT];
-float aspect[PLACE_COUNT] = {0.63f, 0.63f};
+float aspect[PLACE_COUNT] = {0.63f, 0.63f, 0.63f, 0.63f};
 int grip_owner[2] = {-1, -1}; /* the screen hand i's grip holds */
 bool grip_was[2];
 std::atomic<bool> reset_wanted{false};
@@ -242,7 +242,7 @@ Vec3 turn(Vec3 a, Vec3 from, Vec3 to)
 bool shown_corners(int s, float c[4][3])
 {
 	float p[4][3];
-	if (!(s == PLACE_SCREEN ? cockpit_screen_play(p) : cockpit_camera_play(p)))
+	if (!cockpit_place_play(s, p))
 		return false;
 	for (int i = 0; i < 4; i++)
 		cockpit_play_to_view(p[i], c[i]);

@@ -22,6 +22,9 @@ extern CINPUT input;
 
 /* Queue an ST key press / release */
 void Input_PressSTKey(unsigned char scancode, BOOL press);
+/* A key pressed and let go, from any thread (the cockpit's screens): taken
+ * in at the game's next mouse poll; one at a time, the last wins */
+void Input_TapSTKey(unsigned char scancode);
 void Input_MousePress(int sdl_button);
 void Input_MouseRelease(int sdl_button);
 

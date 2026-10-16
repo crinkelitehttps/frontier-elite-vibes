@@ -13,7 +13,7 @@
  *   between them. Letting go of one hand goes back to the other holding
  *   it. Let go, it stays there, kept in glfrontier.cfg (screen_place_*,
  *   view space) for the next start; until it is first moved it has its
- *   usual place above the panel. screen_place_reset() puts both back.
+ *   usual place above the panel. screen_place_reset() puts them all back.
  *
  *   While a map (the galaxy's or the system's) is on the cockpit's
  *   screen, the left trigger is the map's: held, either hand touching the
@@ -45,8 +45,10 @@ extern "C"
 
 enum
 {
-	PLACE_SCREEN, /* the game's screens (maps, station, ship, options) */
+	PLACE_SCREEN, /* the MAP group's screen (gl_cockpit.h, COCKPIT_SCREEN_*) */
 	PLACE_CAMERA, /* the camera screen */
+	PLACE_SHIP,   /* the SHIP group's screen */
+	PLACE_COMS,   /* the COMS group's screen (and options) */
 	PLACE_COUNT
 };
 
@@ -62,7 +64,7 @@ typedef struct
 } ScreenPlace;
 extern ScreenPlace screen_place[PLACE_COUNT];
 
-/* Both screens back to their usual places (any thread) */
+/* All the screens back to their usual places (any thread) */
 void screen_place_reset(void);
 
 /* Drawing thread (gl_cockpit.c, as the cockpit is built): `c` (view

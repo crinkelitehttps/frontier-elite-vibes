@@ -39,7 +39,7 @@ typedef enum
 	TRIGGER_OFF,
 	TRIGGER_CLICK,
 	TRIGGER_PAD,
-	TRIGGER_CAMERA /* on the camera screen: camera_tap */
+	TRIGGER_HOST /* the host's (gl_cockpit.h, cockpit_host_tap): the game doesn't see it */
 } TriggerUse;
 
 static Beam beams[2];
@@ -139,8 +139,9 @@ void laser_update(bool cockpit)
 {
 	VrHand hands[2];
 	bool connected = false, active = false;
-	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_camera[2] = {false, false};
-	float cam_u[2] = {0, 0}, cam_v[2] = {0, 0};
+	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_host[2] = {false, false};
+	float host_u[2] = {0, 0}, host_v[2] = {0, 0};
+	int host_id[2] = {0, 0};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
 	for (int i = 0; i < 2; i++)
 		connected = vr_controller(i, &hands[i]) || connected;
@@ -172,12 +173,13 @@ void laser_update(bool cockpit)
 		hit[i] = cockpit ? cockpit_ray_to_screen(h->pos, h->dir, &hx[i], &hy[i], &dist)
 						 : ray_to_virtual_screen(h->pos, h->dir, &hx[i], &hy[i], &dist);
 		b->hit_near = hit[i] && dist > 0.0f;
-		float cam_dist;
-		on_camera[i] = cockpit && cockpit_ray_hits_camera(h->pos, h->dir, &cam_dist, &cam_u[i], &cam_v[i]);
-		if (on_camera[i])
+		float host_dist;
+		on_host[i] =
+			cockpit && cockpit_ray_hits_host(h->pos, h->dir, &host_dist, &host_u[i], &host_v[i], &host_id[i]);
+		if (on_host[i])
 		{
 			b->hit_near = true;
-			dist = cam_dist;
+			dist = host_dist;
 		}
 		/* on the panel or a screen; the HUD (out into space) only with the grip */
 		clickable[i] = hit[i] && (b->hit_near || h->squeeze);
@@ -198,9 +200,11 @@ void laser_update(bool cockpit)
 			trigger_use[i] = TRIGGER_OFF;
 		else if (!was)
 		{
-			trigger_use[i] = on_camera[i] ? TRIGGER_CAMERA : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
-			if (on_camera[i])
-				camera_tap(cam_u[i], cam_v[i]);
+			trigger_use[i] = on_host[i] ? TRIGGER_HOST : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
+			if (on_host[i])
+				cockpit_host_tap(host_id[i], host_u[i], host_v[i]);
+			else if (clickable[i] && cockpit_screen_press(hx[i], hy[i]))
+				trigger_use[i] = TRIGGER_HOST;
 			if (clickable[i])
 				current = i;
 		}

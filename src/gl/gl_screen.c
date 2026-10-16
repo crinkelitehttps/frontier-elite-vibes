@@ -298,7 +298,8 @@ typedef struct
 	int bgcol;
 	int renderer; /* enum RENDERERS */
 	bool cockpit;
-	bool sub; /* one of the game's other screens, for the cockpit's screen */
+	bool sub;  /* one of the game's other screens, for the cockpit's screens */
+	int group; /* ... its group's (COCKPIT_SCREEN_*), -1 if not */
 	bool mouse_shown;
 } ScreenFrame;
 static ScreenFrame scr_pub, scr_show;
@@ -781,7 +782,7 @@ static bool draw_vr(void)
 	{
 		laser_off();
 		cockpit_set_headset(NULL, NULL);
-		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub);
+		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub ? scr_show.group : -1);
 	}
 
 	bool render = vr_begin_frame();
@@ -798,7 +799,7 @@ static bool draw_vr(void)
 	{
 		cockpit_set_headset(NULL, NULL);
 	}
-	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub);
+	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub ? scr_show.group : -1);
 	laser_update(cockpit && tracked);
 
 	if (render)
@@ -880,7 +881,8 @@ static void pace_screen_frames(void)
 static void publish_frame(void)
 {
 	scr_pub.cockpit = cockpit_game_frame();
-	scr_pub.sub = !scr_pub.cockpit && cockpit_screen_frame();
+	scr_pub.group = scr_pub.cockpit ? -1 : cockpit_screen_group();
+	scr_pub.sub = scr_pub.group >= 0;
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
 	scr_pub.bgcol = fe2_bgcol;
@@ -973,40 +975,48 @@ static void log_rates(bool new_frame)
 	}
 }
 
-/* The cockpit's screen's picture (gl_cockpit.h): the game's screen drawn
+/* The cockpit's screens' pictures (gl_cockpit.h): the game's screen drawn
  * the classic way, as the window would show it without the cockpit, into
- * a texture of its own; mipmapped, as it is seen small */
+ * its group's texture; mipmapped, as it is seen small. The other groups'
+ * keep the last picture they had. */
 #define SUB_W 1280
 #define SUB_H 960
-static GLuint sub_fbo, sub_tex, sub_depth;
+static GLuint sub_fbos[COCKPIT_SCREENS], sub_texs[COCKPIT_SCREENS], sub_depth;
+static bool sub_drawn[COCKPIT_SCREENS];
 
-GLuint gl_screen_sub_texture(void)
+GLuint gl_screen_sub_texture(int group)
 {
-	return sub_tex;
+	return group >= 0 && group < COCKPIT_SCREENS && sub_drawn[group] ? sub_texs[group] : 0;
 }
 
-static void draw_sub(void)
+static void draw_sub(int group)
 {
-	if (!sub_fbo)
+	if (group < 0 || group >= COCKPIT_SCREENS)
+		return;
+	if (!sub_depth)
 	{
-		glGenTextures(1, &sub_tex);
-		glBindTexture(GL_TEXTURE_2D, sub_tex);
+		glGenRenderbuffers(1, &sub_depth);
+		glBindRenderbuffer(GL_RENDERBUFFER, sub_depth);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SUB_W, SUB_H);
+	}
+	GLuint *sub_fbo = &sub_fbos[group], *sub_tex = &sub_texs[group];
+	if (!*sub_fbo)
+	{
+		glGenTextures(1, sub_tex);
+		glBindTexture(GL_TEXTURE_2D, *sub_tex);
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SUB_W, SUB_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glGenRenderbuffers(1, &sub_depth);
-		glBindRenderbuffer(GL_RENDERBUFFER, sub_depth);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, SUB_W, SUB_H);
-		glGenFramebuffers(1, &sub_fbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, sub_fbo);
-		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sub_tex, 0);
+		glGenFramebuffers(1, sub_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, *sub_fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, *sub_tex, 0);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, sub_depth);
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 			log_printf("The cockpit's screen's framebuffer is incomplete\n");
 	}
-	glBindFramebuffer(GL_FRAMEBUFFER, sub_fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, *sub_fbo);
 	cockpit_draw_flat(true);
 	native_use_screen(true);
 	drawing_sub = true;
@@ -1015,9 +1025,10 @@ static void draw_sub(void)
 	native_use_screen(false);
 	cockpit_draw_flat(false);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glBindTexture(GL_TEXTURE_2D, sub_tex);
+	glBindTexture(GL_TEXTURE_2D, *sub_tex);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, 0);
+	sub_drawn[group] = true;
 }
 
 /* One picture: the headset's (if any), then the window's */
@@ -1025,7 +1036,7 @@ static void draw_picture(bool with_menu)
 {
 	log_rates(acquire_frame());
 	if (scr_show.sub)
-		draw_sub();
+		draw_sub(scr_show.group);
 	bool cockpit = draw_vr();
 	draw_frame(screen_w, screen_h, cockpit, true);
 	if (with_menu)
