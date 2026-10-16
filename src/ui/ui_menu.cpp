@@ -28,6 +28,7 @@ extern "C"
 #include "gamepad.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
+#include "gl/gl_hud.h"
 #include "headtrack.h"
 #include "vr.h"
 }
@@ -206,6 +207,9 @@ void page_settings()
 	{
 		Screen_SetLetterboxMode(!keep_aspect);
 	}
+
+	ui_heading("HUD");
+	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);
 
 	ui_heading("Cockpit view (Ctrl-K)");
 	wrapped_checkbox("3D cockpit in the front view", &cockpit_enabled);

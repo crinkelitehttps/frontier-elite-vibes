@@ -325,6 +325,8 @@
 #define FE2_Lnative_culled                           0x8325e /* Lnative_culled */
 #define FE2_Lnative_text                             0x83260 /* Lnative_text */
 #define FE2_Lscreen_controls                         0x8327a /* Lscreen_controls */
+#define FE2_Lhud_cross                               0x83298 /* Lhud_cross */
+#define FE2_Lhud_velocity                            0x832b0 /* Lhud_velocity */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

@@ -590,6 +590,13 @@ mat4 cockpit_headset_projection(const VrView *v)
 	return mat4_mul(&l, &vt);
 }
 
+mat4 cockpit_direction_projection(void)
+{
+	if (!active)
+		return mat4_perspective(CLASSIC_FOV, CLASSIC_ASPECT, WORLD_NEAR, WORLD_FAR);
+	return world_rotation_projection();
+}
+
 mat4 cockpit_view_pixel_projection(void)
 {
 	if (!active)

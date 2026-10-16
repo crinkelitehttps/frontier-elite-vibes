@@ -144,6 +144,10 @@ mat4 cockpit_headset_projection(const VrView *v);
 /* Projection for 2D drawing in view pixels (x 0..320, y 0..168 down, z 0),
  * cockpit or not, to be used with the GD_VP_VIEW3D viewport */
 mat4 cockpit_view_pixel_projection(void);
+/* Projection for view space directions at infinity (x right, y up, -z
+ * ahead; put them inside the world's near/far, 1 .. 1e10): the cockpit's
+ * world without the eye's offset, or the classic 3D view's */
+mat4 cockpit_direction_projection(void);
 
 /* Queues the HUD plane and the panel */
 void cockpit_draw(void);

@@ -29,6 +29,7 @@
 #include "gl_cockpit.h"
 #include "gl_native.h"
 #include "gl_draw.h"
+#include "gl_hud.h"
 #include "gl_laser.h"
 #include "gl_overlay.h"
 #include "gl_planet.h"
@@ -667,6 +668,9 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gl_prims_finish();
 	native_draw();
 	gd_set_wireframe(false);
+	/* our crosshair and velocity marker (gl_hud.h), on the world */
+	mat4 dirs = cockpit_direction_projection();
+	hud_draw(&dirs);
 
 	/* 2. emulated screen */
 	if (cockpit)
@@ -833,6 +837,7 @@ static void publish_frame(void)
 	SDL_LockMutex(frame_lock);
 	memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
 	scene_publish(scr_pub.sub);
+	hud_publish(scr_pub.sub);
 	frame_new = true;
 	SDL_UnlockMutex(frame_lock);
 
@@ -848,6 +853,7 @@ static void publish_frame(void)
 	/* the camera screen's picture, the game's own (gl_camera.h) */
 	if (scr_pub.cockpit || scr_pub.sub)
 		camera_capture();
+	hud_frame_end();
 	SDL_AtomicIncRef(&published);
 }
 
@@ -862,6 +868,7 @@ static bool acquire_frame(void)
 		if (scr_show.cockpit)
 			world_bg = scr_show.main_rgb[scr_show.bgcol & 0xff];
 		scene_acquire(scr_show.sub);
+		hud_acquire();
 		frame_new = false;
 	}
 	SDL_UnlockMutex(frame_lock);

@@ -17,6 +17,7 @@
 #include "freecam.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
+#include "gl/gl_hud.h"
 #include "main.h"
 #include "manual.h"
 #include "mods.h"
@@ -40,6 +41,7 @@ typedef struct
 	int cockpit;
 	int cockpit_screen;
 	int cockpit_fov;
+	int own_hud;
 	int headtrack;
 	int headtrack_port;
 	int vr;
@@ -70,6 +72,7 @@ static const struct
 	{"cockpit", offsetof(Settings, cockpit)},
 	{"cockpit_screen", offsetof(Settings, cockpit_screen)},
 	{"cockpit_fov", offsetof(Settings, cockpit_fov)},
+	{"own_hud", offsetof(Settings, own_hud)},
 	{"headtrack", offsetof(Settings, headtrack)},
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
 	{"vr", offsetof(Settings, vr)},
@@ -122,6 +125,7 @@ static Settings current(void)
 	s.cockpit = cockpit_enabled;
 	s.cockpit_screen = cockpit_screen;
 	s.cockpit_fov = cockpit_fov;
+	s.own_hud = own_hud;
 	s.headtrack = headtrack_enabled;
 	s.headtrack_port = headtrack_port;
 	s.vr = settings_vr_arg >= 0 ? file_vr : vr_enabled;
@@ -157,6 +161,7 @@ static void apply(const Settings *s)
 	cockpit_screen = s->cockpit_screen != 0;
 	if (s->cockpit_fov >= 30 && s->cockpit_fov <= 120)
 		cockpit_fov = s->cockpit_fov;
+	own_hud = s->own_hud != 0;
 	headtrack_enabled = s->headtrack != 0;
 	if (s->headtrack_port > 0 && s->headtrack_port < 65536)
 		headtrack_port = s->headtrack_port;

@@ -82,6 +82,9 @@ Nu_NativeFar		equ	$83
 Nu_NativeText		equ	$84
 * Cockpit screen: flight controls under a game screen (src/gl/gl_cockpit.c)
 Call_ScreenControls	equ	$85
+* Own HUD: the host draws the crosshair and velocity marker (src/gl/gl_hud.c)
+Call_HudCross		equ	$86
+Call_HudVelocity	equ	$87
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -42829,7 +42832,8 @@ L63bdc:
 	l63cc8:	rts
 
 L63cca:
-		movem.w	L63d4e(pc),d0-3/a0
+		jmp	Lhud_cross
+	lhud_cross_back:
 		jsr	A5_DrawLine(a5)
 		movem.w	L63d58(pc),d0-3/a0
 		jsr	A5_DrawLine(a5)
@@ -42839,8 +42843,9 @@ L63cca:
 		jmp	A5_DrawLine(a5)
 
 L63cf2_DrawPlayerVelocityVector:
-		movem.w	d0-1,-(a7)
-		subi.w	#$e,d0
+		jmp	Lhud_velocity
+		nop
+	lhud_velocity_back:
 		bmi.s	l63d36
 		subi.w	#$e,d1
 		bmi.s	l63d36
@@ -66646,4 +66651,33 @@ Lscreen_controls:
 		addq.l	#4,a7
 		jmp	l62752
 lscreen_controls_on:
+		rts
+
+******************************************************************************
+* Own HUD: the host may draw the crosshair and the velocity marker itself
+* (src/gl/gl_hud.c), sharp and at their true directions; d0 = 1 from its
+* call skips the game's. The crosshair: in place of the first
+* "movem.w L63d4e(pc),d0-3/a0" of L63cca. The velocity marker: in place of
+* "movem.w d0-1,-(a7) / subi.w #$e,d0" at the start of
+* L63cf2_DrawPlayerVelocityVector (d0/d1 = its screen position).
+******************************************************************************
+Lhud_cross:
+		hcall	#Call_HudCross
+		tst.w	d0
+		bne.s	lhud_cross_own
+		movem.w	L63d4e,d0-3/a0
+		jmp	lhud_cross_back
+lhud_cross_own:
+		rts
+
+Lhud_velocity:
+		move.l	d0,-(a7)
+		hcall	#Call_HudVelocity
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	lhud_velocity_own
+		movem.w	d0-1,-(a7)
+		subi.w	#$e,d0
+		jmp	lhud_velocity_back
+lhud_velocity_own:
 		rts

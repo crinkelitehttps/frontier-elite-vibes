@@ -36,7 +36,7 @@ Rules (the header of `fe2/fe2_modded.s` has the full version):
 - Comments are whole lines starting with `*`.
 - Careful with sed on asm: an identical instruction may exist elsewhere.
 - Host C finds game addresses only via `FE2_*` from `fe2*_labels.h`.
-- `hcall #N` calls `hcalls[N]` in `src/hostcall.c` (C reads 68k regs with `GetReg`/`SetReg`, RAM with `rdbyte` etc.). Used numbers: `$60+` = `Nu_*` draw calls, `$7a-$7d,$7f-$80` cockpit, `$7e` strafing, `$81-$83` native scene. Add new ones as an `equ` in the .s, an entry in `hcalls[]`, and the C function.
+- `hcall #N` calls `hcalls[N]` in `src/hostcall.c` (C reads 68k regs with `GetReg`/`SetReg`, RAM with `rdbyte` etc.). Used numbers: `$60+` = `Nu_*` draw calls, `$7a-$7d,$7f-$80` cockpit, `$7e` strafing, `$81-$84` native scene, `$85` cockpit screen controls, `$86-$87` own HUD (`gl_hud.c`). Add new ones as an `equ` in the .s, an entry in `hcalls[]`, and the C function.
 
 ## Architecture
 

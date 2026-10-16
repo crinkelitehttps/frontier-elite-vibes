@@ -179,6 +179,8 @@ static void batch_hcalls(void)
 	hcalls[0x82] = cam_no; /* Nu_NativeCulled */
 	hcalls[0x83] = cam_no; /* Nu_NativeFar */
 	hcalls[0x85] = cam_no; /* Call_ScreenControls */
+	hcalls[0x86] = cam_no; /* Call_HudCross */
+	hcalls[0x87] = cam_no; /* Call_HudVelocity */
 }
 
 /* =========================================================================

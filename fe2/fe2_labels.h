@@ -373,5 +373,7 @@
 #define FE2_Lnative_culled                           0xa9152 /* Lnative_culled */
 #define FE2_Lnative_text                             0xa9154 /* Lnative_text */
 #define FE2_Lscreen_controls                         0xa916e /* Lscreen_controls */
+#define FE2_Lhud_cross                               0xa918c /* Lhud_cross */
+#define FE2_Lhud_velocity                            0xa91a4 /* Lhud_velocity */
 
 #endif /* FE2_LABELS_H */
