@@ -24,6 +24,7 @@ extern "C"
 #include "manual.h"
 
 const char *manual_arg;
+int manual_book = 1;
 
 namespace
 {
@@ -50,8 +51,17 @@ bool open_pdf(const std::string &path)
 		log_printf("Manual: can't read %s\n", path.c_str());
 		return false;
 	}
-	/* a scan of two-page spreads: each shown a half at a time */
 	const int pages = doc->pages();
+	if (manual_book)
+	{
+		/* an open book: two pages to the board, a scanned spread whole */
+		board.manual.set_book(true);
+		board.manual.set_pdf(std::move(doc));
+		log_printf("Manual: %s (%d pages, as a book: %d boards)\n", path.c_str(), pages,
+				   board.manual.pages() - board.manual.text_pages());
+		return true;
+	}
+	/* a scan of two-page spreads: each shown a half at a time */
 	int spreads = 0;
 	board.manual.set_pdf(vibe::split_spreads(std::move(doc), &spreads));
 	log_printf("Manual: %s (%d pages, %d of them two-page spreads, shown a half at a time)\n", path.c_str(), pages,

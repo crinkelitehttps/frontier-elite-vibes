@@ -220,6 +220,8 @@ float cockpit_panel_bottom(void);
 /* A point or direction in a headset's play space -> view space (where the
  * panel and the clipboard are), as the cockpit is being drawn */
 void cockpit_play_to_view(const float v[3], float out[3]);
+/* And back: view space -> the headset's play space */
+void cockpit_view_to_play(const float v[3], float out[3]);
 
 #ifdef __cplusplus
 }

@@ -9,6 +9,7 @@
 extern "C"
 {
 #include "gl_camera.h"
+#include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_hands.h"
@@ -352,8 +353,15 @@ bool hands_shown(void)
 
 void hands_queue(const mat4 *play_to_clip, const float eye[3])
 {
+	/* the clipboard drawn just before (this pass): what it covers is hidden */
+	float cover[3][3];
+	const bool covered = clipboard_take_cover(cover);
 	if (!hands_shown())
 		return;
+	vibe::Surface board;
+	if (covered)
+		board = vibe::Surface::from_corners(vibe::Vec3::of(cover[0]) * 100.0f, vibe::Vec3::of(cover[1]) * 100.0f,
+											vibe::Vec3::of(cover[2]) * 100.0f);
 	gd_set_projection(play_to_clip);
 	gd_push();
 	gd_identity();
@@ -385,6 +393,8 @@ void hands_queue(const mat4 *play_to_clip, const float eye[3])
 		tris.clear();
 		vibe::build_hand(h.pose, style, &tris);
 		vibe::cull_and_sort(eye_cm, &tris);
+		if (covered)
+			vibe::occlude(eye_cm, board, &tris);
 		for (const vibe::HandTri &t : tris)
 		{
 			float p[3][3];

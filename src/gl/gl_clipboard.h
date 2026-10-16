@@ -59,6 +59,11 @@ void clipboard_hands(VrHand hands[2], bool grab, int board[2]);
 /* Queues the board in the cockpit, through `view_to_clip`, seen from
  * `eye` (view space) */
 void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3]);
+/* The board just queued by clipboard_queue_cockpit, for hiding what it
+ * covers from the hands drawn after it in the same pass: its top-left,
+ * top-right and bottom-left corners in the play space (metres). Once per
+ * queue; false if it wasn't drawn. */
+bool clipboard_take_cover(float corners[3][3]);
 /* Queues it over a flat picture w x h (GD_VP_WINDOW), while it is out */
 void clipboard_queue_flat(int w, int h);
 

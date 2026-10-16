@@ -1355,6 +1355,12 @@ void cockpit_play_to_view(const float v[3], float out[3])
 	eye_to_view_of(&look, v, out);
 }
 
+void cockpit_view_to_play(const float v[3], float out[3])
+{
+	mat4 look = look_rotation();
+	mat4_xform_dir(&look, v, out);
+}
+
 float cockpit_panel_bottom(void)
 {
 	float y = panel[0][1];

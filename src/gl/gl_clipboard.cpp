@@ -50,6 +50,10 @@ uint64_t step()
 GLuint prog, vao, vbo, tex;
 GLint u_tex;
 bool have_page = false; /* a page is in the texture */
+/* The board as last queued in the cockpit, view space (m); `cover_set`
+ * until clipboard_take_cover takes it */
+float cover[3][3];
+bool cover_set = false;
 
 const char *VS = "in vec4 aPos;\n"
 				 "in vec2 aUV;\n"
@@ -187,12 +191,13 @@ void clipboard_hands(VrHand hands[2], bool grab, int board[2])
 	}
 	/* let go beside the seat below the panel: stowed */
 	clip.holder.stow_below = cockpit_panel_bottom() * 100.0f;
-	/* (a swipe across the held board turns the page in there) */
+	/* (a swipe across the board turns the page in there) */
 	vibe::ClipboardHolder::HandState st[2];
 	clip.update(now, h, st);
 	for (int i = 0; i < 2; i++)
 	{
-		/* holding it, or the fingertip on it: the hand touches nothing else */
+		/* holding it, or the fingertip on it or behind it: the hand touches
+		 * nothing else */
 		board[i] = st[i].holding || st[i].on_board ? 2 : st[i].in_reach ? 1 : 0;
 		if (st[i].take_grip)
 			hands[i].squeeze = false;
@@ -217,11 +222,24 @@ void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3])
 	{
 		float v[3];
 		to_view(c[j], v);
+		if (j != 2) /* TL, TR, BL */
+			memcpy(cover[j == 3 ? 2 : j], v, sizeof v);
 		mat4_xform(view_to_clip, v[0], v[1], v[2], q->v[j]);
 		/* the back plain: the board's edge colour */
 		q->v[j][4] = back ? 2.5f / vibe::kClipboardW : c[j][3];
 		q->v[j][5] = back ? 2.5f / vibe::kClipboardH : c[j][4];
 	}
+	cover_set = true;
+}
+
+bool clipboard_take_cover(float corners[3][3])
+{
+	if (!cover_set)
+		return false;
+	cover_set = false;
+	for (int j = 0; j < 3; j++)
+		cockpit_view_to_play(cover[j], corners[j]);
+	return true;
 }
 
 void clipboard_queue_flat(int w, int h)

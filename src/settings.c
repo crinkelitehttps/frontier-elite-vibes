@@ -55,6 +55,7 @@ typedef struct
 	int vr_finger;
 	int vr_near;
 	int manual_page;
+	int manual_book;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
 
@@ -87,6 +88,7 @@ static const struct
 	{"vr_finger", offsetof(Settings, vr_finger)},
 	{"vr_near", offsetof(Settings, vr_near)},
 	{"manual_page", offsetof(Settings, manual_page)},
+	{"manual_book", offsetof(Settings, manual_book)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
 	{"screen_place_screen_y", offsetof(Settings, screen_place[0].y)},
@@ -158,6 +160,7 @@ static Settings current(void)
 	s.vr_finger = vr_finger;
 	s.vr_near = vr_near_cm;
 	s.manual_page = manual_page();
+	s.manual_book = manual_book;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
 }
@@ -204,6 +207,7 @@ static void apply(const Settings *s)
 		vr_finger = s->vr_finger;
 	if (s->vr_near >= 1 && s->vr_near <= 30)
 		vr_near_cm = s->vr_near;
+	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */
 	if (s->manual_page != manual_page())
 		manual_set_page(s->manual_page);
 	memcpy(screen_place, s->screen_place, sizeof screen_place);

@@ -35,12 +35,16 @@ extern "C"
 
 /* --manual FILE (main.c), NULL: look for one */
 extern const char *manual_arg;
+/* The manual as an open book, two pages to the board, the cover alone on
+ * the left and a scanned spread whole (glfrontier.cfg manual_book, default
+ * on); 0: a page at a time, spreads split in two. Read by manual_init. */
+extern int manual_book;
 
 /* Main thread, once the bindings and settings are loaded: makes the
  * controls pages, opens the PDF and asks for the page being read */
 void manual_init(void);
 
-/* Pages: controls, then the PDF's */
+/* Pages: controls, then the PDF's (a book: its boards) */
 int manual_pages(void);
 /* The page being read (0-based), any thread */
 int manual_page(void);
