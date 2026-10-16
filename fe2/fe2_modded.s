@@ -160,6 +160,9 @@ Call_HudCross		equ	$86
 Call_HudVelocity	equ	$87
 Call_HudTarget		equ	$88
 Call_HudLabels		equ	$89
+* Station screen: kept as it was while other screens are up (src/station_resume.c)
+Call_ScreenLeave	equ	$8a
+Call_StationResume	equ	$8b
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -27751,8 +27754,9 @@ L45318_SetScreenOwner:
 		beq.s	l4532c
 		move.w	d0,A6_screen_owner(a6)
 		movea.l	12(a6,d1.w),a0
-		moveq	#0,d0
-		jmp	36(a0)
+* Lscreen_leave tells the host first (same size as the code it replaced,
+* which it ends with). See the end of the file.
+		jmp	Lscreen_leave
 	l4532c:	move.w	d0,A6_screen_owner(a6)
 		rts
 
@@ -52334,7 +52338,9 @@ L75f2a:
 		rts
 
 L75f3c_fn8:
-		cmpi.b	#$54,A6_plr_flight_state(a6)
+* Lstation_enter may put the station screen back as it was instead (same
+* size as the compare it replaced, which it ends with). See the end of the file.
+		jsr	Lstation_enter
 		beq.w	l75e16
 		cmpi.b	#$60,A6_plr_flight_state(a6)
 		beq.w	l75e16
@@ -67628,3 +67634,43 @@ Lcam_hud:
 		jsr	624(a5)
 lcam_hud_done:
 		rts
+
+******************************************************************************
+* Station screen kept (src/station_resume.c). Leaving the station's services
+* (for a map, the ship screen...) resets them: coming back opens the top
+* page. The host keeps the page's state as it is left (Lscreen_leave, in
+* L45318 just before the old owner's fn 36) and, when the station's fn 8
+* comes back to a docked station from another screen, Lstation_enter does
+* what l75e16 does to take the screen, has the host put the state back and
+* rebuilds that page with L75c92 (as the game does for its own refreshes),
+* then redraws the message under it (L760ba).
+******************************************************************************
+Lscreen_leave:
+		movem.l	d0-1/a0,-(a7)
+		hcall	#Call_ScreenLeave
+		movem.l	(a7)+,d0-1/a0
+		moveq	#0,d0
+		jmp	36(a0)
+
+Lstation_enter:
+		move.l	d0,-(a7)
+		moveq	#0,d0
+		hcall	#Call_StationResume
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	lstation_resume
+		cmpi.b	#$54,A6_plr_flight_state(a6)
+		rts
+lstation_resume:
+		addq.l	#4,a7
+		clr.b	10427(a6)
+		moveq	#96,d0
+		jsr	66(a5)
+		move.w	#$98c4,d2
+		moveq	#4,d0
+		movea.l	A6_mod_panel(a6),a0
+		jsr	32(a0)
+		moveq	#1,d0
+		hcall	#Call_StationResume
+		jsr	L75c92
+		jmp	L760ba

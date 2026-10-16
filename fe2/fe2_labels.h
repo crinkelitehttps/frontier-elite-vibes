@@ -378,5 +378,7 @@
 #define FE2_Lhud_target                              0xa91d8 /* Lhud_target */
 #define FE2_Lhud_labels                              0xa925e /* Lhud_labels */
 #define FE2_Lcam_hud                                 0xa9280 /* Lcam_hud */
+#define FE2_Lscreen_leave                            0xa929e /* Lscreen_leave */
+#define FE2_Lstation_enter                           0xa92b0 /* Lstation_enter */
 
 #endif /* FE2_LABELS_H */

@@ -99,6 +99,9 @@ bool cockpit_game_frame(void);
 /* Game thread, the same: whether the frame is one of the game's other
  * screens, for the cockpit's screen (see HOW IT WORKS) */
 bool cockpit_screen_frame(void);
+/* Whether the cockpit's screens are in use at all (the group a game
+ * screen would go to, though the flight view is up now) */
+bool cockpit_screens_on(void);
 /* Game thread, for such a frame, once the game has drawn it (in a host
  * call): runs the game's flight view as the cockpit would have it, with
  * the game's machine put back as it was afterwards (fe2vm.h), so the

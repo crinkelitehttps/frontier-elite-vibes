@@ -376,9 +376,14 @@ bool cockpit_game_frame(void)
 	return game_active;
 }
 
+bool cockpit_screens_on(void)
+{
+	return cockpit_enabled && cockpit_screen && use_renderer != R_OLD && native_mode() == 2 && !freecam_active();
+}
+
 bool cockpit_screen_frame(void)
 {
-	if (!cockpit_enabled || !cockpit_screen || use_renderer == R_OLD || native_mode() != 2 || freecam_active())
+	if (!cockpit_screens_on())
 		return false;
 	switch (game_screen())
 	{

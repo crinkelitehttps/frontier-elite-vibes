@@ -330,6 +330,8 @@
 #define FE2_Lhud_target                              0x832e4 /* Lhud_target */
 #define FE2_Lhud_labels                              0x8336a /* Lhud_labels */
 #define FE2_Lcam_hud                                 0x8338c /* Lcam_hud */
+#define FE2_Lscreen_leave                            0x833aa /* Lscreen_leave */
+#define FE2_Lstation_enter                           0x833bc /* Lstation_enter */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

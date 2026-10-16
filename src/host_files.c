@@ -12,6 +12,7 @@
 #include "host.h"
 #include "hostcall.h"
 #include "main.h"
+#include "station_resume.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -112,6 +113,7 @@ void Call_Fread(void)
 	read_game_string(GetReg(REG_D1), name, sizeof(name));
 	host_path(name, path, sizeof(path));
 
+	station_resume_forget(); /* a saved game, likely: not the station kept */
 	FILE *f = fopen(path, "rb");
 	if (!f)
 	{

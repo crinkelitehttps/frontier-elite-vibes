@@ -24,6 +24,7 @@
 #include "renderer.h"
 #include "screen_text.h"
 #include "shortcut.h"
+#include "station_resume.h"
 #include "strafe.h"
 
 /* D0.b = exception number, A0 = handler */
@@ -39,6 +40,7 @@ static void Call_HostUpdate(void)
 	ShortCut_CheckKeys();
 	Main_EventHandler();
 	freecam_update();
+	station_resume_poll();
 }
 
 /* The game waiting for its next 20 ms tick: sleep rather than spin (a
@@ -157,5 +159,7 @@ HOSTCALL hcalls[] = {
 	[0x87] = Call_HudVelocity,
 	[0x88] = Call_HudTarget,
 	[0x89] = Call_HudLabels,
+	[0x8a] = Call_ScreenLeave,
+	[0x8b] = Call_StationResume,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

@@ -381,6 +381,8 @@ static void batch_hcalls(void)
 	hcalls[0x87] = cam_no; /* Call_HudVelocity */
 	hcalls[0x88] = cam_no; /* Call_HudTarget */
 	hcalls[0x89] = cam_no; /* Call_HudLabels */
+	hcalls[0x8a] = cam_no; /* Call_ScreenLeave */
+	hcalls[0x8b] = cam_no; /* Call_StationResume */
 }
 
 /* =========================================================================
