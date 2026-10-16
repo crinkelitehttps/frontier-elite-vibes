@@ -63,7 +63,7 @@ static const char DEFAULT_CFG[] =
 	"#\n"
 	"# On the galaxy map the sticks scroll it (the arrow keys) instead of\n"
 	"# doing what they are bound to (the right one not while it moves the\n"
-	"# pointer).\n"
+	"# pointer; on the cockpit's screen only the left one).\n"
 	"#\n"
 	"# Actions:\n"
 	"#   steer-x, steer-y [invert]  the ship's steering (full axes only):\n"
@@ -728,6 +728,11 @@ static bool control_down(const Control *c)
 	return v > threshold; /* + half, or a trigger */
 }
 
+static bool on_left_stick(const Control *c)
+{
+	return c->source == SRC_AXIS && (c->index == SDL_CONTROLLER_AXIS_LEFTX || c->index == SDL_CONTROLLER_AXIS_LEFTY);
+}
+
 /* ---- keys --------------------------------------------------------------- */
 static void send(SDL_Keycode key, Uint16 mod, bool down)
 {
@@ -857,9 +862,11 @@ void gamepad_update(void)
 	}
 
 	/* on the galaxy map the sticks scroll it instead of flying (the right
-	 * one unless it moves the pointer), but not on the cockpit's screen:
-	 * the ship flies on round it */
-	bool map = game_screen() == SCREEN_GALAXY_MAP && !cockpit_screen_frame();
+	 * one unless it moves the pointer); on the cockpit's screen only the
+	 * left one, as the ship flies on round it */
+	bool galaxy = game_screen() == SCREEN_GALAXY_MAP;
+	bool map = galaxy && !cockpit_screen_frame();
+	bool left_map = galaxy && !map;
 	if (map)
 	{
 		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
@@ -867,6 +874,8 @@ void gamepad_update(void)
 		float ry = pointer_on ? 0.0f : raw_axis(SDL_CONTROLLER_AXIS_RIGHTY);
 		scroll_map(fabsf(rx) > fabsf(mx) ? rx : mx, fabsf(ry) > fabsf(my) ? ry : my);
 	}
+	else if (left_map)
+		scroll_map(raw_axis(SDL_CONTROLLER_AXIS_LEFTX), raw_axis(SDL_CONTROLLER_AXIS_LEFTY));
 	else
 		scroll_map(0, 0);
 
@@ -875,6 +884,16 @@ void gamepad_update(void)
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
+		if (left_map && on_left_stick(&b->control))
+		{
+			/* let go of what it held when the map came up */
+			if (b->held)
+				chord(&b->sent, false);
+			b->held = false;
+			b->was_down = false;
+			b->repeating = false;
+			continue;
+		}
 		if (is_axis_action(b->action))
 		{
 			bool acts = b->layer ? b->layer == layer : !(layer > 0 && (b->axis_shadowed & (1 << layer)));
