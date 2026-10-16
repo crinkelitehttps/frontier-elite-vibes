@@ -187,7 +187,9 @@ endif()
 
 ##########################################################################################
 # vibe-lib: the cockpit features shared with the other ports (VR hands, the
-# clipboard). A sibling checkout: ~/projects/vibe-lib. Its vibe::poppler
+# clipboard). The sibling checkout ~/projects/vibe-lib when there is one
+# (where it is worked on), else the submodule vendor/vibe-lib (git submodule
+# update --init); VIBE_LIB_DIR picks another. Its vibe::poppler
 # (poppler-cpp, when found; for MinGW, vibe-lib's static build from
 # tools/build-poppler-windows.sh) reads the game
 # manual's PDF for the clipboard (src/manual.cpp); without it the clipboard
@@ -201,11 +203,18 @@ if(GLF_MANUAL_PDF AND NOT ANDROID AND NOT PLATFORM STREQUAL "Web")
 else()
     set(VIBE_POPPLER OFF CACHE BOOL "" FORCE)
 endif()
-if(NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib/CMakeLists.txt)
-    message(FATAL_ERROR "vibe-lib not found: check it out next to this repo's parent folder "
-                        "(${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib)")
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib/CMakeLists.txt)
+    get_filename_component(_vibe_default ${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib ABSOLUTE)
+else()
+    set(_vibe_default ${CMAKE_CURRENT_LIST_DIR}/vendor/vibe-lib)
 endif()
-add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../vibe-lib vibe)
+set(VIBE_LIB_DIR ${_vibe_default} CACHE PATH "vibe-lib checkout")
+if(NOT EXISTS ${VIBE_LIB_DIR}/CMakeLists.txt)
+    message(FATAL_ERROR "vibe-lib not found at ${VIBE_LIB_DIR}: run "
+                        "\"git submodule update --init\", or set VIBE_LIB_DIR")
+endif()
+message(STATUS "vibe-lib: ${VIBE_LIB_DIR}")
+add_subdirectory(${VIBE_LIB_DIR} vibe)
 list(APPEND LIBRARIES vibe::vibe)
 if(TARGET vibe::poppler)
     list(APPEND LIBRARIES vibe::poppler)
