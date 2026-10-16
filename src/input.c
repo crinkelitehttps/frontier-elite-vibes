@@ -198,6 +198,10 @@ void Input_PressSTKey(unsigned char scancode, BOOL press)
 {
 	if (!press)
 		scancode |= 0x80;
+	/* full (the game takes one a vblank): drop this one, rather than wrap
+	 * round onto the head and lose the lot */
+	if ((input.buf_tail + 1) % SIZE_KEYBUF == input.buf_head)
+		return;
 	input.key_buf[input.buf_tail++] = scancode;
 	input.buf_tail %= SIZE_KEYBUF;
 }

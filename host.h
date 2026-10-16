@@ -47,17 +47,27 @@ extern s32 rdest; // Return address_player from interrupt (0 if none active)
 extern s32 exceptions_pending; /* a bit per exception; set by the timer thread */
 extern u32 exception_handlers[32];
 
-/* exceptions_pending is shared with the timer thread (FlagException): only
- * change it with these */
+/* Exceptions flagged while their handler was away (a host call into the
+ * game, src/galaxy/fe2vm.c, takes them for its batch): fe2vm_end makes them
+ * pending again, so a vblank - the game's input poll and its clock - comes
+ * late rather than never */
+extern s32 exceptions_deferred;
+
+/* exceptions_pending and exceptions_deferred are shared with the timer
+ * thread (FlagException): only change them with these */
 #if defined(_MSC_VER) && !defined(__clang__)
 #include <intrin.h>
 #define EXCEPTIONS_PENDING_OR(v) _InterlockedOr((volatile long *)&exceptions_pending, (long)(v))
 #define EXCEPTIONS_PENDING_AND(v) _InterlockedAnd((volatile long *)&exceptions_pending, (long)(v))
 #define EXCEPTIONS_PENDING_SWAP(v) _InterlockedExchange((volatile long *)&exceptions_pending, (long)(v))
+#define EXCEPTIONS_DEFERRED_OR(v) _InterlockedOr((volatile long *)&exceptions_deferred, (long)(v))
+#define EXCEPTIONS_DEFERRED_SWAP(v) _InterlockedExchange((volatile long *)&exceptions_deferred, (long)(v))
 #else
 #define EXCEPTIONS_PENDING_OR(v) __atomic_fetch_or(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
 #define EXCEPTIONS_PENDING_AND(v) __atomic_fetch_and(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
 #define EXCEPTIONS_PENDING_SWAP(v) __atomic_exchange_n(&exceptions_pending, (v), __ATOMIC_SEQ_CST)
+#define EXCEPTIONS_DEFERRED_OR(v) __atomic_fetch_or(&exceptions_deferred, (v), __ATOMIC_SEQ_CST)
+#define EXCEPTIONS_DEFERRED_SWAP(v) __atomic_exchange_n(&exceptions_deferred, (v), __ATOMIC_SEQ_CST)
 #endif
 
 void SetReg(int reg, int val);

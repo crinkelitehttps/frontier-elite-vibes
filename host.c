@@ -19,6 +19,7 @@ s32 N, nZ, V, C, X;      // CPU flags
 s32 bN, bnZ, bV, bC, bX; // Backup flags
 s32 rdest;               // Return address from interrupt
 s32 exceptions_pending;
+s32 exceptions_deferred;
 u32 exception_handlers[32];      // Handlers for exceptions
 char *STRam;                     // Pointer to system RAM
 
@@ -97,6 +98,8 @@ void FlagException(int num)
 {
     if (exception_handlers[num])
         EXCEPTIONS_PENDING_OR(1 << num);
+    else
+        EXCEPTIONS_DEFERRED_OR(1 << num); /* the handler may be away (fe2vm) */
 }
 
 /* The game's thread: the lowest pending exception with a handler, now no
@@ -109,6 +112,7 @@ int TakeException(void)
             continue;
         if (exception_handlers[i])
             return i;
+        EXCEPTIONS_DEFERRED_OR(1 << i); /* flagged as the handler went away */
     }
     return -1;
 }

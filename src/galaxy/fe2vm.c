@@ -296,6 +296,7 @@ void fe2vm_begin(void)
 	memcpy(saved_handlers, exception_handlers, sizeof(saved_handlers));
 	memset(exception_handlers, 0, sizeof(exception_handlers));
 	saved_pending = EXCEPTIONS_PENDING_SWAP(0);
+	EXCEPTIONS_DEFERRED_SWAP(0); /* none from before (no handler then) */
 
 	memcpy(saved_regs, Regs, sizeof(saved_regs));
 	s32 flags[10] = {N, nZ, V, C, X, bN, bnZ, bV, bC, bX};
@@ -334,9 +335,11 @@ void fe2vm_end(void)
 	bN = saved_flags[5], bnZ = saved_flags[6], bV = saved_flags[7], bC = saved_flags[8], bX = saved_flags[9];
 	rdest = saved_rdest;
 
-	/* what was pending, and any vblank that came in (lost: the handlers were
-	   gone), back; then the handlers */
-	EXCEPTIONS_PENDING_OR(saved_pending);
+	/* what was pending, and any vblank that came in while the handlers were
+	   gone (deferred, host.h), back; then the handlers. Dropping them lost
+	   the game's input polls: a world capture and a camera picture take up
+	   to half of each second, so half its vblanks. */
+	EXCEPTIONS_PENDING_OR(saved_pending | EXCEPTIONS_DEFERRED_SWAP(0));
 	memcpy(exception_handlers, saved_handlers, sizeof(saved_handlers));
 }
 
