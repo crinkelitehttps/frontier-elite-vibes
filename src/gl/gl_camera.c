@@ -50,7 +50,7 @@ bool cockpit_camera = true;
 #define VIEW_F  256.0f
 #define VIEW_CX 160.0f
 #define VIEW_CY 84.0f
-#define TAP_PX  10.0f /* a tap that near a thing picks it */
+#define TAP_PX  10.0f /* a tap that near a thing's centre picks it */
 #define MAX_HITS NUM_SLOTS
 
 enum
@@ -111,8 +111,7 @@ typedef struct
 {
 	uint32_t addr;
 	int slot;
-	float pos[3], r; /* the camera's axes (x right, y up, z ahead): where
-	                    it is and its radius, view units */
+	float x, y; /* its centre in the picture, where its label starts */
 } Hit;
 
 /* The batch's (game thread), and the shown picture's (under `lock`) */
@@ -144,29 +143,19 @@ void camera_tap(float u, float v)
 {
 	if (!lock)
 		return;
-	/* the ray through the tapped pixel */
-	float d[3] = {(u * CAMERA_W - VIEW_CX) / VIEW_F, (VIEW_CY - v * CAMERA_H) / VIEW_F, 1.0f};
-	float dl = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+	float x = u * CAMERA_W, y = v * CAMERA_H;
 	int best = -1;
-	float best_a = 0;
+	float best_d = 0;
 	SDL_LockMutex(lock);
-	/* the thing whose sphere the ray passes through (TAP_PX near does for a
-	 * small one), the one that looks smallest if several: a ship in front
-	 * of a planet */
+	/* the thing whose centre is nearest the tap, within TAP_PX: each has
+	 * that one point, as clicking in the flight view (L62f1e) */
 	for (int i = 0; i < pub_nhits; i++)
 	{
-		const Hit *h = &pub_hits[i];
-		float dist = sqrtf(h->pos[0] * h->pos[0] + h->pos[1] * h->pos[1] + h->pos[2] * h->pos[2]);
-		if (!(dist > h->r))
-			continue; /* inside it */
-		float a = asinf(h->r / dist), tap = TAP_PX / VIEW_F;
-		if (a < tap)
-			a = tap;
-		float c = (d[0] * h->pos[0] + d[1] * h->pos[1] + d[2] * h->pos[2]) / (dl * dist);
-		if (acosf(c > 1.0f ? 1.0f : c < -1.0f ? -1.0f : c) <= a && (best < 0 || a < best_a))
+		float d = hypotf(x - pub_hits[i].x, y - pub_hits[i].y);
+		if (d <= TAP_PX && (best < 0 || d < best_d))
 		{
 			best = i;
-			best_a = a;
+			best_d = d;
 		}
 	}
 	if (best >= 0)
@@ -273,10 +262,11 @@ static void cam_no(void)
 static void cam_far(void)
 {
 	SetReg(REG_D0, 0);
-	uint32_t a6 = (uint32_t)GetReg(REG_A6), m = (uint32_t)GetReg(REG_A5);
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	float z = (float)(int32_t)rdlong(a6 - 8);
 	uint32_t addr = (uint32_t)rdlong(a6 - 212), space = big_space();
 	int slot = (uint8_t)rdbyte(addr + OBJ_SLOT);
-	if (nhits >= MAX_HITS || !slot_shown(space, slot) || slot_object(space, slot) != addr ||
+	if (z < 64.0f || nhits >= MAX_HITS || !slot_shown(space, slot) || slot_object(space, slot) != addr ||
 		addr == game_player_ship())
 		return;
 	for (int i = 0; i < nhits; i++)
@@ -285,10 +275,9 @@ static void cam_far(void)
 	Hit *h = &hits[nhits++];
 	h->addr = addr;
 	h->slot = slot;
-	for (int k = 0; k < 3; k++)
-		h->pos[k] = (float)(int32_t)rdlong(a6 - 16 + 4 * (uint32_t)k);
-	/* the model's radius, as L390f2's disc for a far one */
-	h->r = ldexpf((float)(int16_t)rdword(m + 14), (int16_t)rdword(a6 - 208) + 1);
+	/* as L390f2 puts it at 110(a4) */
+	h->x = VIEW_CX + VIEW_F * (float)(int32_t)rdlong(a6 - 16) / z;
+	h->y = VIEW_CY - VIEW_F * (float)(int32_t)rdlong(a6 - 12) / z;
 }
 
 /* Clears: to black or blue, as the software renderer has them */

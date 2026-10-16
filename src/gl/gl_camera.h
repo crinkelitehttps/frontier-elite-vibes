@@ -23,7 +23,8 @@
  *   object byte +285), so the batch puts back what the frame had first
  *   (camera_note_shots). The native scene's far hook (Nu_NativeFar, every
  *   object before the cull) says no too, but notes where each thing the
- *   flight view lets you click on is in the picture, and how big.
+ *   flight view lets you click on is in the picture: its centre, where
+ *   its label starts, the one point a tap picks it by.
  *
  *   gl_cockpit.c shows it on a screen beside the cockpit's screen; a tap
  *   on it (mouse, laser, hand) on a thing makes that the target, else goes
@@ -58,7 +59,7 @@ void camera_shutdown(void);
 void camera_capture(bool screen);
 
 /* Any thread: a tap on the picture at (u, v) (0..1, from its top left):
- * on a planet, a ship, a station, cargo..., that becomes the target, as
+ * at the centre of a planet, a ship, a station, cargo..., that becomes the target, as
  * clicking it in the flight view does; else on to the next direction */
 void camera_tap(float u, float v);
 
