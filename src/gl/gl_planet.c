@@ -235,6 +235,7 @@ static NativePlanets native_rec, native_pub, native_show, native_last;
 /* the cockpit screen's own (its maps' planets), drawn instead of the
  * world's while its picture is drawn (planet_use_screen) */
 static NativePlanets screen_pub, screen_show;
+static NativePlanets page_pub, page_show; /* ... and a page's beside it (gl_scene.h) */
 static NativePlanets *drawn_planets = &native_show;
 static uint32_t native_frame;
 
@@ -292,6 +293,23 @@ void planet_screen_acquire(void)
 void planet_use_screen(bool screen)
 {
 	drawn_planets = screen ? &screen_show : &native_show;
+}
+
+void planet_page_publish(void)
+{
+	page_pub.n = native_rec.n;
+	memcpy(page_pub.p, native_rec.p, sizeof native_rec.p[0] * (size_t)native_rec.n);
+}
+
+void planet_page_acquire(void)
+{
+	page_show.n = page_pub.n;
+	memcpy(page_show.p, page_pub.p, sizeof page_pub.p[0] * (size_t)page_pub.n);
+}
+
+void planet_use_page(bool page)
+{
+	drawn_planets = page ? &page_show : &native_show;
 }
 
 /* A turned pass's game view vector (z ahead) in the game camera's */

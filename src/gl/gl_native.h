@@ -75,6 +75,10 @@ void native_acquire(bool screen, bool world);
 /* Render thread: draw that screen frame (true), without the world's
  * planets and haze, or the world (false, the default) */
 void native_use_screen(bool screen);
+/* The same for the page beside the screen's frame (scene_publish_page) */
+void native_publish_page(void);
+void native_acquire_page(void);
+void native_use_page(bool page);
 
 /* Render thread, after the scene, with the 3D view's viewport and its
  * un-turned projection set */

@@ -54,6 +54,12 @@ typedef struct
 static SceneBuf rec = {.n_passes = 1, .passes = {{-1, -1, 0}}};
 static SceneBuf pub = {.n_passes = 1, .passes = {{-1, -1, 0}}};
 static SceneBuf show = {.n_passes = 1, .passes = {{-1, -1, 0}}};
+/* A second screen's frame beside the first (the MAP screen's page, while
+ * the station's services are the game's screen): its own copy, drawn when
+ * scene_use_page is on */
+static SceneBuf pub_page = {.n_passes = 1, .passes = {{-1, -1, 0}}};
+static SceneBuf show_page = {.n_passes = 1, .passes = {{-1, -1, 0}}};
+static SceneBuf *drawn = &show;
 
 static int cur_node = -1; /* -1: no node, records are dropped */
 static bool node_locked;
@@ -282,17 +288,17 @@ static void draw_node(const ZNode *n)
 	uint32_t pos = n->start;
 	while (pos + sizeof(RecHeader) <= n->end)
 	{
-		const RecHeader *h = (const RecHeader *)(show.data + pos);
+		const RecHeader *h = (const RecHeader *)(drawn->data + pos);
 		pos += sizeof(RecHeader);
 		if (h->op > PRIM_NONE && h->op < PRIM_COUNT)
-			draw_table[h->op](show.data + pos);
+			draw_table[h->op](drawn->data + pos);
 		pos += h->size;
 	}
 }
 
 static void draw_tree(int root)
 {
-	if (root < 0 || root >= show.n_nodes)
+	if (root < 0 || root >= drawn->n_nodes)
 		return;
 
 	/* In-order walk, `more` (farther) side first: painter's algorithm */
@@ -304,11 +310,11 @@ static void draw_tree(int root)
 		while (i >= 0)
 		{
 			stack[sp++] = i;
-			i = show.nodes[i].more;
+			i = drawn->nodes[i].more;
 		}
 		i = stack[--sp];
-		draw_node(&show.nodes[i]);
-		i = show.nodes[i].less;
+		draw_node(&drawn->nodes[i]);
+		i = drawn->nodes[i].less;
 	}
 }
 
@@ -345,6 +351,15 @@ void scene_publish(bool screen)
 	native_publish();
 }
 
+void scene_publish_page(void)
+{
+	close_current();
+	scene_capture_soft_nodes();
+	copy_scene(&pub_page, &rec);
+	planet_page_publish();
+	native_publish_page();
+}
+
 void scene_publish_world(void)
 {
 	close_current();
@@ -374,20 +389,33 @@ void scene_acquire(bool screen)
 	gl_prims_new_scene();
 }
 
+void scene_acquire_page(void)
+{
+	copy_scene(&show_page, &pub_page);
+	planet_page_acquire();
+	native_acquire_page();
+}
+
+void scene_use_page(bool on)
+{
+	drawn = on ? &show_page : &show;
+	native_use_page(on);
+}
+
 void scene_draw(void)
 {
-	draw_tree(show.passes[0].root);
+	draw_tree(drawn->passes[0].root);
 
 	/* the turned passes, in the cockpit's order: each only where no
 	 * earlier one has drawn */
-	if (show.n_passes > 1)
+	if (drawn->n_passes > 1)
 	{
 		for (int k = 0; k < COCKPIT_MAX_PASSES; k++)
-			for (int p = 1; p < show.n_passes; p++)
-				if (show.passes[p].id == k && show.passes[p].root >= 0)
+			for (int p = 1; p < drawn->n_passes; p++)
+				if (drawn->passes[p].id == k && drawn->passes[p].root >= 0)
 				{
 					cockpit_pass_draw_begin(k);
-					draw_tree(show.passes[p].root);
+					draw_tree(drawn->passes[p].root);
 				}
 		cockpit_pass_draw_end();
 	}

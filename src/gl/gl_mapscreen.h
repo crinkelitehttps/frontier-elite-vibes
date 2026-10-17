@@ -60,6 +60,12 @@ void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, i
 void mapscreen_drag(bool held, int dx, int dy);
 /* A key for the screen (ST scancode), as if pressed with it up */
 void mapscreen_key(unsigned char scancode);
+/* The arrow keys held for the screen (a controller's stick), and whether the
+ * stick is the map's: a press on the screen takes it, one elsewhere gives
+ * it back */
+void mapscreen_scroll(bool up, bool down, bool left, bool right);
+void mapscreen_grab(bool on);
+bool mapscreen_grabbed(void);
 /* The screen is up (the setting on, in flight with the cockpit's screens) */
 bool mapscreen_up(void);
 /* The screen is being used: the pointer is on it, or it was a moment ago */

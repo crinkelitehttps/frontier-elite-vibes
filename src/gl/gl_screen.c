@@ -307,6 +307,7 @@ typedef struct
 	 * the flight view's */
 	bool page;     /* the frame went the way of a game screen's: the world aside */
 	bool page_new; /* ... and the page is new */
+	bool page_beside; /* the frame is a screen's (the station's): the page's scene is its own, beside it */
 	uint8_t page_screen[SCR_W * SCR_H];
 	unsigned int page_main_rgb[256];
 	unsigned int page_ctrl_rgb[16];
@@ -907,8 +908,11 @@ static void publish_frame(void)
 	scr_pub.cockpit = cockpit_game_frame();
 	scr_pub.group = scr_pub.cockpit ? -1 : cockpit_screen_group();
 	scr_pub.sub = scr_pub.group >= 0;
-	bool page = scr_pub.cockpit && mapscreen_due();
-	scr_pub.page = scr_pub.page_new = false;
+	/* beside the station's services the frame is their screen's (the world is
+	 * captured), and the page's scene is kept apart from theirs */
+	bool beside = scr_pub.group == COCKPIT_SCREEN_COMS;
+	bool page = (scr_pub.cockpit || beside) && mapscreen_due();
+	scr_pub.page = scr_pub.page_new = scr_pub.page_beside = false;
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
 	scr_pub.bgcol = fe2_bgcol;
@@ -916,7 +920,7 @@ static void publish_frame(void)
 	scr_pub.mouse_shown = mouse_shown != 0;
 
 	SDL_LockMutex(frame_lock);
-	if (page)
+	if (page && scr_pub.cockpit)
 	{
 		/* the flight frame is the world, as a captured one is, and the page
 		 * is made next; the frame is published after it */
@@ -943,8 +947,16 @@ static void publish_frame(void)
 	{
 		bool ok = mapscreen_page(&map_page);
 		SDL_LockMutex(frame_lock);
-		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
-		scene_publish(true);
+		if (beside)
+		{
+			scene_publish_page();
+			scr_pub.page_beside = true;
+		}
+		else
+		{
+			memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+			scene_publish(true);
+		}
 		scr_pub.page = true;
 		if (ok)
 		{
@@ -992,6 +1004,8 @@ static bool acquire_frame(void)
 		if (scr_show.cockpit)
 			world_bg = scr_show.main_rgb[scr_show.bgcol & 0xff];
 		scene_acquire(scr_show.sub || scr_show.page);
+		if (scr_show.page_beside && scr_show.page_new)
+			scene_acquire_page();
 		hud_acquire();
 		frame_new = false;
 	}
@@ -1074,6 +1088,8 @@ static GLuint sub_target(int group, GLuint *tex)
 	return *sub_fbo;
 }
 
+static bool sub_page; /* draw_sub draws the page beside the screen's frame */
+
 static void draw_sub(int group)
 {
 	if (group < 0 || group >= COCKPIT_SCREENS)
@@ -1083,11 +1099,17 @@ static void draw_sub(int group)
 	GLuint *sub_fbo = &fbo, *sub_tex = &tex;
 	glBindFramebuffer(GL_FRAMEBUFFER, *sub_fbo);
 	cockpit_draw_flat(true);
-	native_use_screen(true);
+	if (sub_page)
+		scene_use_page(true);
+	else
+		native_use_screen(true);
 	drawing_sub = true;
 	draw_frame(SUB_W, SUB_H, false, false);
 	drawing_sub = false;
-	native_use_screen(false);
+	if (sub_page)
+		scene_use_page(false);
+	else
+		native_use_screen(false);
 	cockpit_draw_flat(false);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glBindTexture(GL_TEXTURE_2D, *sub_tex);
@@ -1179,7 +1201,9 @@ static void draw_page(void)
 	scr_show.bgcol = flight.page_bgcol;
 	scr_show.cockpit = false;
 	scr_show.sub = true;
+	sub_page = flight.page_beside;
 	draw_sub(COCKPIT_SCREEN_MAP);
+	sub_page = false;
 	memcpy(&scr_show, &flight, sizeof scr_show);
 }
 
@@ -1190,7 +1214,7 @@ static void draw_picture(bool with_menu)
 	log_rates(new_frame);
 	if (scr_show.sub)
 		draw_sub(scr_show.group);
-	else if (scr_show.page_new && new_frame)
+	if (scr_show.page_new && new_frame)
 		draw_page();
 	draw_coms_flight(new_frame);
 	bool cockpit = draw_vr();

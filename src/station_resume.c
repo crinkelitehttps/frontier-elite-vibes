@@ -14,17 +14,20 @@
  */
 #include <stdbool.h>
 #include <stdint.h>
+#include <SDL.h>
 #include "station_resume.h"
 #include "game_state.h"
 #include "host.h" /* rdbyte, rdword, rdlong, wrbyte, wrword */
 #include "m68000.h"
 #include "gl/gl_cockpit.h"
+#include "input.h"
 
 #define STATE_FLAGS  114   /* bytes 114, 115: page on ($ff), message bits */
 #define STATE_START  10602 /* the item list */
 #define STATE_END    11914 /* past the BB scroll (11906); 11914+ is the ship screen's */
 #define FINES        11774 /* long: unpaid fines, game state, never put back */
 #define STATION_OBJ  678   /* long: the station docked at */
+#define AUTO_ENTER_MS 1000 /* docked in the flight view this long before F4 */
 #define ICON_MAX     64    /* A6_ICON_POSITIONS: 10 bytes each, $ffff ends it */
 
 static struct
@@ -55,6 +58,25 @@ void station_resume_poll(void)
 {
 	if (kept.held && (!docked() || game_screen() == SCREEN_TITLE))
 		station_resume_forget();
+	/* Docked, the COMS screen is the station's services: the game is on
+	 * them (F4) whenever it would otherwise be on the hangar view, which the
+	 * cockpit shows anyway. Not landed: there F7 launches from the flight
+	 * view. */
+	static Uint32 since;
+	if (cockpit_screens_on() && game_screen() == SCREEN_FLIGHT && game_player_ship() &&
+		game_flight_status() == FLIGHT_DOCKED)
+	{
+		Uint32 now = SDL_GetTicks();
+		if (!since)
+			since = now;
+		else if (now - since >= AUTO_ENTER_MS)
+		{
+			since = 0;
+			Input_TapSTKey(0x3e); /* F4 */
+		}
+	}
+	else
+		since = 0;
 }
 
 void Call_ScreenLeave(void)

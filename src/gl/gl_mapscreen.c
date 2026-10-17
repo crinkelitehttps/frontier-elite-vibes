@@ -39,7 +39,7 @@ bool cockpit_map_live = true;
  * 1082..1196. It is the game's own, and what the flight reads of it (the
  * selected system, for the jump) is the map's last: the batch starts from it
  * and what it ends with stays, where the rest of the machine is put back. */
-#define KEEP_FIRST 900
+#define KEEP_FIRST 912 /* (906..909 are the panel module's: which module has it, the scanner shown) */
 #define KEEP_END   1200
 /* ... and where the right-drag has turned it: the mouse control's motion,
  * the game's A6_mouse_motion_ctrl_x, y (the view's angles are these) */
@@ -100,6 +100,8 @@ static struct
 	Uint64 seen; /* the pointer was last on the screen */
 	unsigned char keys[MAX_KEYS];
 	int nkeys;
+	bool arrows[4]; /* held: up, down, left, right (a controller's stick) */
+	bool grabbed;	/* the stick scrolls the map until a press elsewhere */
 } in;
 
 void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, int dy)
@@ -109,7 +111,7 @@ void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, i
 	if (on)
 	{
 		if ((buttons & 2) && !(p->on && (p->buttons & 2)))
-			p->pressed = true;
+			p->pressed = true, in.grabbed = true;
 		if (!(buttons & 2) && p->on && (p->buttons & 2))
 			p->released = true;
 		p->dx += dx;
@@ -150,6 +152,30 @@ void mapscreen_key(unsigned char scancode)
 	SDL_AtomicUnlock(&in_lock);
 }
 
+void mapscreen_scroll(bool up, bool down, bool left, bool right)
+{
+	SDL_AtomicLock(&in_lock);
+	in.arrows[0] = up, in.arrows[1] = down, in.arrows[2] = left, in.arrows[3] = right;
+	if (up || down || left || right)
+		in.seen = SDL_GetPerformanceCounter();
+	SDL_AtomicUnlock(&in_lock);
+}
+
+void mapscreen_grab(bool on)
+{
+	SDL_AtomicLock(&in_lock);
+	in.grabbed = on;
+	SDL_AtomicUnlock(&in_lock);
+}
+
+bool mapscreen_grabbed(void)
+{
+	SDL_AtomicLock(&in_lock);
+	bool g = in.grabbed;
+	SDL_AtomicUnlock(&in_lock);
+	return g;
+}
+
 bool mapscreen_pointed(void)
 {
 	SDL_AtomicLock(&in_lock);
@@ -164,7 +190,11 @@ bool mapscreen_pointed(void)
 
 bool mapscreen_up(void)
 {
-	return cockpit_map_live && cockpit_screens_on() && game_screen() == SCREEN_FLIGHT && game_player_ship();
+	if (!cockpit_map_live || !cockpit_screens_on() || !game_player_ship())
+		return false;
+	/* in flight, or beside the station's services (docked: the game is on
+	 * their screen, the world captured round it) */
+	return game_screen() == SCREEN_FLIGHT || game_screen() == SCREEN_STATION;
 }
 
 bool mapscreen_due(void)
@@ -284,6 +314,8 @@ static bool play_input(void)
 	nkeys = in.nkeys;
 	memcpy(keys, in.keys, sizeof keys);
 	in.nkeys = 0;
+	bool arrows[4];
+	memcpy(arrows, in.arrows, sizeof arrows);
 	SDL_AtomicUnlock(&in_lock);
 
 	if (getenv("GLF_MAP_LOG") && (p.pressed || p.released || p.buttons || drag))
@@ -314,6 +346,10 @@ static bool play_input(void)
 		wrbyte(a6 + A6_SCANCODE_ASCII, keys[i]);
 		ok = call(FE2_UIKeyboardPoll);
 	}
+	wrbyte(a6 + A6_KEY_CURSUP, arrows[0] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSDOWN, arrows[1] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSLEFT, arrows[2] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSRIGHT, arrows[3] ? 0xff : 0);
 	return ok;
 }
 

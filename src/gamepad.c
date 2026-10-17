@@ -12,6 +12,7 @@
 #include "game_state.h"
 #include "gl/gl_clipboard.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_mapscreen.h"
 #include "headtrack.h"
 #include "host.h"
 #include "input.h"
@@ -786,6 +787,7 @@ static void scroll_map(float x, float y)
 static void release_all(void)
 {
 	scroll_map(0, 0);
+	mapscreen_scroll(false, false, false, false);
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
@@ -867,7 +869,8 @@ void gamepad_update(void)
 	bool galaxy = game_screen() == SCREEN_GALAXY_MAP;
 	bool map = galaxy && !cockpit_screen_frame();
 	bool focused = cockpit_map_focused();
-	bool left_map = galaxy && !map && focused;
+	bool side_map = !galaxy && mapscreen_up() && cockpit_side_map_shown() && mapscreen_grabbed();
+	bool left_map = (galaxy && !map && focused) || side_map;
 	if (map)
 	{
 		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
@@ -875,10 +878,18 @@ void gamepad_update(void)
 		float ry = pointer_on ? 0.0f : raw_axis(SDL_CONTROLLER_AXIS_RIGHTY);
 		scroll_map(fabsf(rx) > fabsf(mx) ? rx : mx, fabsf(ry) > fabsf(my) ? ry : my);
 	}
+	else if (side_map)
+	{
+		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
+		mapscreen_scroll(my < -threshold, my > threshold, mx < -threshold, mx > threshold);
+		scroll_map(0, 0);
+	}
 	else if (left_map)
 		scroll_map(raw_axis(SDL_CONTROLLER_AXIS_LEFTX), raw_axis(SDL_CONTROLLER_AXIS_LEFTY));
 	else
 		scroll_map(0, 0);
+	if (!side_map)
+		mapscreen_scroll(false, false, false, false);
 
 	int layer = current_layer();
 	bool out = clipboard_out();

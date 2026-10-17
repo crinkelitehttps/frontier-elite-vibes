@@ -93,6 +93,7 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
 static bool active;      /* the frame being drawn is the cockpit */
 static bool sub_on;      /* ... with the cockpit's screens */
 static int live = -1;    /* ... the live one's group (COCKPIT_SCREEN_*) */
+static bool map_beside;  /* ... and the MAP screen is live beside it (the station's) */
 static GLuint sub_tex[COCKPIT_SCREENS]; /* their pictures, 0: none yet */
 static bool cam_on;      /* ... with the camera screen */
 static GLuint cam_tex;
@@ -539,6 +540,9 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 		if (sub_tex[COCKPIT_SCREEN_MAP])
 			live = COCKPIT_SCREEN_MAP;
 	}
+	/* the MAP screen goes on beside the station's services */
+	map_beside = sub_on && live == COCKPIT_SCREEN_COMS && cockpit_map_live && mapscreen_up() &&
+				 sub_tex[COCKPIT_SCREEN_MAP];
 	/* in flight, the COMS screen shows the comms menu's text */
 	if (active && !sub_on && gl_screen_coms_menu())
 		sub_tex[COCKPIT_SCREEN_COMS] = gl_screen_coms_menu();
@@ -887,7 +891,7 @@ void cockpit_draw(void)
 	for (int g = 0; g < COCKPIT_SCREENS; g++) /* their textures are bottom up */
 		if (sub_tex[g])
 			queue_tex_quad(&cp, (const float(*)[3])subs[g], sub_tex[g], 1.0f, g == COCKPIT_SCREEN_MAP ? 0.0f : GL_SCREEN_SUB_V0,
-						   g == live ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && gl_screen_coms_clear());
+						   g == live || (g == COCKPIT_SCREEN_MAP && map_beside) ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && gl_screen_coms_clear());
 	if (cam_on)
 		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
 	gd_pop();
@@ -1338,7 +1342,7 @@ static int host_screens(bool cam_shown, const float *out[COCKPIT_HOST_MAX], int 
 		ids[n++] = HOST_CAMERA;
 	}
 	for (int g = 0; g < COCKPIT_SCREENS && n < COCKPIT_HOST_MAX; g++)
-		if (g != live && sub_tex[g])
+		if (g != live && sub_tex[g] && !(g == COCKPIT_SCREEN_MAP && map_beside))
 		{
 			out[n] = &subs[g][0][0];
 			ids[n++] = g;
@@ -1371,7 +1375,7 @@ static bool ray_hits_host(const float eye[3], const float d[3], bool cam_shown, 
 /* The MAP screen is up in flight (gl_mapscreen.h) */
 static bool map_up(void)
 {
-	return cockpit_map_live && live == COCKPIT_SCREEN_MAP && sub_tex[COCKPIT_SCREEN_MAP];
+	return cockpit_map_live && (live == COCKPIT_SCREEN_MAP || map_beside) && sub_tex[COCKPIT_SCREEN_MAP];
 }
 
 /* The ray -> the MAP screen's page pixel, when it is up in flight and the ray
@@ -1379,7 +1383,7 @@ static bool map_up(void)
 static bool ray_to_map(const float eye[3], const float d[3], int *px, int *py, float *dist)
 {
 	float u, v, t;
-	if (sub_on || !map_up() || !ray_hits_quad((const float(*)[3])subs[COCKPIT_SCREEN_MAP], eye, d, &u, &v, &t))
+	if ((sub_on && !map_beside) || !map_up() || !ray_hits_quad((const float(*)[3])subs[COCKPIT_SCREEN_MAP], eye, d, &u, &v, &t))
 		return false;
 	*px = (int)(u * GL_SCREEN_W);
 	*py = (int)(v * GL_SCREEN_H);
@@ -1661,9 +1665,14 @@ bool cockpit_screen_play(float corners[4][3])
 	return true;
 }
 
+bool cockpit_side_map_shown(void)
+{
+	return active && !sub_on && map_up();
+}
+
 bool cockpit_map_play(float corners[4][3])
 {
-	if (!active || sub_on || !map_up())
+	if (!active || (sub_on && !map_beside) || !map_up())
 		return false;
 	to_play((const float(*)[3])subs[COCKPIT_SCREEN_MAP], corners);
 	return true;

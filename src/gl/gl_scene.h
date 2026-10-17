@@ -149,6 +149,8 @@ void planet_dists_reset(void);       /* gl_planet.c, with scene_reset */
 void planet_dists_publish(void);     /* gl_planet.c, with scene_publish */
 void planet_screen_publish(void);    /* the same for a cockpit screen's frame */
 void planet_screen_acquire(void);
+void planet_page_publish(void);     /* ... and for the page beside it */
+void planet_page_acquire(void);
 void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
 
 /* ---- hand over --------------------------------------------------------- *
@@ -159,6 +161,12 @@ void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
  * `screen`: the frame is one of the game's other screens for the cockpit's
  * screen (native_acquire), which leaves the world's planets as they were. */
 void scene_publish(bool screen);
+/* The same for a second screen's frame beside the screen's (gl_screen.c,
+ * the MAP screen's page beside the station's services), kept apart from
+ * both: scene_use_page(true) draws it, false is the screen's or world's */
+void scene_publish_page(void);
+void scene_acquire_page(void);
+void scene_use_page(bool on);
 void scene_acquire(bool screen);
 /* Game thread, after scene_publish(true): the world as the cockpit sees it
  * has been recorded for that screen frame (cockpit_capture_world); it is

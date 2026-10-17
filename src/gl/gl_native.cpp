@@ -374,7 +374,7 @@ struct Frame
 };
 /* shows[0]: the world, shows[1]: the last frame of the game's other
  * screens, which leaves the world as it was (native_acquire) */
-Frame rec, pub, pub_world, shows[2];
+Frame rec, pub, pub_world, pub_page, shows[3];
 Frame *shown = &shows[0];
 bool screen_only = false; /* drawing shows[1]: its own planets, no haze */
 
@@ -724,6 +724,24 @@ extern "C" void native_acquire(bool screen, bool world)
 		if (world)
 			shows[0] = pub_world;
 	}
+}
+
+extern "C" void native_publish_page(void)
+{
+	pub_page = rec;
+	pub_page.texts = texts_seen;
+}
+
+extern "C" void native_acquire_page(void)
+{
+	shows[2] = pub_page;
+}
+
+extern "C" void native_use_page(bool page)
+{
+	shown = &shows[page ? 2 : 0];
+	screen_only = page;
+	planet_use_page(page);
 }
 
 extern "C" void native_use_screen(bool screen)

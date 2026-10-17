@@ -250,6 +250,8 @@ bool cockpit_screen_press(int sx, int sy);
  * scrolls the map); a touch on the screen toggles it, unless the map is in
  * select mode. Always true off the galaxy map. */
 bool cockpit_map_focused(void);
+/* The MAP screen is up beside the flight view (it runs on the side) */
+bool cockpit_side_map_shown(void);
 /* Game thread: a left click at screen pixel (sx, sy) went to the game (to
  * follow the map's select mode) */
 void cockpit_map_click(int sx, int sy);
