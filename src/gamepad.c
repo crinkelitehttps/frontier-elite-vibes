@@ -869,7 +869,7 @@ void gamepad_update(void)
 	bool galaxy = game_screen() == SCREEN_GALAXY_MAP;
 	bool map = galaxy && !cockpit_screen_frame();
 	bool focused = cockpit_map_focused();
-	bool side_map = !galaxy && mapscreen_up() && cockpit_side_map_shown() && mapscreen_grabbed();
+	bool side_map = !galaxy && mapscreen_group_up(COCKPIT_SCREEN_MAP) && cockpit_side_map_shown() && mapscreen_grabbed();
 	bool left_map = (galaxy && !map && focused) || side_map;
 	if (map)
 	{

@@ -192,13 +192,14 @@ void Call_GetMouseInput(void)
 	if (abs(input.motion_x) > 100 || abs(input.motion_y) > 100)
 		input.motion_x = input.motion_y = 0;
 
-	/* the mouse on the cockpit's MAP screen (up in flight): the map's, not
-	 * the flight view's. Nothing of it goes on to the game. */
-	int mx = 0, my = 0, px, py;
+	/* the mouse on one of the cockpit's side screens (the MAP and the SHIP
+	 * up in flight): theirs, not the flight view's. Nothing of it goes on to
+	 * the game. */
+	int mx = 0, my = 0, px, py, side = -1;
 	bool on_map = !Input_PadPointer(&px, &py) && !Input_LaserPointer(&px, &py) &&
-				  cockpit_window_to_map(input.abs_x, input.abs_y, &mx, &my);
-	mapscreen_pointer(0, on_map, mx, my, (input.cur_mousebut_state | laser_btn) & 3, input.motion_x + drag_x,
-					  input.motion_y + drag_y);
+				  cockpit_window_to_side(input.abs_x, input.abs_y, &side, &mx, &my);
+	mapscreen_pointer(0, on_map ? side : -1, mx, my, (input.cur_mousebut_state | laser_btn) & 3,
+					  input.motion_x + drag_x, input.motion_y + drag_y);
 	if (on_map)
 	{
 		input.motion_x = input.motion_y = 0;
@@ -206,7 +207,7 @@ void Call_GetMouseInput(void)
 		laser_btn = 0;
 		mapscreen_drag(false, 0, 0);
 	}
-	else if (mapscreen_up())
+	else if (mapscreen_group_up(COCKPIT_SCREEN_MAP))
 	{
 		/* a hand's or a controller's drag is the map's (the mouse's own is
 		 * the flight's steering unless the pointer is on the screen) */
@@ -276,11 +277,20 @@ void Input_PressSTKey(unsigned char scancode, BOOL press)
 	/* F2 with the MAP screen up in flight is the screen's (the galaxy map
 	 * and the system map take turns on it), not the game's */
 	static bool f2_to_map;
-	if (scancode == 0x3c && (press ? mapscreen_up() : f2_to_map))
+	if (scancode == 0x3c && (press ? mapscreen_group_up(COCKPIT_SCREEN_MAP) : f2_to_map))
 	{
 		f2_to_map = press;
 		if (press)
-			mapscreen_key(0x3c);
+			mapscreen_key(COCKPIT_SCREEN_MAP, 0x3c);
+		return;
+	}
+	/* ... and F3 the ship screen's page */
+	static bool f3_to_ship;
+	if (scancode == 0x3d && (press ? mapscreen_group_up(COCKPIT_SCREEN_SHIP) : f3_to_ship))
+	{
+		f3_to_ship = press;
+		if (press)
+			mapscreen_key(COCKPIT_SCREEN_SHIP, 0x3d);
 		return;
 	}
 	if (!press)

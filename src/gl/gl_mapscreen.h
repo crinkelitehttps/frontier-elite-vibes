@@ -22,6 +22,14 @@
  *   screen's, with the flight frame as the world (gl_screen.c).
  *
  * The page is made 2 times a second, or 50 while it is the one being used.
+ *
+ * The SHIP screen (the ship screen module, L7ded6) runs the same way. Its
+ * state is mostly the game's own (the cargo lists, the money owed), which the
+ * batch reads live; what it keeps is its page and the angles the ship
+ * turns at. Its page is cycled by a tap away from the buttons, or F3, as F3
+ * does in the game; a tap on one of the page's own buttons (the cargo to
+ * jettison, the equipment to use) does something to the game and the batch
+ * undoes what it does, so the real screen is opened on the same page for it.
  */
 #ifndef GL_MAPSCREEN_H
 #define GL_MAPSCREEN_H
@@ -34,8 +42,9 @@ extern "C"
 {
 #endif
 
-/* Setting: the map screen live in flight */
+/* Settings: the map and the ship screens live in flight */
 extern bool cockpit_map_live;
+extern bool cockpit_ship_live;
 
 typedef struct
 {
@@ -46,38 +55,41 @@ typedef struct
 	int bgcol;
 } MapPage;
 
-/* Input for the screen, from any thread. The pointer is on the screen (on)
- * at page pixel x, y (0..319, 0..167), the game's buttons held (1 right,
+/* Input for the screens (groups COCKPIT_SCREEN_MAP, COCKPIT_SCREEN_SHIP), from
+ * any thread. The pointer is on the screen `group` (-1: on none) at page
+ * pixel x, y (0..319, 0..167), the game's buttons held (1 right,
  * 2 left) and the mouse's motion since the last call (dx, dy, what the
  * right button drags the map with); the batch plays it back as the game's
  * vblank handler would have (UpdateMouse), once per press, and nothing of
  * it reaches the flight view. */
 #define MAPSCREEN_SOURCES 2 /* pointers: 0 the mouse (game thread), 1 the hands (render thread) */
-void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, int dy);
+void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx, int dy);
 /* A drag that turns the map (the right button with a mouse; a hand or a
  * controller's own): held now, and its motion since the last call in mouse
  * units */
 void mapscreen_drag(bool held, int dx, int dy);
 /* A key for the screen (ST scancode), as if pressed with it up */
-void mapscreen_key(unsigned char scancode);
+void mapscreen_key(int group, unsigned char scancode);
 /* The arrow keys held for the screen (a controller's stick), and whether the
  * stick is the map's: a press on the screen takes it, one elsewhere gives
  * it back */
 void mapscreen_scroll(bool up, bool down, bool left, bool right);
 void mapscreen_grab(bool on);
 bool mapscreen_grabbed(void);
-/* The screen is up (the setting on, in flight with the cockpit's screens) */
+/* The screens can be up (in flight with the cockpit's screens, or beside the
+ * station's services), and the one of `group` is (its setting on too) */
 bool mapscreen_up(void);
+bool mapscreen_group_up(int group);
 /* The screen is being used: the pointer is on it, or it was a moment ago */
-bool mapscreen_pointed(void);
+bool mapscreen_pointed(int group);
 
-/* Game thread, in the flip of a cockpit frame of the flight view: a page is
- * wanted now (the map screen is on, enough time has passed) */
-bool mapscreen_due(void);
+/* Game thread, in the flip of a cockpit frame of the flight view: the group
+ * whose page is wanted now (enough time has passed), -1 if none */
+int mapscreen_due(void);
 
-/* Runs the page as above; false when it could not (the picture is then not
- * to be used, and the machine and the host are as they were) */
-bool mapscreen_page(MapPage *out);
+/* Runs the group's page as above; false when it could not (the picture is
+ * then not to be used, and the machine and the host are as they were) */
+bool mapscreen_page(int group, MapPage *out);
 
 /* Forgets what the map was showing (a new game was loaded) */
 void mapscreen_forget(void);

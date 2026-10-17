@@ -308,6 +308,7 @@ typedef struct
 	bool page;     /* the frame went the way of a game screen's: the world aside */
 	bool page_new; /* ... and the page is new */
 	bool page_beside; /* the frame is a screen's (the station's): the page's scene is its own, beside it */
+	int page_group;	  /* ... and the page is this group's: the MAP screen's or the SHIP screen's */
 	uint8_t page_screen[SCR_W * SCR_H];
 	unsigned int page_main_rgb[256];
 	unsigned int page_ctrl_rgb[16];
@@ -911,7 +912,8 @@ static void publish_frame(void)
 	/* beside the station's services the frame is their screen's (the world is
 	 * captured), and the page's scene is kept apart from theirs */
 	bool beside = scr_pub.group == COCKPIT_SCREEN_COMS;
-	bool page = (scr_pub.cockpit || beside) && mapscreen_due();
+	int page_group = (scr_pub.cockpit || beside) ? mapscreen_due() : -1;
+	bool page = page_group >= 0;
 	scr_pub.page = scr_pub.page_new = scr_pub.page_beside = false;
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
@@ -945,7 +947,7 @@ static void publish_frame(void)
 
 	if (page)
 	{
-		bool ok = mapscreen_page(&map_page);
+		bool ok = mapscreen_page(page_group, &map_page);
 		SDL_LockMutex(frame_lock);
 		if (beside)
 		{
@@ -961,6 +963,7 @@ static void publish_frame(void)
 		if (ok)
 		{
 			scr_pub.page_new = true;
+			scr_pub.page_group = page_group;
 			memcpy(scr_pub.page_screen, map_page.screen, sizeof scr_pub.page_screen);
 			build_rgb_palette(scr_pub.page_main_rgb, map_page.main_pal, map_page.len_main);
 			build_rgb_palette(scr_pub.page_ctrl_rgb, map_page.ctrl_pal, 16);
@@ -1189,7 +1192,7 @@ bool gl_screen_coms_clear(void)
 	return coms_state != COMS_KEPT;
 }
 
-/* The MAP screen's new page: the frame's picture and scene for the time of
+/* The MAP or SHIP screen's new page: the frame's picture and scene for the time of
  * drawing it into the group's texture */
 static void draw_page(void)
 {
@@ -1202,7 +1205,7 @@ static void draw_page(void)
 	scr_show.cockpit = false;
 	scr_show.sub = true;
 	sub_page = flight.page_beside;
-	draw_sub(COCKPIT_SCREEN_MAP);
+	draw_sub(flight.page_group);
 	sub_page = false;
 	memcpy(&scr_show, &flight, sizeof scr_show);
 }

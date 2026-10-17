@@ -15,17 +15,21 @@
 #include "gl_scene.h"
 #include "host.h" /* rdword, wrword, hcalls_count */
 #include "hostcall.h"
+#include "input.h"
 #include "m68000.h"
 #include "renderer.h"
 #include "screen_text.h"
 
 bool cockpit_map_live = true;
+bool cockpit_ship_live = true;
 
 #define IDLE_FPS  2
+#define SHIP_IDLE_FPS 10 /* the ship turns */
 #define FOCUS_FPS 50
 #define FOCUS_MS  300 /* the screen counts as in use this long after the pointer left it */
 
 #define HC_DRAW_SCREEN 0x6f /* Nu_DrawScreen */
+#define HC_IDLE        0x1f /* Call_Idle */
 
 /* A6 offsets */
 #define A6_MOD_GALAXY       28    /* long: module pointers */
@@ -59,12 +63,31 @@ bool cockpit_map_live = true;
 #define A6_KEY_CURSRIGHT   16419
 #define A6_KEY_CURSUP      16422
 
+/* The ship screen's module (L7ded6): what it keeps of itself, the angles the
+ * ship is turned to, the page it will show next (fn 8 shows that page and
+ * sets this to the one after) and the page shown. The rest of what it reads
+ * (the cargo lists, the money owed) the game changes as it plays, and is
+ * the game's live. */
+#define A6_MOD_SHIP        124
+#define SHIP_ANGLES        11914 /* 2 words */
+#define SHIP_NEXT_PAGE     11959 /* byte */
+#define SHIP_PAGE          12920 /* byte */
+#define SHIP_KEEP_A        11958 /* 3 bytes round the next page */
+#define SHIP_KEEP_A_LEN    3
+#define A6_FRAME_TIME      14454 /* long: the time the last frame took, 994 for a 50th of a second */
+#define VBLANK_TIME        994
+#define SHIP_PAGE_ROWS     168	 /* the page's rows above the panel, where a tap away from the buttons turns it */
+#define SHIP_ITEM_ID       0x80  /* the icons from this on are the page's items: they do something */
+#define SCAN_F3            0x3d
+#define HAND_OVER_MS       400
+
 /* L457d8, the modules' fn 16 loop, is 0x7c before L45854 (no label) */
 #define MODULES_FN16 (FE2_CallHUDModfuncs - 0x7c)
 #define MODULES_OP   0x022e /* its first instruction, andi.b #,598(a6) */
 
 /* Which map is up, and the motion of its right drag (the flight's own mouse
- * control is not the map's, so this is kept here) */
+ * control is not the map's, so this is kept here), and what the ship screen
+ * keeps */
 static struct
 {
 	bool held;
@@ -72,12 +95,31 @@ static struct
 	uint8_t ctrl[KEEP2_LEN];
 } kept;
 
+#define SHIP_STATE_LEN (4 + SHIP_KEEP_A_LEN + 1)
+static struct
+{
+	bool held;
+	uint8_t state[SHIP_STATE_LEN]; /* angles, 11958..11960, the page shown */
+	int icons;
+	int rect[64][4], id[64]; /* the buttons the page set, as the game had them at its end */
+	Uint64 last;			 /* the page was last made */
+	Uint32 handed;			 /* the real screen was opened (ticks) */
+} ship;
+
+/* No vblank comes in a batch: the game's wait for one (L41b98, the ship
+ * screen draws after it) has it now */
+static void vblank_now(void)
+{
+	wrword(FE2_vblank_waits, 0);
+}
+
 static MapPage *flipped; /* the batch's flip puts the picture here */
 static bool got_page;
 
 void mapscreen_forget(void)
 {
 	kept.held = false;
+	ship.held = false;
 }
 
 /* =========================================================================
@@ -92,7 +134,7 @@ typedef struct
 } Pointer;
 
 static SDL_SpinLock in_lock;
-static struct
+typedef struct
 {
 	Pointer ptr[MAPSCREEN_SOURCES];
 	bool drag; /* a drag other than a mouse's right button */
@@ -102,16 +144,21 @@ static struct
 	int nkeys;
 	bool arrows[4]; /* held: up, down, left, right (a controller's stick) */
 	bool grabbed;	/* the stick scrolls the map until a press elsewhere */
-} in;
+} SideInput;
+static SideInput ins[COCKPIT_SCREENS];
+#define mapin ins[COCKPIT_SCREEN_MAP] /* the map's, for the drag, the stick and the grab */
 
-void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, int dy)
+static void pointer_set(SideInput *in, int group, int source, bool on, int x, int y, int buttons, int dx, int dy)
 {
-	SDL_AtomicLock(&in_lock);
-	Pointer *p = &in.ptr[source];
+	Pointer *p = &in->ptr[source];
 	if (on)
 	{
 		if ((buttons & 2) && !(p->on && (p->buttons & 2)))
-			p->pressed = true, in.grabbed = true;
+		{
+			p->pressed = true;
+			if (group == COCKPIT_SCREEN_MAP)
+				in->grabbed = true;
+		}
 		if (!(buttons & 2) && p->on && (p->buttons & 2))
 			p->released = true;
 		p->dx += dx;
@@ -119,7 +166,7 @@ void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, i
 		p->x = x;
 		p->y = y;
 		p->buttons = buttons;
-		in.seen = SDL_GetPerformanceCounter();
+		in->seen = SDL_GetPerformanceCounter();
 	}
 	else if (p->on)
 	{
@@ -128,85 +175,117 @@ void mapscreen_pointer(int source, bool on, int x, int y, int buttons, int dx, i
 		p->buttons = 0;
 	}
 	p->on = on;
+}
+
+void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx, int dy)
+{
+	SDL_AtomicLock(&in_lock);
+	for (int g = 0; g < COCKPIT_SCREENS; g++)
+		if (g == COCKPIT_SCREEN_MAP || g == COCKPIT_SCREEN_SHIP)
+			pointer_set(&ins[g], g, source, g == group, x, y, buttons, dx, dy);
 	SDL_AtomicUnlock(&in_lock);
 }
 
 void mapscreen_drag(bool held, int dx, int dy)
 {
 	SDL_AtomicLock(&in_lock);
-	in.drag = held;
+	mapin.drag = held;
 	if (held)
 	{
-		in.drag_dx += dx;
-		in.drag_dy += dy;
-		in.seen = SDL_GetPerformanceCounter();
+		mapin.drag_dx += dx;
+		mapin.drag_dy += dy;
+		mapin.seen = SDL_GetPerformanceCounter();
 	}
 	SDL_AtomicUnlock(&in_lock);
 }
 
-void mapscreen_key(unsigned char scancode)
+void mapscreen_key(int group, unsigned char scancode)
 {
 	SDL_AtomicLock(&in_lock);
-	if (in.nkeys < MAX_KEYS)
-		in.keys[in.nkeys++] = scancode;
+	SideInput *i = &ins[group];
+	if (i->nkeys < MAX_KEYS)
+		i->keys[i->nkeys++] = scancode;
 	SDL_AtomicUnlock(&in_lock);
 }
 
 void mapscreen_scroll(bool up, bool down, bool left, bool right)
 {
 	SDL_AtomicLock(&in_lock);
-	in.arrows[0] = up, in.arrows[1] = down, in.arrows[2] = left, in.arrows[3] = right;
+	mapin.arrows[0] = up, mapin.arrows[1] = down, mapin.arrows[2] = left, mapin.arrows[3] = right;
 	if (up || down || left || right)
-		in.seen = SDL_GetPerformanceCounter();
+		mapin.seen = SDL_GetPerformanceCounter();
 	SDL_AtomicUnlock(&in_lock);
 }
 
 void mapscreen_grab(bool on)
 {
 	SDL_AtomicLock(&in_lock);
-	in.grabbed = on;
+	mapin.grabbed = on;
 	SDL_AtomicUnlock(&in_lock);
 }
 
 bool mapscreen_grabbed(void)
 {
 	SDL_AtomicLock(&in_lock);
-	bool g = in.grabbed;
+	bool g = mapin.grabbed;
 	SDL_AtomicUnlock(&in_lock);
 	return g;
 }
 
-bool mapscreen_pointed(void)
+bool mapscreen_pointed(int group)
 {
 	SDL_AtomicLock(&in_lock);
-	bool used = in.drag || in.nkeys;
-	for (int i = 0; i < MAPSCREEN_SOURCES; i++)
-		used = used || in.ptr[i].on || in.ptr[i].pressed || in.ptr[i].released;
+	SideInput *i = &ins[group];
+	bool used = i->drag || i->nkeys;
+	for (int s = 0; s < MAPSCREEN_SOURCES; s++)
+		used = used || i->ptr[s].on || i->ptr[s].pressed || i->ptr[s].released;
 	used = used ||
-		   (in.seen && SDL_GetPerformanceCounter() - in.seen < SDL_GetPerformanceFrequency() * FOCUS_MS / 1000);
+		   (i->seen && SDL_GetPerformanceCounter() - i->seen < SDL_GetPerformanceFrequency() * FOCUS_MS / 1000);
 	SDL_AtomicUnlock(&in_lock);
 	return used;
 }
 
 bool mapscreen_up(void)
 {
-	if (!cockpit_map_live || !cockpit_screens_on() || !game_player_ship())
+	if (!cockpit_screens_on() || !game_player_ship())
 		return false;
 	/* in flight, or beside the station's services (docked: the game is on
 	 * their screen, the world captured round it) */
 	return game_screen() == SCREEN_FLIGHT || game_screen() == SCREEN_STATION;
 }
 
-bool mapscreen_due(void)
+bool mapscreen_group_up(int group)
 {
-	if (!mapscreen_up())
-		return false;
-	static Uint64 last;
+	if (group == COCKPIT_SCREEN_MAP)
+		return cockpit_map_live && mapscreen_up();
+	/* (not for a moment after it opens the real screen: the key is the game's) */
+	if (group == COCKPIT_SCREEN_SHIP)
+		return cockpit_ship_live && mapscreen_up() && SDL_GetTicks() - ship.handed >= HAND_OVER_MS;
+	return false;
+}
+
+int mapscreen_due(void)
+{
+	static Uint64 last[COCKPIT_SCREENS];
 	Uint64 now = SDL_GetPerformanceCounter(), freq = SDL_GetPerformanceFrequency();
-	if (last && now - last < freq / (mapscreen_pointed() ? FOCUS_FPS : IDLE_FPS))
-		return false;
-	last = now;
-	return true;
+	int due = -1;
+	Uint64 most = 0;
+	for (int g = COCKPIT_SCREEN_MAP; g <= COCKPIT_SCREEN_SHIP; g++)
+	{
+		if (!mapscreen_group_up(g))
+			continue;
+		if (!last[g])
+		{
+			due = g; /* the first page */
+			break;
+		}
+		Uint64 gap = freq / (mapscreen_pointed(g) ? FOCUS_FPS : g == COCKPIT_SCREEN_SHIP ? SHIP_IDLE_FPS : IDLE_FPS);
+		if (now - last[g] >= gap && now - last[g] - gap >= most)
+			due = g, most = now - last[g] - gap;
+	}
+	if (due >= 0)
+		last[due] = now;
+	return due;
 }
 
 /* The batch's Nu_DrawScreen: the game has flipped the page, the picture is
@@ -266,8 +345,8 @@ static bool finish_frame(void)
 	return true;
 }
 
-/* The map module's fn 8, as the game's F2 / F3 key runs it */
-static bool enter(void)
+/* The map module's fn 8, as the game's F2 key runs it */
+static bool enter_map(void)
 {
 	uint32_t a6 = GAME_A6;
 	int owner = kept.held ? kept.owner : OWNER_GALAXY;
@@ -275,6 +354,27 @@ static bool enter(void)
 	/* with the galaxy map shown its fn 8 goes on to the system map */
 	wrword(a6 + A6_GALAXY_SHOWN, 0);
 	return call(mod + 8);
+}
+
+/* The ship screen's fn 8, as F3 runs it: it shows the page set to be next
+ * and sets the one after. Put back what it keeps, the page shown (the next
+ * page, if F3 is to turn it) as the one to show. */
+static bool enter_ship(bool turn)
+{
+	uint32_t a6 = GAME_A6;
+	if (ship.held)
+	{
+		for (int i = 0; i < 4; i++)
+			wrbyte(a6 + SHIP_ANGLES + (uint32_t)i, ship.state[i]);
+		for (int i = 0; i < SHIP_KEEP_A_LEN; i++)
+			wrbyte(a6 + SHIP_KEEP_A + (uint32_t)i, ship.state[4 + i]);
+		wrbyte(a6 + SHIP_PAGE, ship.state[4 + SHIP_KEEP_A_LEN]);
+		if (!turn)
+			wrbyte(a6 + SHIP_NEXT_PAGE, ship.state[4 + SHIP_KEEP_A_LEN]);
+	}
+	else
+		wrbyte(a6 + SHIP_NEXT_PAGE, 0);
+	return call((uint32_t)rdlong(a6 + A6_MOD_SHIP) + 8);
 }
 
 /* L41fe8_UpdateMouse as the vblank handler calls it: d0, d1 the motion,
@@ -289,67 +389,104 @@ static bool update_mouse(int dx, int dy, int buttons)
 	return fe2vm_call(FE2_UpdateMouse, &r) == 0;
 }
 
-/* The input since the last batch, as the game would have had it */
-static bool play_input(void)
+/* The input for a batch, since the last */
+typedef struct
 {
-	uint32_t a6 = GAME_A6;
 	Pointer p;
 	bool drag;
 	int drag_dx, drag_dy, nkeys;
 	unsigned char keys[MAX_KEYS];
+	bool arrows[4];
+	bool turn;	   /* the ship screen: F3, or a tap away from its buttons */
+	bool handover; /* ... a tap on one of its items */
+} Batch;
+
+static void take_input(int group, Batch *b)
+{
+	memset(b, 0, sizeof *b);
 	SDL_AtomicLock(&in_lock);
+	SideInput *in = &ins[group];
 	/* the pointer that is on the screen, a hand's (the later source) before
 	 * the mouse's */
 	int src = 0;
 	for (int i = 0; i < MAPSCREEN_SOURCES; i++)
-		if (in.ptr[i].on || in.ptr[i].released || in.ptr[i].pressed)
+		if (in->ptr[i].on || in->ptr[i].released || in->ptr[i].pressed)
 			src = i;
-	p = in.ptr[src];
+	b->p = in->ptr[src];
 	for (int i = 0; i < MAPSCREEN_SOURCES; i++)
-		in.ptr[i].pressed = in.ptr[i].released = false, in.ptr[i].dx = in.ptr[i].dy = 0;
-	drag = in.drag;
-	drag_dx = in.drag_dx;
-	drag_dy = in.drag_dy;
-	in.drag_dx = in.drag_dy = 0;
-	nkeys = in.nkeys;
-	memcpy(keys, in.keys, sizeof keys);
-	in.nkeys = 0;
-	bool arrows[4];
-	memcpy(arrows, in.arrows, sizeof arrows);
+		in->ptr[i].pressed = in->ptr[i].released = false, in->ptr[i].dx = in->ptr[i].dy = 0;
+	b->drag = in->drag;
+	b->drag_dx = in->drag_dx;
+	b->drag_dy = in->drag_dy;
+	in->drag_dx = in->drag_dy = 0;
+	b->nkeys = in->nkeys;
+	memcpy(b->keys, in->keys, sizeof b->keys);
+	in->nkeys = 0;
+	memcpy(b->arrows, in->arrows, sizeof b->arrows);
 	SDL_AtomicUnlock(&in_lock);
 
-	if (getenv("GLF_MAP_LOG") && (p.pressed || p.released || p.buttons || drag))
-		log_printf("map input: on %d at %d,%d buttons %d pressed %d released %d d %d,%d drag %d %d,%d\n", p.on, p.x,
-				   p.y, p.buttons, p.pressed, p.released, p.dx, p.dy, drag, drag_dx, drag_dy);
-	bool ok = true;
-	const bool right = (p.on && (p.buttons & 1)) || drag;
-	if (p.on || p.released || drag)
+	if (group != COCKPIT_SCREEN_SHIP)
+		return;
+	/* the ship screen: the keys but F3 are not its, a tap on an item opens
+	 * the real screen, a tap away from the buttons turns the page, and the
+	 * pointer only moves */
+	for (int i = 0; i < b->nkeys; i++)
+		if (b->keys[i] == SCAN_F3)
+			b->turn = true;
+	b->nkeys = 0;
+	if (b->p.pressed)
 	{
-		if (p.on || p.released)
+		int hit = -1;
+		for (int i = 0; i < ship.icons; i++)
+			if (b->p.x >= ship.rect[i][0] && b->p.x <= ship.rect[i][2] && b->p.y >= ship.rect[i][1] &&
+				b->p.y <= ship.rect[i][3])
+				hit = i;
+		if (hit >= 0)
+			b->handover = ship.id[hit] >= SHIP_ITEM_ID;
+		else
+			b->turn = b->turn || b->p.y < SHIP_PAGE_ROWS;
+	}
+	b->p.pressed = b->p.released = false;
+	b->p.buttons &= ~2;
+}
+
+/* The input, as the game would have had it */
+static bool play_input(const Batch *b)
+{
+	uint32_t a6 = GAME_A6;
+	const Pointer *p = &b->p;
+	if (getenv("GLF_MAP_LOG") && (p->pressed || p->released || p->buttons || b->drag))
+		log_printf("map input: on %d at %d,%d buttons %d pressed %d released %d d %d,%d drag %d %d,%d\n", p->on, p->x,
+				   p->y, p->buttons, p->pressed, p->released, p->dx, p->dy, b->drag, b->drag_dx, b->drag_dy);
+	bool ok = true;
+	const bool right = (p->on && (p->buttons & 1)) || b->drag;
+	if (p->on || p->released || b->drag)
+	{
+		if (p->on || p->released)
 		{
-			wrword(a6 + A6_MOUSE_ABS_X, p.x);
-			wrword(a6 + A6_MOUSE_ABS_Y, p.y);
+			wrword(a6 + A6_MOUSE_ABS_X, p->x);
+			wrword(a6 + A6_MOUSE_ABS_Y, p->y);
 		}
 		/* the click, one press (the game acts on the edge), then what the
 		 * buttons are now: a right drag moves the map */
-		if (p.pressed)
+		if (p->pressed)
 			ok = update_mouse(0, 0, 2);
-		if (ok && (p.pressed || p.released) && !(p.buttons & 2))
+		if (ok && (p->pressed || p->released) && !(p->buttons & 2))
 			ok = update_mouse(0, 0, 0);
 		if (ok && right)
-			ok = update_mouse(p.dx + drag_dx, p.dy + drag_dy, 1);
-		else if (ok && !p.pressed && !p.released && p.on)
+			ok = update_mouse(p->dx + b->drag_dx, p->dy + b->drag_dy, 1);
+		else if (ok && !p->pressed && !p->released && p->on)
 			ok = update_mouse(0, 0, 0);
 	}
-	for (int i = 0; ok && i < nkeys; i++)
+	for (int i = 0; ok && i < b->nkeys; i++)
 	{
-		wrbyte(a6 + A6_SCANCODE_ASCII, keys[i]);
+		wrbyte(a6 + A6_SCANCODE_ASCII, b->keys[i]);
 		ok = call(FE2_UIKeyboardPoll);
 	}
-	wrbyte(a6 + A6_KEY_CURSUP, arrows[0] ? 0xff : 0);
-	wrbyte(a6 + A6_KEY_CURSDOWN, arrows[1] ? 0xff : 0);
-	wrbyte(a6 + A6_KEY_CURSLEFT, arrows[2] ? 0xff : 0);
-	wrbyte(a6 + A6_KEY_CURSRIGHT, arrows[3] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSUP, b->arrows[0] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSDOWN, b->arrows[1] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSLEFT, b->arrows[2] ? 0xff : 0);
+	wrbyte(a6 + A6_KEY_CURSRIGHT, b->arrows[3] ? 0xff : 0);
 	return ok;
 }
 
@@ -366,17 +503,48 @@ static void no_keys(void)
 	wrbyte(a6 + A6_KEY_CURSUP, 0);
 }
 
-bool mapscreen_page(MapPage *out)
+/* The ship screen's page ran: what it keeps, and its buttons */
+static void ship_take(void)
 {
-	static bool failed;
+	uint32_t a6 = GAME_A6;
+	for (int i = 0; i < 4; i++)
+		ship.state[i] = (uint8_t)rdbyte(a6 + SHIP_ANGLES + (uint32_t)i);
+	for (int i = 0; i < SHIP_KEEP_A_LEN; i++)
+		ship.state[4 + i] = (uint8_t)rdbyte(a6 + SHIP_KEEP_A + (uint32_t)i);
+	ship.state[4 + SHIP_KEEP_A_LEN] = (uint8_t)rdbyte(a6 + SHIP_PAGE);
+	int rects[64][4];
+	ship.icons = game_icon_rects(rects, 64);
+	memcpy(ship.rect, rects, sizeof ship.rect);
+	for (int i = 0; i < ship.icons; i++)
+		ship.id[i] = (uint16_t)rdword(a6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8);
+	ship.held = true;
+}
+
+/* The real ship screen on the page shown (a tap on an item: what it does is
+ * the game's to do) */
+static void ship_hand_over(void)
+{
+	uint32_t a6 = GAME_A6;
+	wrbyte(a6 + SHIP_NEXT_PAGE, ship.state[4 + SHIP_KEEP_A_LEN]);
+	ship.handed = SDL_GetTicks();
+	Input_TapSTKey(SCAN_F3);
+}
+
+bool mapscreen_page(int group, MapPage *out)
+{
+	static bool failed[COCKPIT_SCREENS];
+	const bool is_ship = group == COCKPIT_SCREEN_SHIP;
 	uint32_t a6 = GAME_A6;
 	if ((uint16_t)rdword(MODULES_FN16) != MODULES_OP)
 	{
-		if (!failed)
+		if (!failed[group])
 			log_printf("Map screen: the modules' loop is not where expected\n");
-		failed = true;
+		failed[group] = true;
 		return false;
 	}
+
+	Batch input;
+	take_input(group, &input);
 
 	HostScreenState host;
 	host_screen_save(&host);
@@ -385,32 +553,55 @@ bool mapscreen_page(MapPage *out)
 	fe2vm_game_hcalls(1);
 	fe2vm_begin();
 	hcalls[HC_DRAW_SCREEN] = page_flip;
+	hcalls[HC_IDLE] = vblank_now;
 	flipped = out;
 	got_page = false;
 
 	int step = 0;
 	uint8_t state[KEEP_END - KEEP_FIRST], end_state[KEEP_END - KEEP_FIRST];
-	for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
-		state[i] = (uint8_t)rdbyte(a6 + KEEP_FIRST + (uint32_t)i);
-	bool ok = call(FE2_Clear3DView) && (step = 1, enter());
+	if (!is_ship)
+		for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
+			state[i] = (uint8_t)rdbyte(a6 + KEEP_FIRST + (uint32_t)i);
+	bool ok = call(FE2_Clear3DView) && (step = 1, is_ship ? enter_ship(input.turn) : enter_map());
 	if (ok)
 	{
 		step = 2;
-		/* entering resets some of it: as it was, then */
-		for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
-			wrbyte(a6 + KEEP_FIRST + (uint32_t)i, state[i]);
-		if (kept.held)
-			for (int i = 0; i < KEEP2_LEN; i++)
-				wrbyte(a6 + KEEP2_FIRST + (uint32_t)i, kept.ctrl[i]);
+		if (!is_ship)
+		{
+			/* entering resets some of it: as it was, then */
+			for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
+				wrbyte(a6 + KEEP_FIRST + (uint32_t)i, state[i]);
+			if (kept.held)
+				for (int i = 0; i < KEEP2_LEN; i++)
+					wrbyte(a6 + KEEP2_FIRST + (uint32_t)i, kept.ctrl[i]);
+		}
+		else
+		{
+			/* the ship turns by the time that has passed, as the frames
+			 * the game has not run would have */
+			Uint64 now = SDL_GetPerformanceCounter(), freq = SDL_GetPerformanceFrequency();
+			Uint64 vblanks = ship.last ? (now - ship.last) * 50 / freq : 1;
+			if (vblanks < 1)
+				vblanks = 1;
+			if (vblanks > 100)
+				vblanks = 100;
+			ship.last = now;
+			wrlong(a6 + A6_FRAME_TIME, (uint32_t)(VBLANK_TIME * vblanks));
+		}
 		no_keys();
-		ok = (step = 3, play_input()) && call(FE2_UIKeyboardPoll) && (step = 4, call(MODULES_FN16)) && (step = 5, finish_frame()) &&
-			 (step = 6, got_page);
+		ok = (step = 3, play_input(&input)) && call(FE2_UIKeyboardPoll) && (step = 4, call(MODULES_FN16)) &&
+			 (step = 5, finish_frame()) && (step = 6, got_page);
 	}
 	bool keep = false;
 	if (ok)
 	{
 		int owner = (uint16_t)rdword(a6 + A6_SCREEN_OWNER);
-		if (owner == OWNER_GALAXY || owner == OWNER_SYSTEM)
+		if (is_ship)
+		{
+			if (owner == OWNER_SHIP_SCREEN)
+				ship_take();
+		}
+		else if (owner == OWNER_GALAXY || owner == OWNER_SYSTEM)
 		{
 			kept.owner = owner;
 			for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
@@ -430,9 +621,12 @@ bool mapscreen_page(MapPage *out)
 			wrbyte(a6 + KEEP_FIRST + (uint32_t)i, end_state[i]);
 	host_screen_restore(&host);
 	flipped = NULL;
+	if (ok && is_ship && input.handover)
+		ship_hand_over();
 
-	if (!ok && !failed)
-		log_printf("Map screen: no page (step %d, owner %d, clr %02x: %s)\n", step, d_owner, d_clr, fe2vm_error());
-	failed = !ok;
+	if (!ok && !failed[group])
+		log_printf("%s screen: no page (step %d, owner %d, clr %02x: %s)\n", is_ship ? "Ship" : "Map", step, d_owner,
+				   d_clr, fe2vm_error());
+	failed[group] = !ok;
 	return ok;
 }

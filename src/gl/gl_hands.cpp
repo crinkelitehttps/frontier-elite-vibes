@@ -354,9 +354,9 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 			(mp < 0 || (hand[i].down && !hand[mp].down) || (hand[i].down == hand[mp].down && hand[i].height < hand[mp].height)))
 			mp = i;
 	if (mp >= 0)
-		mapscreen_pointer(1, true, hand[mp].sx, hand[mp].sy, hand[mp].down ? 2 : 0, 0, 0);
+		mapscreen_pointer(1, COCKPIT_SCREEN_MAP, hand[mp].sx, hand[mp].sy, hand[mp].down ? 2 : 0, 0, 0);
 	else
-		mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
+		mapscreen_pointer(1, -1, 0, 0, 0, 0, 0);
 	if (active || was_active)
 	{
 		const Hand *h = current >= 0 ? &hand[current] : nullptr;
@@ -372,7 +372,7 @@ void hands_off(void)
 	for (Hand &h : hand)
 		h = Hand{};
 	current = -1;
-	mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
+	mapscreen_pointer(1, -1, 0, 0, 0, 0, 0);
 	if (was_active)
 		Input_SetLaser(false, false, 0, 0, 0);
 	was_active = false;

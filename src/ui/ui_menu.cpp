@@ -217,6 +217,7 @@ void page_settings()
 	wrapped_checkbox("3D cockpit in the front view", &cockpit_enabled);
 	wrapped_checkbox("Maps, station and ship screens on a screen in the cockpit", &cockpit_screen);
 	wrapped_checkbox("Map screen live in flight", &cockpit_map_live);
+	wrapped_checkbox("Ship screen live in flight", &cockpit_ship_live);
 	ImGui::TextWrapped("Field of view (vertical)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##fov", &cockpit_fov, 30, 120, "%d degrees");

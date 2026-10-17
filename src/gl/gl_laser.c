@@ -142,7 +142,7 @@ void laser_update(bool cockpit)
 	bool connected = false, active = false;
 	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_host[2] = {false, false};
 	bool on_map[2] = {false, false}; /* the MAP screen up in flight (gl_mapscreen.h) */
-	int map_x[2] = {0, 0}, map_y[2] = {0, 0};
+	int map_x[2] = {0, 0}, map_y[2] = {0, 0}, map_g[2] = {-1, -1};
 	float host_u[2] = {0, 0}, host_v[2] = {0, 0};
 	int host_id[2] = {0, 0};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
@@ -185,7 +185,7 @@ void laser_update(bool cockpit)
 			dist = host_dist;
 		}
 		float map_dist;
-		on_map[i] = cockpit && cockpit_ray_to_map(h->pos, h->dir, &map_x[i], &map_y[i], &map_dist);
+		on_map[i] = cockpit && cockpit_ray_to_side(h->pos, h->dir, &map_g[i], &map_x[i], &map_y[i], &map_dist);
 		if (on_map[i])
 		{
 			b->hit_near = true;
@@ -230,9 +230,9 @@ void laser_update(bool cockpit)
 	if (!vr_hands)
 	{
 		if (mp >= 0)
-			mapscreen_pointer(1, true, map_x[mp], map_y[mp], trigger_on[mp] ? 2 : 0, 0, 0);
+			mapscreen_pointer(1, map_g[mp], map_x[mp], map_y[mp], trigger_on[mp] ? 2 : 0, 0, 0);
 		else
-			mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
+			mapscreen_pointer(1, -1, 0, 0, 0, 0, 0);
 	}
 
 	if (vr_hands)
