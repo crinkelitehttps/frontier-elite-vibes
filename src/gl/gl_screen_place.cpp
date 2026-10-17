@@ -12,6 +12,7 @@ extern "C"
 #include "gl_hands.h"
 #include "gl_screen_place.h"
 #include "input.h"
+#include "main.h"
 }
 
 #include "vibe/surface.h"
@@ -334,6 +335,14 @@ void stop_turning(void)
 	turner = -1;
 }
 
+/* The screens are moved only with the game paused (the options screen or
+ * the emulator's menu): flying, the hands rest on the panel and a squeeze
+ * is a flight control */
+bool game_paused(void)
+{
+	return !bEmulationActive || game_screen() == SCREEN_OPTIONS;
+}
+
 bool map_on_screen(void)
 {
 	float c[4][3];
@@ -410,7 +419,7 @@ void screen_place_hands(VrHand hands[2], bool cockpit, int held[2])
 				screen_place[own] = place_from_pose(c.cur);
 			own = -1;
 		}
-		if (!pressed || !h[i].on || own >= 0)
+		if (!pressed || !h[i].on || own >= 0 || !game_paused())
 			continue;
 		/* the nearest screen within reach; one the other hand holds counts
 		 * where it is being carried */

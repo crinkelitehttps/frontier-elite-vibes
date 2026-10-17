@@ -83,6 +83,12 @@ bool gl_screen_menu_rows(int *y0, int *y1);
  * never had one */
 GLuint gl_screen_sub_texture(int group);
 #define GL_SCREEN_SUB_V0 (1.0f - 168.0f / 200.0f)
+/* The COMS screen's picture while undocked and the screen isn't live: the
+ * flight comms menu's text on nothing (the texture, else 0 when there is no
+ * menu); and whether the picture is such (transparent where the alpha is 0,
+ * and not the station's page it last had) */
+GLuint gl_screen_coms_menu(void);
+bool gl_screen_coms_clear(void);
 /* With the cockpit's screen: the labels on things in the world round it,
  * the flight view's text layer, laid out as the emulated screen's
  * texture (transparent where there is none); 0 when there are none */
@@ -128,6 +134,9 @@ bool cockpit_capture_world(void);
 /* Host call (Lscreen_controls in fe2.s): d0 = 1 if the player's controls
  * are to work though a game screen is up, as it is on the cockpit's */
 void Call_ScreenControls(void);
+/* Host call (Ldust_gate in fe2.s): d0 = 1 if the world goes on round the
+ * cockpit's screen (dust and clouds are made), without the controls */
+void Call_ScreenWorld(void);
 
 /* Once per drawing, before it: polls the head tracker and sets up the
  * view for a frame the game drew as the cockpit (`cockpit`), or for the
@@ -229,6 +238,13 @@ void cockpit_host_tap(int id, float u, float v);
  * host's (on none of the game's buttons on a screen whose pages a tap
  * cycles), and then done: the game is not to see it. Any thread. */
 bool cockpit_screen_press(int sx, int sy);
+/* Whether the galaxy map on the cockpit's screen has the left stick (it
+ * scrolls the map); a touch on the screen toggles it, unless the map is in
+ * select mode. Always true off the galaxy map. */
+bool cockpit_map_focused(void);
+/* Game thread: a left click at screen pixel (sx, sy) went to the game (to
+ * follow the map's select mode) */
+void cockpit_map_click(int sx, int sy);
 /* Places the screens again, after one was moved (gl_screen_place.h) */
 void cockpit_place_screens(void);
 /* A ray in the play space, as cockpit_ray_to_screen: does it hit a host

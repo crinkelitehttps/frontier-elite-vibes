@@ -34,6 +34,8 @@ void Input_MouseRelease(int sdl_button);
 void Input_PadPointerBegin(void); /* starts where the game's pointer is */
 void Input_PadPointerMove(float dx, float dy);
 void Input_PadPointerClick(void); /* clicks the left button there, then ends */
+/* Clicks the left button at screen pixel (x, y) (any thread) */
+void Input_ClickAt(int x, int y);
 bool Input_PadPointer(int *x, int *y); /* on: where it is */
 
 /* The VR laser pointer (gl_laser.c). Set by the drawing, any thread:

@@ -508,6 +508,7 @@ bool gl_screen_menu_rows(int *y0, int *y1)
 typedef struct
 {
 	int transparent;
+	int scissor[4]; /* x, y, w, h in the framebuffer; w = 0: none */
 } BlitPass;
 
 static void screen_blit_pass(const void *data)
@@ -518,7 +519,13 @@ static void screen_blit_pass(const void *data)
 	glUniform1i(u_blit_tex, 0);
 	glUniform1i(u_blit_discard, b->transparent);
 	glBindVertexArray(blit_vao);
+	if (b->scissor[2])
+	{
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(b->scissor[0], b->scissor[1], b->scissor[2], b->scissor[3]);
+	}
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glDisable(GL_SCISSOR_TEST);
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
@@ -742,7 +749,10 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 
 		BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
 		if (blit)
+		{
 			blit->transparent = (scr_show.renderer != R_OLD);
+			blit->scissor[2] = 0;
+		}
 
 		/* the clipboard over the picture while it is out */
 		gd_set_viewport(GD_VP_WINDOW);
@@ -989,10 +999,9 @@ GLuint gl_screen_sub_texture(int group)
 	return group >= 0 && group < COCKPIT_SCREENS && sub_drawn[group] ? sub_texs[group] : 0;
 }
 
-static void draw_sub(int group)
+/* The group's framebuffer, made at first use; its texture in *tex */
+static GLuint sub_target(int group, GLuint *tex)
 {
-	if (group < 0 || group >= COCKPIT_SCREENS)
-		return;
 	if (!sub_depth)
 	{
 		glGenRenderbuffers(1, &sub_depth);
@@ -1016,6 +1025,17 @@ static void draw_sub(int group)
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 			log_printf("The cockpit's screen's framebuffer is incomplete\n");
 	}
+	*tex = *sub_tex;
+	return *sub_fbo;
+}
+
+static void draw_sub(int group)
+{
+	if (group < 0 || group >= COCKPIT_SCREENS)
+		return;
+	GLuint tex;
+	GLuint fbo = sub_target(group, &tex);
+	GLuint *sub_fbo = &fbo, *sub_tex = &tex;
 	glBindFramebuffer(GL_FRAMEBUFFER, *sub_fbo);
 	cockpit_draw_flat(true);
 	native_use_screen(true);
@@ -1031,12 +1051,85 @@ static void draw_sub(int group)
 	sub_drawn[group] = true;
 }
 
+/* The COMS screen when it isn't the game's live screen and the ship is
+ * undocked: the station's page it last had is gone. In its place the flight
+ * comms menu's text (rows of the screen where the menu is), on nothing, or
+ * nothing at all. */
+enum
+{
+	COMS_KEPT,  /* the texture is the station's (or never drawn) */
+	COMS_CLEAR, /* cleared */
+	COMS_MENU   /* the comms menu's text */
+};
+static int coms_state;
+
+static void draw_coms_flight(bool new_frame)
+{
+	FlightStatus fs = game_flight_status();
+	if (!cockpit_screens_on() || fs == FLIGHT_DOCKED || fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH ||
+		(scr_show.sub && scr_show.group == COCKPIT_SCREEN_COMS))
+	{
+		coms_state = COMS_KEPT;
+		return;
+	}
+	int y0, y1;
+	bool menu = scr_show.cockpit && !scr_show.sub && gl_screen_menu_rows(&y0, &y1);
+	if (!menu && coms_state == COMS_CLEAR)
+		return;
+	if (menu && !new_frame && coms_state == COMS_MENU)
+		return;
+	GLuint tex;
+	GLuint fbo = sub_target(COCKPIT_SCREEN_COMS, &tex);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, SUB_W, SUB_H);
+	glClearColor(0, 0, 0, 0);
+	glStencilMask(0xff);
+	glDepthMask(GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	if (menu)
+	{
+		int rects[GD_VP_COUNT][4];
+		layout_rects(SUB_W, SUB_H, rects);
+		gd_begin_frame(rects);
+		gd_set_viewport(GD_VP_GAME);
+		BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
+		if (blit)
+		{
+			const int *g = rects[GD_VP_GAME];
+			blit->transparent = 1;
+			blit->scissor[0] = g[0];
+			blit->scissor[1] = g[1] + g[3] * (SCR_H - y1) / SCR_H;
+			blit->scissor[2] = g[2];
+			blit->scissor[3] = g[3] * (y1 - y0) / SCR_H + 1;
+		}
+		gd_flush();
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	sub_drawn[COCKPIT_SCREEN_COMS] = true;
+	coms_state = menu ? COMS_MENU : COMS_CLEAR;
+}
+
+GLuint gl_screen_coms_menu(void)
+{
+	return coms_state == COMS_MENU ? sub_texs[COCKPIT_SCREEN_COMS] : 0;
+}
+
+bool gl_screen_coms_clear(void)
+{
+	return coms_state != COMS_KEPT;
+}
+
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
-	log_rates(acquire_frame());
+	bool new_frame = acquire_frame();
+	log_rates(new_frame);
 	if (scr_show.sub)
 		draw_sub(scr_show.group);
+	draw_coms_flight(new_frame);
 	bool cockpit = draw_vr();
 	draw_frame(screen_w, screen_h, cockpit, true);
 	if (with_menu)

@@ -7,6 +7,7 @@
 #include <SDL.h>
 
 #include "input.h"
+#include "gl/gl_cockpit.h"
 #include "m68000.h"
 #include "main.h"
 #include "renderer.h"
@@ -64,6 +65,17 @@ void Input_PadPointerClick(void)
 {
 	if (!pad_on || click_polls)
 		return;
+	click_polls = CLICK_POLLS;
+	input.cur_mousebut_state |= 0x2;
+}
+
+void Input_ClickAt(int x, int y)
+{
+	if (click_polls)
+		return;
+	pad_x = (float)x;
+	pad_y = (float)y;
+	pad_on = true;
 	click_polls = CLICK_POLLS;
 	input.cur_mousebut_state |= 0x2;
 }
@@ -197,6 +209,13 @@ void Call_GetMouseInput(void)
 	}
 
 	input.motion_x = input.motion_y = 0;
+
+	/* the left button going down: the map follows its select mode */
+	static bool left_was;
+	bool left = (input.cur_mousebut_state | laser_btn) & 0x2;
+	if (left && !left_was && have_last)
+		cockpit_map_click(last_x, last_y);
+	left_was = left;
 
 	/* the gamepad's click: the button held for a few polls, then released
 	 * and the pointer put away */

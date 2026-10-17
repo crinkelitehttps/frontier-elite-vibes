@@ -866,7 +866,8 @@ void gamepad_update(void)
 	 * left one, as the ship flies on round it */
 	bool galaxy = game_screen() == SCREEN_GALAXY_MAP;
 	bool map = galaxy && !cockpit_screen_frame();
-	bool left_map = galaxy && !map;
+	bool focused = cockpit_map_focused();
+	bool left_map = galaxy && !map && focused;
 	if (map)
 	{
 		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);

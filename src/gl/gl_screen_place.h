@@ -4,6 +4,10 @@
  * headset's hands, and the maps turned with the left trigger.
  *
  * HOW IT WORKS
+ *   Only with the game paused (the options screen, or the emulator's
+ *   menu): in flight the hands rest on the panel, and a squeeze is a flight
+ *   control.
+ *
  *   A grip pressed with the hand within PLACE_REACH of a screen (its
  *   palm or fingertip, from the rectangle or its edges) takes that screen:
  *   it follows the hand as if held at that point, so it moves, turns,

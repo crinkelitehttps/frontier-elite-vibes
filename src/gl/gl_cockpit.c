@@ -366,6 +366,10 @@ void cockpit_place_screens(void)
 static float screen_plane[4][3], view_plane[4][3];
 static bool menu_on;
 static int menu_y0, menu_y1;
+/* In flight the comms menu is on the COMS screen (gl_screen_coms_menu), not
+ * in the view: its rows are left out of the view */
+static volatile bool coms_menu;
+static int cut_y0, cut_y1;
 
 static void build_planes(void)
 {
@@ -385,7 +389,7 @@ static void build_planes(void)
 		view_plane[i][1] = v * 2.0f * ky;
 		view_plane[i][2] = -dist;
 	}
-	menu_on = gl_screen_menu_rows(&menu_y0, &menu_y1);
+	menu_on = !coms_menu && gl_screen_menu_rows(&menu_y0, &menu_y1);
 }
 
 bool cockpit_game_frame(void)
@@ -447,6 +451,11 @@ void Call_ScreenControls(void)
 		wrlong(a6 + MOUSE_CTRL_LAST, rdlong(a6 + MOUSE_CTRL));
 	}
 	SetReg(REG_D0, on);
+}
+
+void Call_ScreenWorld(void)
+{
+	SetReg(REG_D0, cockpit_screen_frame());
 }
 
 bool cockpit_capture_world(void)
@@ -517,6 +526,10 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	live = sub_on ? screen : -1;
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		sub_tex[g] = sub_on ? gl_screen_sub_texture(g) : 0;
+	/* in flight, the COMS screen shows the comms menu's text */
+	if (active && !sub_on && gl_screen_coms_menu())
+		sub_tex[COCKPIT_SCREEN_COMS] = gl_screen_coms_menu();
+	coms_menu = active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && gl_screen_menu_rows(&cut_y0, &cut_y1);
 	cam_tex = active && cockpit_camera ? camera_texture() : 0;
 	cam_on = cam_tex != 0;
 	if (window_w > 0 && window_h > 0)
@@ -791,7 +804,7 @@ static void queue_screen_quad(const mat4 *m, const float corners[4][3], int y0, 
 /* Queues the whole of texture `tex` on the quad `corners`, its top edge
  * at texture v `v_top` and its bottom at `v_bottom`, `tint` bright */
 static void queue_tex_quad(const mat4 *m, const float corners[4][3], GLuint tex, float v_top, float v_bottom,
-						   float tint)
+						   float tint, bool discard)
 {
 	TexQuad *q = gd_custom(tex_quad_pass, sizeof *q);
 	if (!q)
@@ -802,7 +815,7 @@ static void queue_tex_quad(const mat4 *m, const float corners[4][3], GLuint tex,
 		q->v[i][4] = (i & 1) ? 1.0f : 0.0f;
 		q->v[i][5] = (i & 2) ? v_bottom : v_top;
 	}
-	q->discard = false;
+	q->discard = discard;
 	q->upload = false;
 	q->tex = tex;
 	q->tint = tint;
@@ -819,7 +832,9 @@ void cockpit_draw(void)
 	mat4 hud = cockpit_view_pixel_projection();
 	gd_set_viewport(GD_VP_WINDOW);
 	bool upload = true;
-	const int bands[2][2] = {{0, menu_on ? menu_y0 : PANEL_ROW0}, {menu_on ? menu_y1 : PANEL_ROW0, PANEL_ROW0}};
+	const bool cut = menu_on || coms_menu;
+	const int c0 = menu_on ? menu_y0 : cut_y0, c1 = menu_on ? menu_y1 : cut_y1;
+	const int bands[2][2] = {{0, cut ? c0 : PANEL_ROW0}, {cut ? c1 : PANEL_ROW0, PANEL_ROW0}};
 	for (int i = 0; i < 2 && !sub_on; i++)
 	{
 		int a = bands[i][0], b = bands[i][1];
@@ -859,9 +874,9 @@ void cockpit_draw(void)
 	for (int g = 0; g < COCKPIT_SCREENS; g++) /* their textures are bottom up */
 		if (sub_tex[g])
 			queue_tex_quad(&cp, (const float(*)[3])subs[g], sub_tex[g], 1.0f, GL_SCREEN_SUB_V0,
-						   g == live ? 1.0f : SUB_DIM);
+						   g == live ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && gl_screen_coms_clear());
 	if (cam_on)
-		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f);
+		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
 	gd_pop();
 
 	/* the clipboard (gl_clipboard.h), nearer than the panel */
@@ -1310,7 +1325,7 @@ static int host_screens(bool cam_shown, const float *out[COCKPIT_HOST_MAX], int 
 		ids[n++] = HOST_CAMERA;
 	}
 	for (int g = 0; g < COCKPIT_SCREENS && n < COCKPIT_HOST_MAX; g++)
-		if (sub_on && g != live && sub_tex[g])
+		if (g != live && sub_tex[g])
 		{
 			out[n] = &subs[g][0][0];
 			ids[n++] = g;
@@ -1423,13 +1438,43 @@ void cockpit_host_tap(int id, float u, float v)
 {
 	if (id == HOST_CAMERA)
 		camera_tap(u, v);
+	else if (id == COCKPIT_SCREEN_COMS && coms_menu)
+		Input_ClickAt((int)(u * GL_SCREEN_W), (int)(v * PANEL_ROW0)); /* the comms menu's own */
 	else if (id >= 0 && id < COCKPIT_SCREENS)
 		Input_TapSTKey(GROUP_KEY[id]);
+}
+
+/* The galaxy map on the cockpit's screen holds the left stick (it scrolls
+ * the map) until the screen is touched; touched again, the stick flies the
+ * ship again. Not while the map is in select mode (the panel's button
+ * MAP_SELECT_ICON toggles it): then touches are the game's. */
+#define MAP_SELECT_ICON 10
+static volatile bool map_focus = true, map_select;
+
+bool cockpit_map_focused(void)
+{
+	if (game_screen() != SCREEN_GALAXY_MAP)
+		map_focus = true, map_select = false;
+	return map_focus;
+}
+
+void cockpit_map_click(int sx, int sy)
+{
+	int rects[64][4], n = game_icon_rects(rects, 64);
+	if (game_screen() == SCREEN_GALAXY_MAP && n > MAP_SELECT_ICON && sx >= rects[MAP_SELECT_ICON][0] &&
+		sx <= rects[MAP_SELECT_ICON][2] && sy >= rects[MAP_SELECT_ICON][1] && sy <= rects[MAP_SELECT_ICON][3])
+		map_select = !map_select;
 }
 
 bool cockpit_screen_press(int sx, int sy)
 {
 	int g = live;
+	if (sub_on && g == COCKPIT_SCREEN_MAP && game_screen() == SCREEN_GALAXY_MAP && sy >= 0 && sy < PANEL_ROW0 &&
+		!map_select)
+	{
+		map_focus = !map_focus;
+		return true;
+	}
 	if (!sub_on || g != COCKPIT_SCREEN_SHIP || sy < 0 || sy >= PANEL_ROW0)
 		return false;
 	int rects[64][4], n = game_icon_rects(rects, 64);

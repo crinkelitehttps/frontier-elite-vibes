@@ -380,5 +380,6 @@
 #define FE2_Lcam_hud                                 0xa9280 /* Lcam_hud */
 #define FE2_Lscreen_leave                            0xa929e /* Lscreen_leave */
 #define FE2_Lstation_enter                           0xa92b0 /* Lstation_enter */
+#define FE2_Ldust_gate                               0xa92f4 /* Ldust_gate */
 
 #endif /* FE2_LABELS_H */

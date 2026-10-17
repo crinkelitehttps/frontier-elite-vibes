@@ -163,6 +163,8 @@ Call_HudLabels		equ	$89
 * Station screen: kept as it was while other screens are up (src/station_resume.c)
 Call_ScreenLeave	equ	$8a
 Call_StationResume	equ	$8b
+* Cockpit screen: the dust is made under a game screen (src/gl/gl_cockpit.c)
+Call_ScreenWorld	equ	$8c
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -40582,8 +40584,10 @@ L61cf4:
 		bge.w	l61ef2
 		tst.b	A6_opt_dust_n_clouds(a6)
 		beq.w	l61ef2
-		tst.b	A6_mod_player_active(a6)
-		bpl.w	l61ef2
+* Dust under a game screen too. Hook, same size. See Ldust_gate at the end
+* of the file.
+		jsr	Ldust_gate
+		nop
 		jsr	A5_2RandInts(a5)
 		cmp.w	#$3332,d0
 		bhi.w	l61ef2
@@ -41088,8 +41092,10 @@ L62400:
 	l62418:	bsr.w	L624f2_GenAsteroids
 		tst.b	A6_opt_dust_n_clouds(a6)
 		beq.w	l624f0
-		tst.b	A6_mod_player_active(a6)
-		bpl.w	l624f0
+* Dust under a game screen too. Hook, same size. See Ldust_gate at the end
+* of the file.
+		jsr	Ldust_gate
+		nop
 		jsr	A5_2RandInts(a5)
 		cmp.w	#$3332,d0
 		bhi.w	l624f0
@@ -67674,3 +67680,23 @@ lstation_resume:
 		hcall	#Call_StationResume
 		jsr	L75c92
 		jmp	L760ba
+
+******************************************************************************
+* Cockpit screen: dust and clouds are made only while the flight view is up
+* (A6_mod_player_active(a6) negative), though with a game screen on the cockpit's screen
+* the flight view is still seen round it, and the ship flies on through
+* it: the host says so (d0 = 1 from Call_ScreenWorld). Called in place of
+* "tst.b A6_mod_player_active(a6) / bpl.w <the routine's rts>" by the two routines that make
+* them; not up and no screen: returns from the routine instead.
+******************************************************************************
+Ldust_gate:
+		tst.b	A6_mod_player_active(a6)
+		bmi.s	ldust_gate_on
+		move.l	d0,-(a7)
+		hcall	#Call_ScreenWorld
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	ldust_gate_on
+		addq.l	#4,a7
+ldust_gate_on:
+		rts
