@@ -1436,6 +1436,10 @@ static const unsigned char GROUP_KEY[COCKPIT_SCREENS] = {0x3c, 0x3d, 0x3e}; /* F
 
 void cockpit_host_tap(int id, float u, float v)
 {
+	/* the options screen holds the game paused: only it is touched, a tap
+	 * on another screen would leave it (and unpause) */
+	if (game_screen() == SCREEN_OPTIONS)
+		return;
 	if (id == HOST_CAMERA)
 		camera_tap(u, v);
 	else if (id == COCKPIT_SCREEN_COMS && coms_menu)
