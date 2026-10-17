@@ -560,7 +560,14 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	/* in flight, the COMS screen shows the comms menu's text */
 	if (active && !sub_on && gl_screen_coms_menu())
 		sub_tex[COCKPIT_SCREEN_COMS] = gl_screen_coms_menu();
-	coms_menu = active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && gl_screen_menu_rows(&cut_y0, &cut_y1);
+	/* the menu's rows stay out of the view a while after the game stops
+	 * drawing its boxes: its text can outlast them (the screen keeps it) */
+	static int coms_hold;
+	if (active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && gl_screen_menu_rows(&cut_y0, &cut_y1))
+		coms_hold = 60;
+	else if (coms_hold > 0)
+		coms_hold--;
+	coms_menu = active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && coms_hold > 0;
 	cam_tex = active && cockpit_camera ? camera_texture() : 0;
 	cam_on = cam_tex != 0;
 	if (window_w > 0 && window_h > 0)

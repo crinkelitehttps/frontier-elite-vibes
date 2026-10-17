@@ -1161,7 +1161,8 @@ static void draw_coms_flight(bool new_frame)
 	}
 	int y0, y1;
 	bool menu = scr_show.cockpit && !scr_show.sub && gl_screen_menu_rows(&y0, &y1);
-	if (!menu && coms_state == COMS_CLEAR)
+	/* the last menu's text stays up after the game's own has gone */
+	if (!menu && coms_state != COMS_KEPT)
 		return;
 	if (menu && !new_frame && coms_state == COMS_MENU)
 		return;
