@@ -903,31 +903,45 @@ static void pace_screen_frames(void)
  * published (game thread) */
 static MapPage map_page;
 
+#define POINTER_HOLD 8
+
 /* Game thread: makes the frame the game just flipped the latest */
 static void publish_frame(void)
 {
-	scr_pub.cockpit = cockpit_game_frame();
-	scr_pub.group = scr_pub.cockpit ? -1 : cockpit_screen_group();
-	scr_pub.sub = scr_pub.group >= 0;
+	bool cockpit = cockpit_game_frame();
+	int group = cockpit ? -1 : cockpit_screen_group();
 	/* beside the station's services the frame is their screen's (the world is
 	 * captured), and the page's scene is kept apart from theirs */
-	bool beside = scr_pub.group == COCKPIT_SCREEN_COMS;
-	int page_group = (scr_pub.cockpit || beside) ? mapscreen_due() : -1;
+	bool beside = group == COCKPIT_SCREEN_COMS;
+	int page_group = (cockpit || beside) ? mapscreen_due() : -1;
 	bool page = page_group >= 0;
+
+	SDL_LockMutex(frame_lock);
+	scr_pub.cockpit = cockpit;
+	scr_pub.group = group;
+	scr_pub.sub = group >= 0;
 	scr_pub.page = scr_pub.page_new = scr_pub.page_beside = false;
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
 	scr_pub.bgcol = fe2_bgcol;
 	scr_pub.renderer = use_renderer;
-	scr_pub.mouse_shown = mouse_shown != 0;
+	/* the game doesn't ask for the pointer in every frame (landed, away from
+	 * the station's services): it stays a few frames, not flickering */
+	static int pointer_hold;
+	pointer_hold = mouse_shown ? POINTER_HOLD : pointer_hold > 0 ? pointer_hold - 1 : 0;
+	mouse_shown = pointer_hold > 0;
+	scr_pub.mouse_shown = mouse_shown;
 
-	SDL_LockMutex(frame_lock);
-	if (page && scr_pub.cockpit)
+	if (page && cockpit)
 	{
 		/* the flight frame is the world, as a captured one is, and the page
 		 * is made next; the frame is published after it */
 		scene_publish_world();
 		hud_publish(false);
+		/* the frame before, if the drawing hasn't taken it, is dropped: it
+		 * would be taken with this one half made, and a page's scene (the
+		 * published one) as the world's */
+		frame_new = false;
 		/* ... and its picture is the one before the batch drew its own */
 		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
 	}
