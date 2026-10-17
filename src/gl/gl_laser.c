@@ -11,6 +11,7 @@
 #include "gl_draw.h"
 #include "gl_hands.h"
 #include "gl_laser.h"
+#include "gl_mapscreen.h"
 #include "gl_screen_place.h"
 
 #include "gamepad.h"
@@ -140,6 +141,8 @@ void laser_update(bool cockpit)
 	VrHand hands[2];
 	bool connected = false, active = false;
 	bool hit[2] = {false, false}, clickable[2] = {false, false}, on_host[2] = {false, false};
+	bool on_map[2] = {false, false}; /* the MAP screen up in flight (gl_mapscreen.h) */
+	int map_x[2] = {0, 0}, map_y[2] = {0, 0};
 	float host_u[2] = {0, 0}, host_v[2] = {0, 0};
 	int host_id[2] = {0, 0};
 	int hx[2] = {0, 0}, hy[2] = {0, 0};
@@ -181,6 +184,13 @@ void laser_update(bool cockpit)
 			b->hit_near = true;
 			dist = host_dist;
 		}
+		float map_dist;
+		on_map[i] = cockpit && cockpit_ray_to_map(h->pos, h->dir, &map_x[i], &map_y[i], &map_dist);
+		if (on_map[i])
+		{
+			b->hit_near = true;
+			dist = map_dist;
+		}
 		/* on the panel or a screen; the HUD (out into space) only with the grip */
 		clickable[i] = hit[i] && (b->hit_near || h->squeeze);
 		b->aiming = hit[i] && !b->hit_near && h->squeeze;
@@ -200,7 +210,7 @@ void laser_update(bool cockpit)
 			trigger_use[i] = TRIGGER_OFF;
 		else if (!was)
 		{
-			trigger_use[i] = on_host[i] ? TRIGGER_HOST : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
+			trigger_use[i] = on_host[i] || on_map[i] ? TRIGGER_HOST : clickable[i] ? TRIGGER_CLICK : TRIGGER_PAD;
 			if (on_host[i])
 				cockpit_host_tap(host_id[i], host_u[i], host_v[i]);
 			else if (clickable[i] && cockpit_screen_press(hx[i], hy[i]))
@@ -211,6 +221,19 @@ void laser_update(bool cockpit)
 	}
 	if (!hands[current].active && hands[!current].active)
 		current = !current;
+
+	/* the map's pointer: the beam on the screen, a pressed one before the other */
+	int mp = -1;
+	for (int i = 0; i < 2; i++)
+		if (on_map[i] && (mp < 0 || (trigger_on[i] && !trigger_on[mp])))
+			mp = i;
+	if (!vr_hands)
+	{
+		if (mp >= 0)
+			mapscreen_pointer(1, true, map_x[mp], map_y[mp], trigger_on[mp] ? 2 : 0, 0, 0);
+		else
+			mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
+	}
 
 	if (vr_hands)
 		active = false; /* hands_update points the mouse */

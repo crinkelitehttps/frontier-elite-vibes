@@ -19,6 +19,7 @@
 
 #include "gl_api.h"
 #include "gl_camera.h"
+#include "gl_mapscreen.h"
 #include "gl_clipboard.h"
 #include "gl_cockpit.h"
 #include "gl_native.h"
@@ -77,6 +78,10 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
  * drawn this bright. */
 #define SUB_W    0.30f
 #define SUB_H    (SUB_W * 168.0f / 320.0f * 1.2f)
+/* The MAP screen shows the whole page, its info strip and icons too (in the
+ * flight view the panel is the flight view's), its top edge where the
+ * others' are */
+#define MAP_H    (SUB_W * (float)GL_SCREEN_H / 320.0f * 1.2f)
 #define SUB_DOWN 10.8f
 #define SUB_DIM  0.65f
 
@@ -330,7 +335,8 @@ static void place_screens(float k)
 	const float r = PANEL_DIST * cosf(SUB_DOWN * GLM_PI / 180.0f);
 	const float half = atanf(SUB_W * 0.5f / r), gap = CAM_GAP / r;
 	const float cam_right = atanf(((SUB_W + CAM_W) * 0.5f + CAM_GAP + CAM_W * 0.5f) / r);
-	place_facing(SUB_DOWN, 0.0f, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_MAP]);
+	place_facing(SUB_DOWN - atanf((MAP_H - SUB_H) * 0.5f / PANEL_DIST) * 180.0f / GLM_PI, 0.0f, SUB_W, MAP_H, k,
+				 subs[COCKPIT_SCREEN_MAP]);
 	place_facing(SUB_DOWN, 2.0f * half + gap, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_COMS]);
 	place_facing(SUB_DOWN, -(cam_right + gap + half), SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_SHIP]);
 	place_facing(SUB_DOWN, 0.0f, CAM_W, CAM_H, k, cam);
@@ -526,6 +532,13 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	live = sub_on ? screen : -1;
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		sub_tex[g] = sub_on ? gl_screen_sub_texture(g) : 0;
+	/* the MAP screen is up in flight too (gl_mapscreen.h) */
+	if (cockpit && cockpit_map_live && cockpit_screens_on())
+	{
+		sub_tex[COCKPIT_SCREEN_MAP] = gl_screen_sub_texture(COCKPIT_SCREEN_MAP);
+		if (sub_tex[COCKPIT_SCREEN_MAP])
+			live = COCKPIT_SCREEN_MAP;
+	}
 	/* in flight, the COMS screen shows the comms menu's text */
 	if (active && !sub_on && gl_screen_coms_menu())
 		sub_tex[COCKPIT_SCREEN_COMS] = gl_screen_coms_menu();
@@ -873,7 +886,7 @@ void cockpit_draw(void)
 	}
 	for (int g = 0; g < COCKPIT_SCREENS; g++) /* their textures are bottom up */
 		if (sub_tex[g])
-			queue_tex_quad(&cp, (const float(*)[3])subs[g], sub_tex[g], 1.0f, GL_SCREEN_SUB_V0,
+			queue_tex_quad(&cp, (const float(*)[3])subs[g], sub_tex[g], 1.0f, g == COCKPIT_SCREEN_MAP ? 0.0f : GL_SCREEN_SUB_V0,
 						   g == live ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && gl_screen_coms_clear());
 	if (cam_on)
 		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
@@ -1355,6 +1368,25 @@ static bool ray_hits_host(const float eye[3], const float d[3], bool cam_shown, 
 	return hit;
 }
 
+/* The MAP screen is up in flight (gl_mapscreen.h) */
+static bool map_up(void)
+{
+	return cockpit_map_live && live == COCKPIT_SCREEN_MAP && sub_tex[COCKPIT_SCREEN_MAP];
+}
+
+/* The ray -> the MAP screen's page pixel, when it is up in flight and the ray
+ * is on it */
+static bool ray_to_map(const float eye[3], const float d[3], int *px, int *py, float *dist)
+{
+	float u, v, t;
+	if (sub_on || !map_up() || !ray_hits_quad((const float(*)[3])subs[COCKPIT_SCREEN_MAP], eye, d, &u, &v, &t))
+		return false;
+	*px = (int)(u * GL_SCREEN_W);
+	*py = (int)(v * GL_SCREEN_H);
+	*dist = t;
+	return true;
+}
+
 /* The ray from `eye` (view space) along d -> emulated screen pixel: on the
  * cockpit's live screen or the panel (*dist: how far along d), else on the
  * view pixel plane, held to its edges (*dist -1: at infinity) */
@@ -1368,10 +1400,13 @@ static bool ray_to_screen(const float eye[3], const float d[3], bool cam_shown, 
 	if (sub_on && ray_hits_quad((const float(*)[3])subs[live], eye, d, &u, &v, &t))
 	{
 		*sx = (int)(u * GL_SCREEN_W);
-		*sy = (int)(v * PANEL_ROW0);
+		*sy = (int)(v * (live == COCKPIT_SCREEN_MAP ? GL_SCREEN_H : PANEL_ROW0));
 		*dist = t;
 		return true;
 	}
+	/* the MAP screen up in flight is not the game's pointer either */
+	if (!sub_on && map_up() && ray_hits_quad((const float(*)[3])subs[COCKPIT_SCREEN_MAP], eye, d, &u, &v, &t))
+		return false;
 	/* the panel, from the eye's position */
 	if (ray_hits_quad((const float(*)[3])panel, eye, d, &u, &v, &t))
 	{
@@ -1409,6 +1444,31 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], dist;
 	eye_to_view_of(&sv.head_view, e, d);
 	return ray_to_screen(sv.eye, d, sv.cam_on, sx, sy, &dist);
+}
+
+bool cockpit_window_to_map(int wx, int wy, int *px, int *py)
+{
+	SharedView sv;
+	get_shared(&sv);
+	if (!sv.active || screen_w <= 0 || screen_h <= 0)
+		return false;
+	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
+	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
+	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
+	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], dist;
+	eye_to_view_of(&sv.head_view, e, d);
+	return ray_to_map(sv.eye, d, px, py, &dist);
+}
+
+bool cockpit_ray_to_map(const float origin[3], const float dir[3], int *px, int *py, float *dist)
+{
+	if (!active)
+		return false;
+	mat4 look = look_rotation();
+	float o[3], d[3];
+	eye_to_view_of(&look, origin, o);
+	eye_to_view_of(&look, dir, d);
+	return ray_to_map(o, d, px, py, dist);
 }
 
 bool cockpit_host_clicked(int wx, int wy)
@@ -1601,6 +1661,14 @@ bool cockpit_screen_play(float corners[4][3])
 	return true;
 }
 
+bool cockpit_map_play(float corners[4][3])
+{
+	if (!active || sub_on || !map_up())
+		return false;
+	to_play((const float(*)[3])subs[COCKPIT_SCREEN_MAP], corners);
+	return true;
+}
+
 bool cockpit_place_play(int place, float corners[4][3])
 {
 	if (place == PLACE_CAMERA)
@@ -1608,6 +1676,8 @@ bool cockpit_place_play(int place, float corners[4][3])
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		if (GROUP_PLACE[g] == place)
 		{
+			if (g == COCKPIT_SCREEN_MAP && cockpit_map_play(corners))
+				return true;
 			if (!active || !sub_on || !sub_tex[g])
 				return false;
 			to_play((const float(*)[3])subs[g], corners);

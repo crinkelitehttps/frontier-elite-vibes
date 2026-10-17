@@ -346,6 +346,8 @@ bool game_paused(void)
 bool map_on_screen(void)
 {
 	float c[4][3];
+	if (cockpit_map_play(c))
+		return true; /* up in flight, the map is the screen's whichever it is */
 	if (!cockpit_screen_play(c))
 		return false;
 	const GameScreen g = game_screen();
@@ -459,8 +461,17 @@ void screen_place_hands(VrHand hands[2], bool cockpit, int held[2])
 	const VrHand &l = hands[0];
 	const bool trig = l.connected && l.trigger > (trigger_was ? TRIGGER_UP : TRIGGER_DOWN);
 	const bool map = have[PLACE_SCREEN] && map_on_screen();
+	/* up in flight (gl_mapscreen.h) the trigger is the pad's unless a hand is
+	 * at the screen as it is pulled */
+	float up[4][3];
+	const bool in_flight = cockpit_map_play(up);
+	bool at_screen = !in_flight;
+	if (map && in_flight)
+		for (int i = 0; i < 2; i++)
+			if (h[i].on && grip_owner[i] < 0 && hand_distance(shown[PLACE_SCREEN], aspect[PLACE_SCREEN], h[i]) < TURN_TOUCH)
+				at_screen = true;
 	if (trig && !trigger_was)
-		trigger_taken = map;
+		trigger_taken = map && at_screen;
 	trigger_was = trig;
 	if (!trig || !map)
 		trigger_taken = false;

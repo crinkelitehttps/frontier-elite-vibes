@@ -193,6 +193,35 @@ void Call_SetScreenBase(void)
 	len_main_palette = 16 + ext_pal_len;
 }
 
+/* What the screen calls leave in the host (palettes, the screen shown, the
+ * dynamic colours): a batch of game calls on the side (gl_mapscreen.c)
+ * puts it back after */
+void host_screen_save(HostScreenState *s)
+{
+	memcpy(s->main, MainPalette, sizeof s->main);
+	memcpy(s->ctrl, CtrlPalette, sizeof s->ctrl);
+	memcpy(s->ext, ext_pal, sizeof s->ext);
+	s->len_main = len_main_palette;
+	s->ext_len = ext_pal_len;
+	s->base = VideoBase;
+	s->raster = VideoRaster;
+	s->bgcol = fe2_bgcol;
+	s->mouse_shown = mouse_shown;
+}
+
+void host_screen_restore(const HostScreenState *s)
+{
+	memcpy(MainPalette, s->main, sizeof s->main);
+	memcpy(CtrlPalette, s->ctrl, sizeof s->ctrl);
+	memcpy(ext_pal, s->ext, sizeof s->ext);
+	len_main_palette = s->len_main;
+	ext_pal_len = s->ext_len;
+	VideoBase = s->base;
+	VideoRaster = s->raster;
+	fe2_bgcol = s->bgcol;
+	mouse_shown = s->mouse_shown;
+}
+
 /* (colour list): list of (rgb444, index * 4) pairs. Dynamic colours live
  * in palette entries 16+, so the indices are moved up by 16 in place. */
 void Call_MakeExtPalette(void)

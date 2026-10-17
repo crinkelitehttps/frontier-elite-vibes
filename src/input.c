@@ -8,6 +8,7 @@
 
 #include "input.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_mapscreen.h"
 #include "m68000.h"
 #include "main.h"
 #include "renderer.h"
@@ -191,15 +192,38 @@ void Call_GetMouseInput(void)
 	if (abs(input.motion_x) > 100 || abs(input.motion_y) > 100)
 		input.motion_x = input.motion_y = 0;
 
+	/* the mouse on the cockpit's MAP screen (up in flight): the map's, not
+	 * the flight view's. Nothing of it goes on to the game. */
+	int mx = 0, my = 0, px, py;
+	bool on_map = !Input_PadPointer(&px, &py) && !Input_LaserPointer(&px, &py) &&
+				  cockpit_window_to_map(input.abs_x, input.abs_y, &mx, &my);
+	mapscreen_pointer(0, on_map, mx, my, (input.cur_mousebut_state | laser_btn) & 3, input.motion_x + drag_x,
+					  input.motion_y + drag_y);
+	if (on_map)
+	{
+		input.motion_x = input.motion_y = 0;
+		drag_x = drag_y = 0;
+		laser_btn = 0;
+		mapscreen_drag(false, 0, 0);
+	}
+	else if (mapscreen_up())
+	{
+		/* a hand's or a controller's drag is the map's (the mouse's own is
+		 * the flight's steering unless the pointer is on the screen) */
+		mapscreen_drag(laser_btn & 1, drag_x, drag_y);
+		laser_btn &= ~1;
+		drag_x = drag_y = 0;
+	}
+
 	mouse_mov[0] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[0]) + input.motion_x + drag_x);
 	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y + drag_y);
-	mouse_mov[2] = SDL_SwapBE16(0xf8 | input.cur_mousebut_state | laser_btn);
+	mouse_mov[2] = SDL_SwapBE16(0xf8 | (on_map ? 0 : input.cur_mousebut_state) | laser_btn);
 
 	/* window pixels -> game screen (letterboxed game area, or the cockpit),
 	 * or the gamepad's pointer, or the laser's */
 	int gx, gy;
-	if (Input_PadPointer(&gx, &gy) || Input_LaserPointer(&gx, &gy) ||
-		Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy))
+	if (!on_map && (Input_PadPointer(&gx, &gy) || Input_LaserPointer(&gx, &gy) ||
+					Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
 	{
 		mouse_abs[0] = SDL_SwapBE16(gx);
 		mouse_abs[1] = SDL_SwapBE16(gy);
@@ -212,7 +236,7 @@ void Call_GetMouseInput(void)
 
 	/* the left button going down: the map follows its select mode */
 	static bool left_was;
-	bool left = (input.cur_mousebut_state | laser_btn) & 0x2;
+	bool left = ((on_map ? 0 : input.cur_mousebut_state) | laser_btn) & 0x2;
 	if (left && !left_was && have_last)
 		cockpit_map_click(last_x, last_y);
 	left_was = left;
@@ -247,6 +271,16 @@ void Input_TapSTKey(unsigned char scancode)
 
 void Input_PressSTKey(unsigned char scancode, BOOL press)
 {
+	/* F2 with the MAP screen up in flight is the screen's (the galaxy map
+	 * and the system map take turns on it), not the game's */
+	static bool f2_to_map;
+	if (scancode == 0x3c && (press ? mapscreen_up() : f2_to_map))
+	{
+		f2_to_map = press;
+		if (press)
+			mapscreen_key(0x3c);
+		return;
+	}
 	if (!press)
 		scancode |= 0x80;
 	/* full (the game takes one a vblank): drop this one, rather than wrap

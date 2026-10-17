@@ -13,6 +13,7 @@ extern "C"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_hands.h"
+#include "gl_mapscreen.h"
 #include "input.h"
 }
 
@@ -60,7 +61,8 @@ enum
 	SURF_MAIN,
 	SURF_VIEW,
 	SURF_HOST,
-	SURF_COUNT = SURF_HOST + COCKPIT_HOST_IDS
+	SURF_MAP = SURF_HOST + COCKPIT_HOST_IDS, /* the MAP screen up in flight (gl_mapscreen.h) */
+	SURF_COUNT
 };
 
 /* Everything in the play space, in cm (vibe's unit): x right, y up, -z ahead */
@@ -71,6 +73,7 @@ struct Hand
 	vibe::FingerTouch touch[SURF_COUNT];
 	bool near, down;
 	bool on_host;   /* the surface it is near is a host screen */
+	bool on_map;    /* ... the MAP screen up in flight: the map's pointer, not the game's */
 	bool swallowed; /* this press is the host's (cockpit_screen_press) */
 	float height;               /* the tip above the surface (cm, + on the eye's side) */
 	vibe::Vec3 foot, n;         /* the tip's foot on the surface, its normal */
@@ -237,6 +240,13 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 			have[SURF_HOST + ids[j]] = true;
 		}
 	}
+	if (cockpit && cockpit_map_play(surfs[SURF_MAP].c))
+	{
+		surfs[SURF_MAP].y0 = 0;
+		surfs[SURF_MAP].y1 = GL_SCREEN_H;
+		surfs[SURF_MAP].view = false;
+		have[SURF_MAP] = true;
+	}
 	for (int k = 0; k < SURF_COUNT; k++)
 		if (have[k])
 			surf[k] = to_vibe(surfs[k], &mirrored[k]);
@@ -284,11 +294,14 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 			t = st[pick];
 		h.down = t.down;
 		h.near = t.is_near;
-		h.on_host = pick >= SURF_HOST;
+		h.on_host = pick >= SURF_HOST && pick < SURF_MAP;
+		h.on_map = pick == SURF_MAP;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
 		if (t.pressed && h.on_host)
 			cockpit_host_tap(pick - SURF_HOST, mirrored[pick] ? 1 - t.u : t.u, t.v);
+		if (!h.near)
+			h.on_map = false;
 		if (!h.down)
 			h.swallowed = false;
 		if (t.is_near)
@@ -326,14 +339,24 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 	}
 
 	/* the mouse: the pressing hand until it lets go, else the nearest */
-	if (current < 0 || !hand[current].down || hand[current].on_host)
+	if (current < 0 || !hand[current].down || hand[current].on_host || hand[current].on_map)
 	{
 		current = -1;
 		for (int i = 0; i < 2; i++)
-			if (hand[i].shown && hand[i].near && !hand[i].on_host &&
+			if (hand[i].shown && hand[i].near && !hand[i].on_host && !hand[i].on_map &&
 				(current < 0 || hand[i].height < hand[current].height))
 				current = i;
 	}
+	/* the map's pointer: the pressing hand at the MAP screen, else the nearest */
+	int mp = -1;
+	for (int i = 0; i < 2; i++)
+		if (hand[i].shown && hand[i].near && hand[i].on_map &&
+			(mp < 0 || (hand[i].down && !hand[mp].down) || (hand[i].down == hand[mp].down && hand[i].height < hand[mp].height)))
+			mp = i;
+	if (mp >= 0)
+		mapscreen_pointer(1, true, hand[mp].sx, hand[mp].sy, hand[mp].down ? 2 : 0, 0, 0);
+	else
+		mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
 	if (active || was_active)
 	{
 		const Hand *h = current >= 0 ? &hand[current] : nullptr;
@@ -349,6 +372,7 @@ void hands_off(void)
 	for (Hand &h : hand)
 		h = Hand{};
 	current = -1;
+	mapscreen_pointer(1, false, 0, 0, 0, 0, 0);
 	if (was_active)
 		Input_SetLaser(false, false, 0, 0, 0);
 	was_active = false;

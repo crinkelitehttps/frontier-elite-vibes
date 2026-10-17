@@ -29,6 +29,7 @@ extern "C"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
+#include "gl/gl_mapscreen.h"
 #include "gl/gl_screen_place.h"
 #include "headtrack.h"
 #include "vr.h"
@@ -215,6 +216,7 @@ void page_settings()
 	ui_heading("Cockpit view (Ctrl-K)");
 	wrapped_checkbox("3D cockpit in the front view", &cockpit_enabled);
 	wrapped_checkbox("Maps, station and ship screens on a screen in the cockpit", &cockpit_screen);
+	wrapped_checkbox("Map screen live in flight", &cockpit_map_live);
 	ImGui::TextWrapped("Field of view (vertical)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##fov", &cockpit_fov, 30, 120, "%d degrees");

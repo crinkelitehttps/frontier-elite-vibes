@@ -29,6 +29,16 @@ void Call_SetMainPalette(void);
 void Call_SetCtrlPalette(void);
 void Call_InformScreens(void);
 void Call_SetScreenBase(void);
+
+typedef struct
+{
+	unsigned short main[256], ctrl[16], ext[240];
+	int len_main, ext_len, bgcol, mouse_shown;
+	unsigned long base;
+	unsigned char *raster;
+} HostScreenState;
+void host_screen_save(HostScreenState *s);
+void host_screen_restore(const HostScreenState *s);
 void Call_MakeExtPalette(void);
 
 /* host_files.c */

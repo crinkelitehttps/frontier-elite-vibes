@@ -112,6 +112,11 @@ bool cockpit_game_frame(void);
 /* Game thread, the same: whether the frame is one of the game's other
  * screens, for the cockpit's screens (see HOW IT WORKS), and which
  * group's (-1: none) */
+/* The MAP screen up in flight (gl_mapscreen.h): the pixel of its page (0..319,
+ * 0..167) a window pixel / a ray (the play frame, as cockpit_ray_to_screen) is
+ * on; false if not on it or it is not up */
+bool cockpit_window_to_map(int wx, int wy, int *px, int *py);
+bool cockpit_ray_to_map(const float origin[3], const float dir[3], int *px, int *py, float *dist);
 bool cockpit_screen_frame(void);
 /* Whether the cockpit's screens are in use at all (the group a game
  * screen would go to, though the flight view is up now) */
@@ -221,6 +226,9 @@ bool cockpit_panel_play(float corners[4][3]);
 /* The same for the cockpit's live screen while it is shown (screen rows
  * 0 .. COCKPIT_PANEL_ROW0) */
 bool cockpit_screen_play(float corners[4][3]);
+/* The MAP screen up in flight (gl_mapscreen.h), in the play space as the
+ * above; its page's rows are all 0 .. GL_SCREEN_H */
+bool cockpit_map_play(float corners[4][3]);
 /* The camera screen (gl_camera.h) while it is shown, the same way */
 bool cockpit_camera_play(float corners[4][3]);
 /* The same for screen `place` of gl_screen_place.h (PLACE_*), live or not */

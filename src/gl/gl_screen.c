@@ -31,6 +31,7 @@
 #include "gl_draw.h"
 #include "gl_hud.h"
 #include "gl_laser.h"
+#include "gl_mapscreen.h"
 #include "gl_overlay.h"
 #include "gl_planet.h"
 #include "gl_prims.h"
@@ -301,6 +302,15 @@ typedef struct
 	bool sub;  /* one of the game's other screens, for the cockpit's screens */
 	int group; /* ... its group's (COCKPIT_SCREEN_*), -1 if not */
 	bool mouse_shown;
+	/* A cockpit frame that carries a new picture for the MAP screen
+	 * (gl_mapscreen.h): that page's screen and palettes; the frame's own are
+	 * the flight view's */
+	bool page;     /* the frame went the way of a game screen's: the world aside */
+	bool page_new; /* ... and the page is new */
+	uint8_t page_screen[SCR_W * SCR_H];
+	unsigned int page_main_rgb[256];
+	unsigned int page_ctrl_rgb[16];
+	int page_bgcol;
 } ScreenFrame;
 static ScreenFrame scr_pub, scr_show;
 
@@ -887,12 +897,18 @@ static void pace_screen_frames(void)
 	last = SDL_GetPerformanceCounter();
 }
 
+/* The MAP screen's page, made on the side for the cockpit frame being
+ * published (game thread) */
+static MapPage map_page;
+
 /* Game thread: makes the frame the game just flipped the latest */
 static void publish_frame(void)
 {
 	scr_pub.cockpit = cockpit_game_frame();
 	scr_pub.group = scr_pub.cockpit ? -1 : cockpit_screen_group();
 	scr_pub.sub = scr_pub.group >= 0;
+	bool page = scr_pub.cockpit && mapscreen_due();
+	scr_pub.page = scr_pub.page_new = false;
 	build_rgb_palette(scr_pub.main_rgb, MainPalette, len_main_palette);
 	build_rgb_palette(scr_pub.ctrl_rgb, CtrlPalette, 16);
 	scr_pub.bgcol = fe2_bgcol;
@@ -900,10 +916,20 @@ static void publish_frame(void)
 	scr_pub.mouse_shown = mouse_shown != 0;
 
 	SDL_LockMutex(frame_lock);
-	memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
-	scene_publish(scr_pub.sub);
-	hud_publish(scr_pub.sub);
-	frame_new = true;
+	if (page)
+	{
+		/* the flight frame is the world, as a captured one is, and the page
+		 * is made next; the frame is published after it */
+		scene_publish_world();
+		hud_publish(false);
+	}
+	else
+	{
+		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+		scene_publish(scr_pub.sub);
+		hud_publish(scr_pub.sub);
+		frame_new = true;
+	}
 	if (scr_pub.cockpit)
 		memcpy(flight_rgb, scr_pub.main_rgb, sizeof flight_rgb);
 	if (!scr_pub.sub && lab_pub.on)
@@ -912,6 +938,25 @@ static void publish_frame(void)
 		lab_new = true;
 	}
 	SDL_UnlockMutex(frame_lock);
+
+	if (page)
+	{
+		bool ok = mapscreen_page(&map_page);
+		SDL_LockMutex(frame_lock);
+		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+		scene_publish(true);
+		scr_pub.page = true;
+		if (ok)
+		{
+			scr_pub.page_new = true;
+			memcpy(scr_pub.page_screen, map_page.screen, sizeof scr_pub.page_screen);
+			build_rgb_palette(scr_pub.page_main_rgb, map_page.main_pal, map_page.len_main);
+			build_rgb_palette(scr_pub.page_ctrl_rgb, map_page.ctrl_pal, 16);
+			scr_pub.page_bgcol = map_page.bgcol;
+		}
+		frame_new = true;
+		SDL_UnlockMutex(frame_lock);
+	}
 
 	/* the world round the cockpit's screen, live, with its labels */
 	if (scr_pub.sub)
@@ -946,7 +991,7 @@ static bool acquire_frame(void)
 		scr_show = scr_pub;
 		if (scr_show.cockpit)
 			world_bg = scr_show.main_rgb[scr_show.bgcol & 0xff];
-		scene_acquire(scr_show.sub);
+		scene_acquire(scr_show.sub || scr_show.page);
 		hud_acquire();
 		frame_new = false;
 	}
@@ -1122,6 +1167,22 @@ bool gl_screen_coms_clear(void)
 	return coms_state != COMS_KEPT;
 }
 
+/* The MAP screen's new page: the frame's picture and scene for the time of
+ * drawing it into the group's texture */
+static void draw_page(void)
+{
+	static ScreenFrame flight;
+	memcpy(&flight, &scr_show, sizeof flight);
+	memcpy(scr_show.screen, flight.page_screen, sizeof scr_show.screen);
+	memcpy(scr_show.main_rgb, flight.page_main_rgb, sizeof scr_show.main_rgb);
+	memcpy(scr_show.ctrl_rgb, flight.page_ctrl_rgb, sizeof scr_show.ctrl_rgb);
+	scr_show.bgcol = flight.page_bgcol;
+	scr_show.cockpit = false;
+	scr_show.sub = true;
+	draw_sub(COCKPIT_SCREEN_MAP);
+	memcpy(&scr_show, &flight, sizeof scr_show);
+}
+
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
@@ -1129,6 +1190,8 @@ static void draw_picture(bool with_menu)
 	log_rates(new_frame);
 	if (scr_show.sub)
 		draw_sub(scr_show.group);
+	else if (scr_show.page_new && new_frame)
+		draw_page();
 	draw_coms_flight(new_frame);
 	bool cockpit = draw_vr();
 	draw_frame(screen_w, screen_h, cockpit, true);
