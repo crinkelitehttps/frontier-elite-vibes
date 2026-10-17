@@ -93,6 +93,7 @@ typedef enum
 } FlightStatus;
 
 GameScreen game_screen(void);
+void game_screen_freeze(bool on); /* other threads see the owner as it is now, until off */
 int game_screen_owner(void); /* raw A6_SCREEN_OWNER, for debugging */
 FlightView game_flight_view(void);
 FlightStatus game_flight_status(void);

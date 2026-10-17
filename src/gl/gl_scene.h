@@ -166,6 +166,7 @@ void scene_publish(bool screen);
  * both: scene_use_page(true) draws it, false is the screen's or world's */
 void scene_publish_page(void);
 void scene_acquire_page(void);
+void scene_drop_shown(void);
 void scene_use_page(bool on);
 void scene_acquire(bool screen);
 /* Game thread, after scene_publish(true): the world as the cockpit sees it

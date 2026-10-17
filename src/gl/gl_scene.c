@@ -120,6 +120,7 @@ void scene_reset(void)
 	cur_pass = 0;
 	n_soft_pending = 0;
 	cur_soft = NULL;
+	scene_mute_object(0);
 	soft_nodes_reset();
 	planet_dists_reset();
 }
@@ -387,6 +388,16 @@ void scene_acquire(bool screen)
 	native_acquire(screen, world_new);
 	world_new = false;
 	gl_prims_new_scene();
+}
+
+/* The scene being drawn has nothing: the page's, drawn into its screen, is
+ * not the world's */
+void scene_drop_shown(void)
+{
+	show.n_nodes = 0;
+	show.data_pos = 0;
+	show.n_passes = 1;
+	show.passes[0].root = -1;
 }
 
 void scene_acquire_page(void)

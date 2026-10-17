@@ -2,6 +2,7 @@
  * game_state.c - see game_state.h.
  */
 #include "game_state.h"
+#include <SDL.h>
 #include "host.h" /* rdbyte, rdword, rdlong, MEM_SIZE */
 
 GameScreen game_screen(void)
@@ -27,8 +28,28 @@ GameScreen game_screen(void)
 	}
 }
 
+/* While a side batch runs on the game thread (gl_mapscreen.c) the owner is
+ * briefly the map's or the ship screen's: the other threads are told what it
+ * was */
+static volatile int frozen_owner = -1;
+static volatile unsigned long frozen_thread;
+
+void game_screen_freeze(bool on)
+{
+	if (on)
+	{
+		frozen_thread = (unsigned long)SDL_ThreadID();
+		frozen_owner = (u16)rdword(GAME_A6 + A6_SCREEN_OWNER);
+	}
+	else
+		frozen_owner = -1;
+}
+
 int game_screen_owner(void)
 {
+	int f = frozen_owner;
+	if (f >= 0 && frozen_thread != (unsigned long)SDL_ThreadID())
+		return f;
 	return (u16)rdword(GAME_A6 + A6_SCREEN_OWNER);
 }
 

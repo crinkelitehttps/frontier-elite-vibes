@@ -928,6 +928,8 @@ static void publish_frame(void)
 		 * is made next; the frame is published after it */
 		scene_publish_world();
 		hud_publish(false);
+		/* ... and its picture is the one before the batch drew its own */
+		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
 	}
 	else
 	{
@@ -956,7 +958,8 @@ static void publish_frame(void)
 		}
 		else
 		{
-			memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+			if (!scr_pub.cockpit)
+				memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
 			scene_publish(true);
 		}
 		scr_pub.page = true;
@@ -1208,6 +1211,9 @@ static void draw_page(void)
 	draw_sub(flight.page_group);
 	sub_page = false;
 	memcpy(&scr_show, &flight, sizeof scr_show);
+	/* the flight view's own frame is next: not the page's objects in it */
+	if (flight.cockpit && !flight.page_beside)
+		scene_drop_shown();
 }
 
 /* One picture: the headset's (if any), then the window's */

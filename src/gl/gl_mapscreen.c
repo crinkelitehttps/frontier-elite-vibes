@@ -24,7 +24,8 @@ bool cockpit_map_live = true;
 bool cockpit_ship_live = true;
 
 #define IDLE_FPS  2
-#define SHIP_IDLE_FPS 10 /* the ship turns */
+#define MAP_IDLE_FPS 20 /* the maps move: the orrery turns, the galaxy map scrolls */
+#define SHIP_IDLE_FPS 30 /* the ship turns */
 #define FOCUS_FPS 50
 #define FOCUS_MS  300 /* the screen counts as in use this long after the pointer left it */
 
@@ -279,7 +280,7 @@ int mapscreen_due(void)
 			due = g; /* the first page */
 			break;
 		}
-		Uint64 gap = freq / (mapscreen_pointed(g) ? FOCUS_FPS : g == COCKPIT_SCREEN_SHIP ? SHIP_IDLE_FPS : IDLE_FPS);
+		Uint64 gap = freq / (mapscreen_pointed(g) ? FOCUS_FPS : g == COCKPIT_SCREEN_SHIP ? SHIP_IDLE_FPS : MAP_IDLE_FPS);
 		if (now - last[g] >= gap && now - last[g] - gap >= most)
 			due = g, most = now - last[g] - gap;
 	}
@@ -475,8 +476,8 @@ static bool play_input(const Batch *b)
 			ok = update_mouse(0, 0, 0);
 		if (ok && right)
 			ok = update_mouse(p->dx + b->drag_dx, p->dy + b->drag_dy, 1);
-		else if (ok && !p->pressed && !p->released && p->on)
-			ok = update_mouse(0, 0, 0);
+		else if (ok && !p->pressed && !p->released && p->on && !(p->buttons & 2))
+			ok = update_mouse(0, 0, p->buttons & 2); /* (a held left button stays held: the zoom icons repeat) */
 	}
 	for (int i = 0; ok && i < b->nkeys; i++)
 	{
@@ -546,6 +547,8 @@ bool mapscreen_page(int group, MapPage *out)
 	Batch input;
 	take_input(group, &input);
 
+	game_screen_freeze(true);
+	scene_mute_object(0); /* (the frame before may have left one: its stack is above the batch's) */
 	HostScreenState host;
 	host_screen_save(&host);
 	static HOSTCALL saved[256];
@@ -612,6 +615,16 @@ bool mapscreen_page(int group, MapPage *out)
 			keep = true;
 		}
 	}
+	if (!is_ship && getenv("GLF_MAP_LOG"))
+	{
+		int now = (uint16_t)rdword(a6 + A6_SCREEN_OWNER);
+		static int last_owner = -1;
+		if (now != last_owner || input.nkeys || input.p.pressed || input.p.released)
+			log_printf("map batch: entered %d, ended %d (ok %d), keys %d pressed %d released %d at %d,%d\n",
+					   kept.held ? kept.owner : OWNER_GALAXY, now, ok, input.nkeys, input.p.pressed, input.p.released,
+					   input.p.x, input.p.y);
+		last_owner = now;
+	}
 	int d_owner = (uint16_t)rdword(a6 + A6_SCREEN_OWNER), d_clr = (uint8_t)rdbyte(a6 + A6_DO_CLR);
 	memcpy(hcalls, saved, (size_t)hcalls_count * sizeof(HOSTCALL));
 	fe2vm_end();
@@ -620,6 +633,7 @@ bool mapscreen_page(int group, MapPage *out)
 		for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
 			wrbyte(a6 + KEEP_FIRST + (uint32_t)i, end_state[i]);
 	host_screen_restore(&host);
+	game_screen_freeze(false);
 	flipped = NULL;
 	if (ok && is_ship && input.handover)
 		ship_hand_over();
