@@ -54,6 +54,13 @@ void Input_PadPointerBegin(void)
 	pad_y = have_last ? (float)last_y : 184.0f;
 }
 
+void Input_PadPointerAt(int x, int y)
+{
+	Input_PadPointerBegin();
+	if (!click_polls)
+		pad_x = (float)x, pad_y = (float)y;
+}
+
 void Input_PadPointerMove(float dx, float dy)
 {
 	if (!pad_on || click_polls)
@@ -186,6 +193,7 @@ void Call_GetMouseInput(void)
 	short *mouse_mov = (short *)(STRam + STMemory_ReadLong(params + SIZE_WORD));
 	short *mouse_abs = (short *)(STRam + STMemory_ReadLong(params + SIZE_WORD + SIZE_LONG));
 	int drag_x, drag_y;
+	mapscreen_poll();
 	int laser_btn = take_laser(&drag_x, &drag_y);
 
 	/* SDL occasionally reports a huge jump (e.g. when grabbing the mouse) */
@@ -275,9 +283,10 @@ void Input_TapSTKey(unsigned char scancode)
 void Input_PressSTKey(unsigned char scancode, BOOL press)
 {
 	/* F2 with the MAP screen up in flight is the screen's (the galaxy map
-	 * and the system map take turns on it), not the game's */
+	 * and the system map take turns on it), not the game's (but for the one
+	 * that opens the real map for it, mapscreen_poll) */
 	static bool f2_to_map;
-	if (scancode == 0x3c && (press ? mapscreen_group_up(COCKPIT_SCREEN_MAP) : f2_to_map))
+	if (scancode == 0x3c && (press ? mapscreen_group_up(COCKPIT_SCREEN_MAP) && !mapscreen_handing() : f2_to_map))
 	{
 		f2_to_map = press;
 		if (press)

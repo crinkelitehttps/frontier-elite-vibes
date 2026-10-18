@@ -243,7 +243,7 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 	if (cockpit && cockpit_map_play(surfs[SURF_MAP].c))
 	{
 		surfs[SURF_MAP].y0 = 0;
-		surfs[SURF_MAP].y1 = GL_SCREEN_H;
+		surfs[SURF_MAP].y1 = COCKPIT_PANEL_ROW0;
 		surfs[SURF_MAP].view = false;
 		have[SURF_MAP] = true;
 	}

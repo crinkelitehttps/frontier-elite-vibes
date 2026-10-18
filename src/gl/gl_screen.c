@@ -427,6 +427,33 @@ static void draw_pointer(void)
 		}
 }
 
+/* The map's icon 6 (gl_mapscreen.h): its picture's inside is drawn by the
+ * native renderer, not into the screen: the raster has colour 0 there, which
+ * shows black. The classic picture stands in for it. */
+#define ICON_6_ID 246
+static const char ICON_6_ROWS[14][16] = {"AAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBB", "BCCCCCCCCCCCCCB", "BCCCCCCCCCCCCCB",
+										 "BDEDCCCCCCCCCCB", "BEEEDCFCGGCHCCB", "BEEEDCCCGGCCCCB", "BDEDCCBCCCCCCCB",
+										 "BCCCCCCCBBCCIIB", "BCCCCCCCBBCCJCB", "BCCCCCCCCCCCJIB", "BCCCCCCCBCCCJJB",
+										 "BCCCCCCCCCCCIIB", "BBBBBBBBBBBBBBB"};
+static unsigned int icon6_rgb(char k)
+{
+	switch (k)
+	{
+	case 'A': return 0xfff0f0f0u;
+	case 'B': return 0xffa0a0a0u;
+	case 'D': return 0xff0080f0u; /* (the framebuffer is abgr) */
+	case 'E': return 0xff00d0d0u;
+	case 'F': return 0xfff00000u;
+	case 'G': return 0xff80a0d0u;
+	case 'H': return 0xff6080a0u;
+	case 'I': return 0xff606060u;
+	case 'J': return 0xff000000u;
+	default: return 0xff808080u;
+	}
+}
+
+static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
+
 void gl_screen_upload(void)
 {
 	const uint8_t *src = scr_show.screen;
@@ -437,6 +464,23 @@ void gl_screen_upload(void)
 		uint32_t *out = framebuf + y * SCR_W;
 		for (int x = 0; x < SCR_W; x++)
 			out[x] = (row[x] == 255) ? 0 : pal[row[x]];
+	}
+	if (page_buttons)
+	{
+		/* the panel's buttons, on the view (gl_mapscreen.h) */
+		MapButton b[MAPSCREEN_BUTTONS];
+		int n = mapscreen_buttons(b);
+		for (int i = 0; i < n; i++)
+			for (int y = 0; y < b[i].h; y++)
+				for (int x = 0; x < b[i].w; x++)
+				{
+					uint8_t c = src[(b[i].sy + y) * SCR_W + b[i].sx + x];
+					unsigned int px = scr_show.ctrl_rgb[c & 15];
+					if (b[i].id == ICON_6_ID && c == 0 && b[i].w == 15 && b[i].h == 14)
+						px = icon6_rgb(ICON_6_ROWS[y][x]);
+					if (c != 255)
+						framebuf[(b[i].dy + y) * SCR_W + b[i].dx + x] = px;
+				}
 	}
 	draw_pointer();
 	glActiveTexture(GL_TEXTURE0);
@@ -1223,7 +1267,9 @@ static void draw_page(void)
 	scr_show.cockpit = false;
 	scr_show.sub = true;
 	sub_page = flight.page_beside;
+	page_buttons = flight.page_group == COCKPIT_SCREEN_MAP;
 	draw_sub(flight.page_group);
+	page_buttons = false;
 	sub_page = false;
 	memcpy(&scr_show, &flight, sizeof scr_show);
 	/* the flight view's own frame is next: not the page's objects in it */

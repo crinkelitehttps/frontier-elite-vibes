@@ -79,6 +79,11 @@ bool mapscreen_grabbed(void);
 /* The screens can be up (in flight with the cockpit's screens, or beside the
  * station's services), and the one of `group` is (its setting on too) */
 bool mapscreen_up(void);
+/* Game thread, each mouse poll: finishes a press handed over to the game's own
+ * screen */
+void mapscreen_poll(void);
+/* ... and it is waiting for the real map: F2 is the game's meanwhile */
+bool mapscreen_handing(void);
 bool mapscreen_group_up(int group);
 /* The screen is being used: the pointer is on it, or it was a moment ago */
 bool mapscreen_pointed(int group);
@@ -90,6 +95,18 @@ int mapscreen_due(void);
 /* Runs the group's page as above; false when it could not (the picture is
  * then not to be used, and the machine and the host are as they were) */
 bool mapscreen_page(int group, MapPage *out);
+
+/* The MAP screen shows the map's view only: the panel's buttons (the map
+ * controls, the zoom and the time controls, the legend) are moved onto its
+ * lower right, from where the game has them (source: panel rows 168..199)
+ * to (dx, dy), w x h. A pointer there is put back where the button was. */
+#define MAPSCREEN_BUTTONS 16
+typedef struct
+{
+	int sx, sy, w, h, dx, dy;
+	int id; /* the game's icon number */
+} MapButton;
+int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
 
 /* Forgets what the map was showing (a new game was loaded) */
 void mapscreen_forget(void);

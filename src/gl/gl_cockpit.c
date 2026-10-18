@@ -78,16 +78,16 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
  * drawn this bright. */
 #define SUB_W    0.30f
 #define SUB_H    (SUB_W * 168.0f / 320.0f * 1.2f)
-/* The MAP screen shows the whole page, its info strip and icons too (in the
- * flight view the panel is the flight view's), its top edge where the
- * others' are */
+/* The SHIP screen shows the whole page when it runs live, its top edge where
+ * the others' are */
 #define MAP_H    (SUB_W * (float)GL_SCREEN_H / 320.0f * 1.2f)
 #define SUB_DOWN 10.8f
-/* The MAP screen shows the whole page, and the SHIP screen when it runs live
- * (its buttons are in the strip below) */
+/* The SHIP screen shows the whole page when it runs live (its buttons are in
+ * the strip below). The MAP screen's buttons are put on its view
+ * (gl_mapscreen.h). */
 static bool full_page(int g)
 {
-	return g == COCKPIT_SCREEN_MAP || (g == COCKPIT_SCREEN_SHIP && cockpit_ship_live);
+	return g == COCKPIT_SCREEN_SHIP && cockpit_ship_live;
 }
 #define SUB_DIM  0.65f
 
@@ -343,8 +343,7 @@ static void place_screens(float k)
 	const float r = PANEL_DIST * cosf(SUB_DOWN * GLM_PI / 180.0f);
 	const float half = atanf(SUB_W * 0.5f / r), gap = CAM_GAP / r;
 	const float cam_right = atanf(((SUB_W + CAM_W) * 0.5f + CAM_GAP + CAM_W * 0.5f) / r);
-	place_facing(SUB_DOWN - atanf((MAP_H - SUB_H) * 0.5f / PANEL_DIST) * 180.0f / GLM_PI, 0.0f, SUB_W, MAP_H, k,
-				 subs[COCKPIT_SCREEN_MAP]);
+	place_facing(SUB_DOWN, 0.0f, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_MAP]);
 	place_facing(SUB_DOWN, 2.0f * half + gap, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_COMS]);
 	if (full_page(COCKPIT_SCREEN_SHIP))
 		place_facing(SUB_DOWN - atanf((MAP_H - SUB_H) * 0.5f / PANEL_DIST) * 180.0f / GLM_PI, -(cam_right + gap + half),
@@ -1404,7 +1403,7 @@ static bool ray_to_side(const float eye[3], const float d[3], int *group, int *p
 			continue;
 		*group = g;
 		*px = (int)(u * GL_SCREEN_W);
-		*py = (int)(v * GL_SCREEN_H);
+		*py = (int)(v * (full_page(g) ? GL_SCREEN_H : PANEL_ROW0));
 		*dist = t;
 		return true;
 	}

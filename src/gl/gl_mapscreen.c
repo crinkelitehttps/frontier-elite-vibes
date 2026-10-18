@@ -124,6 +124,147 @@ void mapscreen_forget(void)
 }
 
 /* =========================================================================
+ * The panel's buttons on the MAP screen
+ * ========================================================================= */
+#define PANEL_ROW0 168
+/* The icons of the map's panel that are kept (ids as the game numbers them):
+ * the time controls (system map), the map's own (the 2: galaxy or system), and 6..10.
+ * The scanner (245), the flight icons and the system map's info box (128)
+ * stay in the panel. */
+#define ICON_TIME_FIRST 193 /* 193..197 and 254 */
+#define ICON_TIME_LAST  197
+#define ICON_TIME_PAUSE 254
+#define ICON_MAP        242
+#define ICON_6          246
+#define SCAN_F2         0x3c
+/* A press on icon 6 opens the real map and presses it there: when the map is
+ * up, a few polls on (its icons are set by then), for a moment at most */
+#define HAND_POLLS      200
+#define HAND_WAIT       6
+static volatile int hand_polls, hand_x, hand_y;
+static int hand_up;
+#define ICON_10         250
+#define BTN_GAP         2
+#define BTN_RIGHT  316 /* the buttons' right edge, bottom edge */
+#define BTN_BOTTOM 164
+
+static SDL_SpinLock btn_lock;
+static MapButton btns[MAPSCREEN_BUTTONS];
+static int nbtns;
+
+int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS])
+{
+	SDL_AtomicLock(&btn_lock);
+	int n = nbtns;
+	memcpy(out, btns, sizeof btns);
+	SDL_AtomicUnlock(&btn_lock);
+	return n;
+}
+
+/* The icons the game has in the panel (rects: x0, y0, x1, y1 inclusive),
+ * packed in rows up from the bottom right of the view, in the panel's order */
+static bool time_icon(int id)
+{
+	return (id >= ICON_TIME_FIRST && id <= ICON_TIME_LAST) || id == ICON_TIME_PAUSE;
+}
+
+/* the time controls are the system map's only */
+static bool kept_icon(int id, int owner)
+{
+	return (time_icon(id) && owner == OWNER_SYSTEM) || id == ICON_MAP || (id >= ICON_6 && id <= ICON_10);
+}
+
+static void layout_buttons(int rects[][4], const int ids[], int n, int owner)
+{
+	MapButton b[MAPSCREEN_BUTTONS];
+	int nb = 0;
+	for (int i = 0; i < n && nb < MAPSCREEN_BUTTONS; i++)
+	{
+		const int *r = rects[i];
+		if (!kept_icon(ids[i], owner) || r[1] < PANEL_ROW0 || r[3] > 199 || r[0] < 0 || r[2] > 319 || r[2] < r[0] || r[3] < r[1])
+			continue;
+		MapButton m = {r[0], r[1], r[2] - r[0] + 1, r[3] - r[1] + 1, 0, 0, ids[i]};
+		int j = nb++;
+		for (; j > 0 && b[j - 1].sx > m.sx; j--)
+			b[j] = b[j - 1];
+		b[j] = m;
+	}
+	/* rows, each as wide as fits */
+	int row_end[MAPSCREEN_BUTTONS], rows = 0, width = 0;
+	for (int i = 0; i < nb; i++)
+	{
+		if (i > 0 && width + BTN_GAP + b[i].w > BTN_RIGHT - 4)
+			row_end[rows++] = i, width = 0;
+		width += (width ? BTN_GAP : 0) + b[i].w;
+	}
+	if (nb)
+		row_end[rows++] = nb;
+	int y = BTN_BOTTOM;
+	for (int r = rows - 1; r >= 0; r--)
+	{
+		int a = r ? row_end[r - 1] : 0, e = row_end[r], w = 0, h = 0;
+		for (int i = a; i < e; i++)
+			w += b[i].w + (i > a ? BTN_GAP : 0), h = b[i].h > h ? b[i].h : h;
+		int x = BTN_RIGHT - w;
+		for (int i = a; i < e; i++)
+		{
+			b[i].dx = x;
+			b[i].dy = y - h + 1 + (h - b[i].h);
+			x += b[i].w + BTN_GAP;
+		}
+		y -= h + BTN_GAP;
+	}
+	if (getenv("GLF_MAP_LOG"))
+		for (int i = 0; i < nb; i++)
+			if (b[i].id == ICON_6)
+			{
+				int hist[256] = {0};
+				for (int y = 0; y < b[i].h; y++)
+					for (int x = 0; x < b[i].w; x++)
+						hist[(uint8_t)VideoRaster[(b[i].sy + y) * 320 + b[i].sx + x]]++;
+				char buf[512];
+				int len = snprintf(buf, sizeof buf, "icon 6 pixels:");
+				for (int v = 0; v < 256 && len < 450; v++)
+					if (hist[v])
+						len += snprintf(buf + len, sizeof buf - (size_t)len, " %d:%d", v, hist[v]);
+				static char last[512];
+				if (strcmp(buf, last))
+					log_printf("%s (len_main %d)\n", buf, len_main_palette), memcpy(last, buf, sizeof last);
+			}
+	SDL_AtomicLock(&btn_lock);
+	memcpy(btns, b, sizeof b);
+	nbtns = nb;
+	SDL_AtomicUnlock(&btn_lock);
+}
+
+/* The kept icon at a point of the game's panel, 0 if none */
+static int button_at(int x, int y)
+{
+	int id = 0;
+	SDL_AtomicLock(&btn_lock);
+	for (int i = 0; i < nbtns; i++)
+		if (x >= btns[i].sx && x < btns[i].sx + btns[i].w && y >= btns[i].sy && y < btns[i].sy + btns[i].h)
+			id = btns[i].id;
+	SDL_AtomicUnlock(&btn_lock);
+	return id;
+}
+
+/* A point on the screen -> where the game has it: a button's pixels are the
+ * panel's */
+static void unmove_point(int *x, int *y)
+{
+	SDL_AtomicLock(&btn_lock);
+	for (int i = 0; i < nbtns; i++)
+		if (*x >= btns[i].dx && *x < btns[i].dx + btns[i].w && *y >= btns[i].dy && *y < btns[i].dy + btns[i].h)
+		{
+			*x += btns[i].sx - btns[i].dx;
+			*y += btns[i].sy - btns[i].dy;
+			break;
+		}
+	SDL_AtomicUnlock(&btn_lock);
+}
+
+/* =========================================================================
  * Input
  * ========================================================================= */
 #define MAX_KEYS 8
@@ -180,6 +321,8 @@ static void pointer_set(SideInput *in, int group, int source, bool on, int x, in
 
 void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx, int dy)
 {
+	if (group == COCKPIT_SCREEN_MAP)
+		unmove_point(&x, &y);
 	SDL_AtomicLock(&in_lock);
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		if (g == COCKPIT_SCREEN_MAP || g == COCKPIT_SCREEN_SHIP)
@@ -244,6 +387,50 @@ bool mapscreen_pointed(int group)
 		   (i->seen && SDL_GetPerformanceCounter() - i->seen < SDL_GetPerformanceFrequency() * FOCUS_MS / 1000);
 	SDL_AtomicUnlock(&in_lock);
 	return used;
+}
+
+bool mapscreen_handing(void)
+{
+	return hand_polls > 0;
+}
+
+void mapscreen_poll(void)
+{
+	if (hand_polls <= 0)
+		return;
+	hand_polls--;
+	if (getenv("GLF_MAP_LOG"))
+	{
+		static int last_owner = -1;
+		int o = game_screen_owner();
+		if (o != last_owner)
+			log_printf("hand-over: owner %d (screen %d), %d polls left\n", o, (int)game_screen(), hand_polls);
+		last_owner = o;
+	}
+	if (game_screen() != SCREEN_GALAXY_MAP)
+	{
+		hand_up = 0;
+		return;
+	}
+	/* the game finds what is under the pointer before it is pressed: put it
+	 * there first */
+	if (hand_up == HAND_WAIT / 2)
+		Input_PadPointerAt(hand_x, hand_y);
+	if (++hand_up >= HAND_WAIT + 6)
+	{
+		if (getenv("GLF_MAP_LOG"))
+		{
+			int rects[64][4], n = game_icon_rects(rects, 64);
+			log_printf("hand-over: click at %d,%d, the game's icons:", hand_x, hand_y);
+			for (int i = 0; i < n; i++)
+				log_printf(" [id %d %d,%d-%d,%d]", (uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8),
+						   rects[i][0], rects[i][1], rects[i][2], rects[i][3]);
+			log_printf("\n");
+		}
+		Input_ClickAt(hand_x, hand_y);
+		hand_polls = 0;
+		hand_up = 0;
+	}
 }
 
 bool mapscreen_up(void)
@@ -426,6 +613,41 @@ static void take_input(int group, Batch *b)
 	memcpy(b->arrows, in->arrows, sizeof b->arrows);
 	SDL_AtomicUnlock(&in_lock);
 
+	if (group == COCKPIT_SCREEN_MAP)
+	{
+		/* What the time controls do is the game's (the batch puts the machine
+		 * back): the press goes to its own panel, where they are too. The 2
+		 * is F2, as it is for the game's map. Neither reaches the map. */
+		static bool swallow;
+		if (b->p.pressed)
+		{
+			int id = button_at(b->p.x, b->p.y);
+			if (id == ICON_6 && kept.owner == OWNER_GALAXY)
+			{
+				/* what it opens is the game's own screen: the real map, and the
+				 * button pressed there (mapscreen_poll) */
+				swallow = true;
+				hand_x = b->p.x, hand_y = b->p.y, hand_polls = HAND_POLLS;
+				Input_TapSTKey(SCAN_F2);
+			}
+			else if (time_icon(id) || id == ICON_MAP)
+			{
+				swallow = true;
+				if (id == ICON_MAP && b->nkeys < MAX_KEYS)
+					b->keys[b->nkeys++] = 0x3c;
+				else if (time_icon(id) && game_screen() == SCREEN_FLIGHT)
+					Input_ClickAt(b->p.x, b->p.y);
+			}
+		}
+		if (!(b->p.on && (b->p.buttons & 2)))
+			swallow = false;
+		if (swallow)
+		{
+			b->p.pressed = b->p.released = false;
+			b->p.buttons &= ~2;
+		}
+		return;
+	}
 	if (group != COCKPIT_SCREEN_SHIP)
 		return;
 	/* the ship screen: the keys but F3 are not its, a tap on an item opens
@@ -613,6 +835,23 @@ bool mapscreen_page(int group, MapPage *out)
 				kept.ctrl[i] = (uint8_t)rdbyte(a6 + KEEP2_FIRST + (uint32_t)i);
 			kept.held = true;
 			keep = true;
+			int rects[64][4];
+			int n = game_icon_rects(rects, 64), ids[64];
+			for (int i = 0; i < n; i++)
+				ids[i] = (uint16_t)rdword(a6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8);
+			if (getenv("GLF_MAP_LOG"))
+			{
+				static char last[2048];
+				char buf[2048];
+				int len = snprintf(buf, sizeof buf, "map icons (owner %d):", owner);
+				for (int i = 0; i < n && len < 1900; i++)
+					len += snprintf(buf + len, sizeof buf - (size_t)len, " [id %d %d,%d-%d,%d]",
+									(uint16_t)rdword(a6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8), rects[i][0],
+									rects[i][1], rects[i][2], rects[i][3]);
+				if (strcmp(buf, last))
+					log_printf("%s\n", buf), memcpy(last, buf, sizeof last);
+			}
+			layout_buttons(rects, ids, n, owner);
 		}
 	}
 	if (!is_ship && getenv("GLF_MAP_LOG"))
