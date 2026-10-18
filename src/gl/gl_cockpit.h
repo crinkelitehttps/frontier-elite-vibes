@@ -229,6 +229,8 @@ bool cockpit_screen_play(float corners[4][3]);
 /* The MAP screen up in flight (gl_mapscreen.h), in the play space as the
  * above; its page's rows are all 0 .. GL_SCREEN_H */
 bool cockpit_map_play(float corners[4][3]);
+/* ... and the SHIP screen */
+bool cockpit_ship_play(float corners[4][3]);
 /* The camera screen (gl_camera.h) while it is shown, the same way */
 bool cockpit_camera_play(float corners[4][3]);
 /* The same for screen `place` of gl_screen_place.h (PLACE_*), live or not */

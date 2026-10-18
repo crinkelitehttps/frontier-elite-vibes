@@ -1694,6 +1694,14 @@ bool cockpit_map_play(float corners[4][3])
 	return true;
 }
 
+bool cockpit_ship_play(float corners[4][3])
+{
+	if (!active || !side_on[COCKPIT_SCREEN_SHIP])
+		return false;
+	to_play((const float(*)[3])subs[COCKPIT_SCREEN_SHIP], corners);
+	return true;
+}
+
 bool cockpit_place_play(int place, float corners[4][3])
 {
 	if (place == PLACE_CAMERA)

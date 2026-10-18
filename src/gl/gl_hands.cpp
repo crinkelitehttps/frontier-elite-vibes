@@ -62,6 +62,7 @@ enum
 	SURF_VIEW,
 	SURF_HOST,
 	SURF_MAP = SURF_HOST + COCKPIT_HOST_IDS, /* the MAP screen up in flight (gl_mapscreen.h) */
+	SURF_SHIP,                               /* ... and the SHIP screen */
 	SURF_COUNT
 };
 
@@ -73,7 +74,8 @@ struct Hand
 	vibe::FingerTouch touch[SURF_COUNT];
 	bool near, down;
 	bool on_host;   /* the surface it is near is a host screen */
-	bool on_map;    /* ... the MAP screen up in flight: the map's pointer, not the game's */
+	bool on_map;    /* ... the MAP or SHIP screen up in flight: that screen's pointer, not the game's */
+	int side;       /* ... which (a COCKPIT_SCREEN_ group) */
 	bool swallowed; /* this press is the host's (cockpit_screen_press) */
 	float height;               /* the tip above the surface (cm, + on the eye's side) */
 	vibe::Vec3 foot, n;         /* the tip's foot on the surface, its normal */
@@ -247,6 +249,13 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		surfs[SURF_MAP].view = false;
 		have[SURF_MAP] = true;
 	}
+	if (cockpit && cockpit_ship_play(surfs[SURF_SHIP].c))
+	{
+		surfs[SURF_SHIP].y0 = 0;
+		surfs[SURF_SHIP].y1 = COCKPIT_PANEL_ROW0;
+		surfs[SURF_SHIP].view = false;
+		have[SURF_SHIP] = true;
+	}
 	for (int k = 0; k < SURF_COUNT; k++)
 		if (have[k])
 			surf[k] = to_vibe(surfs[k], &mirrored[k]);
@@ -295,7 +304,8 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		h.down = t.down;
 		h.near = t.is_near;
 		h.on_host = pick >= SURF_HOST && pick < SURF_MAP;
-		h.on_map = pick == SURF_MAP;
+		h.on_map = pick == SURF_MAP || pick == SURF_SHIP;
+		h.side = pick == SURF_SHIP ? COCKPIT_SCREEN_SHIP : COCKPIT_SCREEN_MAP;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
 		if (t.pressed && h.on_host)
@@ -354,7 +364,7 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 			(mp < 0 || (hand[i].down && !hand[mp].down) || (hand[i].down == hand[mp].down && hand[i].height < hand[mp].height)))
 			mp = i;
 	if (mp >= 0)
-		mapscreen_pointer(1, COCKPIT_SCREEN_MAP, hand[mp].sx, hand[mp].sy, hand[mp].down ? 2 : 0, 0, 0);
+		mapscreen_pointer(1, hand[mp].side, hand[mp].sx, hand[mp].sy, hand[mp].down ? 2 : 0, 0, 0);
 	else
 		mapscreen_pointer(1, -1, 0, 0, 0, 0, 0);
 	if (active || was_active)
