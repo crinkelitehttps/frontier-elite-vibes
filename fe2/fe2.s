@@ -35,6 +35,8 @@ Call_Fdelete		equ	$24
 Call_Fopendir		equ	$25
 Call_Freaddir		equ	$26
 Call_Fclosedir		equ	$27
+* Logs that a game has been entered (src/host_files.c)
+Call_GameStart		equ	$2a
 Nu_PutTriangle		equ	$60
 Nu_PutQuad		equ	$61
 Nu_PutLine		equ	$62
@@ -23601,8 +23603,9 @@ N354da_BlitBmp:
 		rts
 
 L42542:
-		movea.l	A6_stack_base(a6),a7
-		lea	A6_main_palette1(a6),a1
+		jmp	Lgame_start
+		nop
+L42542_after:
 		jsr	L2ecc2_MakePalette
 		clr.b	598(a6)
 		clr.l	14446(a6)
@@ -66855,3 +66858,14 @@ Ldust_gate:
 		addq.l	#4,a7
 ldust_gate_on:
 		rts
+
+******************************************************************************
+* A game is entered (a saved game or a new one was loaded): logged by the
+* host as a marker between games. Replaces the two instructions at the start
+* of L42542 (jmp + nop), which are run here instead.
+******************************************************************************
+Lgame_start:
+		hcall	#Call_GameStart
+		movea.l	A6_stack_base(a6),a7
+		lea	A6_main_palette1(a6),a1
+		jmp	L42542_after

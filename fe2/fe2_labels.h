@@ -186,6 +186,7 @@
 #define FE2_DrawMouse1                               0x36b38 /* L423d2_DrawMouse1 */
 #define FE2_WipeMouse1                               0x36b70 /* L42412_WipeMouse1 */
 #define FE2_RedrawUnderMouse                         0x36bac /* L42452_RedrawUnderMouse */
+#define FE2_after                                    0x36c2a /* L42542_after */
 #define FE2_TombstoneLoop                            0x36c80 /* L425a4_TombstoneLoop */
 #define FE2_main                                     0x36dbe /* L426e2_main */
 #define FE2_IntroLoop                                0x36ec8 /* L427dc_IntroLoop */
@@ -388,5 +389,6 @@
 #define FE2_Lscreen_leave                            0xa929e /* Lscreen_leave */
 #define FE2_Lstation_enter                           0xa92b0 /* Lstation_enter */
 #define FE2_Ldust_gate                               0xa92f4 /* Ldust_gate */
+#define FE2_Lgame_start                              0xa930c /* Lgame_start */
 
 #endif /* FE2_LABELS_H */

@@ -43,6 +43,7 @@ void Call_MakeExtPalette(void);
 
 /* host_files.c */
 void Call_Fread(void);
+void Call_GameStart(void);
 void Call_Fwrite(void);
 void Call_Fdelete(void);
 void Call_Fopendir(void);

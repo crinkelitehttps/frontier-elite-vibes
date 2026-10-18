@@ -116,6 +116,7 @@ HOSTCALL hcalls[] = {
 	[0x27] = Call_Fclosedir,
 	[0x28] = Call_ModsSaveBegin, /* mods framework, see mods.c */
 	[0x29] = Call_ModsSaveEnd,
+	[0x2a] = Call_GameStart,
 
 	[0x60] = Nu_PutTriangle,
 	[0x61] = Nu_PutQuad,

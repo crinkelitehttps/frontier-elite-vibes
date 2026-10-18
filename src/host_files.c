@@ -11,6 +11,7 @@
 
 #include "host.h"
 #include "hostcall.h"
+#include "game_state.h"
 #include "main.h"
 #include "station_resume.h"
 
@@ -122,6 +123,15 @@ void Call_Fread(void)
 	}
 	SetReg(REG_D0, (int)fread(STRam + GetReg(REG_A4), 1, GetReg(REG_D7), f));
 	fclose(f);
+}
+
+/* The game was entered (a saved game or a new one was loaded). Logged as a
+ * marker, so a log can be split into one section per game. */
+void Call_GameStart(void)
+{
+	char name[GAME_NAME_MAX];
+	read_game_string(GAME_A6 + 14400, name, sizeof(name)); /* A6_commander_name */
+	log_printf("==== Game start: commander '%s' ====\n", name);
 }
 
 /* =========================================================================
