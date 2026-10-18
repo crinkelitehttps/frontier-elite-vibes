@@ -891,6 +891,11 @@ bool mapscreen_page(int group, MapPage *out)
 	if (!is_ship)
 		for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
 			state[i] = (uint8_t)rdbyte(a6 + KEEP_FIRST + (uint32_t)i);
+	static uint8_t dbg_before[16384];
+	const bool dbg = !is_ship && getenv("GLF_MAP_LOG") && (input.p.released || input.p.pressed);
+	if (dbg)
+		for (int i = 0; i < 16384; i++)
+			dbg_before[i] = (uint8_t)rdbyte(a6 + (uint32_t)i);
 	bool ok = call(FE2_Clear3DView) && (step = 1, is_ship ? enter_ship(input.turn) : enter_map());
 	if (ok)
 	{
@@ -922,6 +927,18 @@ bool mapscreen_page(int group, MapPage *out)
 		no_keys();
 		ok = (step = 3, play_input(&input)) && call(FE2_UIKeyboardPoll) && (step = 4, call(MODULES_FN16)) &&
 			 (step = 5, finish_frame()) && (step = 6, got_page);
+	}
+	if (dbg)
+	{
+		char buf[1500];
+		int len = snprintf(buf, sizeof buf, "map click diff (A6 off old>new):");
+		for (int i = 0; i < 16384 && len < 1400; i++)
+		{
+			int v = (uint8_t)rdbyte(a6 + (uint32_t)i);
+			if (v != dbg_before[i] && i > 100 && !(i >= 14480 && i < 14500) && !(i >= 15800 && i < 16400))
+				len += snprintf(buf + len, sizeof buf - (size_t)len, " %d:%d>%d", i, dbg_before[i], v);
+		}
+		log_printf("%s\n", buf);
 	}
 	bool keep = false;
 	if (ok)
