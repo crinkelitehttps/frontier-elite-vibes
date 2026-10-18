@@ -837,17 +837,8 @@ static void write_steering(float x, float y)
 	wrword(GAME_A6 + 14510, (int)lrintf(y * 32767.0f));
 }
 
-extern volatile int debug_shot_request; /* TEMPORARY: gl_screen.c */
-
 void gamepad_update(void)
 {
-	static bool l3_was;
-	bool l3 = (pad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK)) ||
-			  (vpad.active && (vpad.buttons >> SDL_CONTROLLER_BUTTON_LEFTSTICK & 1));
-	if (l3 && !l3_was)
-		debug_shot_request = 1;
-	l3_was = l3;
-
 	float steer[2] = {0, 0}, strafe[2] = {0, 0}, roll = 0, yaw = 0, point[2] = {0, 0};
 	look[0] = look[1] = 0;
 	/* the click ends the pointer (input.c) */
