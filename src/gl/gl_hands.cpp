@@ -332,6 +332,10 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 				float u = mirrored[pick] ? 1 - t.u : t.u;
 				h.sx = int(u * GL_SCREEN_W);
 				h.sy = s.y0 + int(t.v * float(s.y1 - s.y0));
+				/* the game's own map screens have their buttons moved up
+				 * into view: the press is where the game has them */
+				if (pick == SURF_VIEW && mapscreen_real_buttons())
+					mapscreen_unmove(&h.sx, &h.sy);
 			}
 			h.foot = t.foot;
 			h.n = surf[pick].normal();
