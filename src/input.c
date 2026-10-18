@@ -248,8 +248,6 @@ void Call_GetMouseInput(void)
 	bool left = ((on_map ? 0 : input.cur_mousebut_state) | laser_btn) & 0x2;
 	if (left && !left_was && have_last)
 		cockpit_map_click(last_x, last_y);
-	if (left && !left_was && !on_map)
-		mapscreen_grab(false);
 	left_was = left;
 
 	/* the gamepad's click: the button held for a few polls, then released

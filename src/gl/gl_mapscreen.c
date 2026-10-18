@@ -147,10 +147,34 @@ static int hand_up, after_polls;
 #define BTN_GAP         2
 #define BTN_RIGHT  316 /* the buttons' right edge, bottom edge */
 #define BTN_BOTTOM 164
+#define PAN_SIZE    14
 
 static SDL_SpinLock btn_lock;
 static MapButton btns[MAPSCREEN_BUTTONS];
 static int nbtns;
+/* the galaxy map's pan buttons (up, down, left, right), on the screen */
+static int pans[MAPSCREEN_PANS][4], npans;
+
+int mapscreen_pans(int out[MAPSCREEN_PANS][4])
+{
+	SDL_AtomicLock(&btn_lock);
+	int n = npans;
+	memcpy(out, pans, sizeof pans);
+	SDL_AtomicUnlock(&btn_lock);
+	return n;
+}
+
+/* Which pan button a point of the screen is on, -1 if none */
+static int pan_at(int x, int y)
+{
+	int hit = -1;
+	SDL_AtomicLock(&btn_lock);
+	for (int i = 0; i < npans; i++)
+		if (x >= pans[i][0] && x < pans[i][0] + pans[i][2] && y >= pans[i][1] && y < pans[i][1] + pans[i][3])
+			hit = i;
+	SDL_AtomicUnlock(&btn_lock);
+	return hit;
+}
 
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS])
 {
@@ -240,9 +264,21 @@ static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bo
 				if (strcmp(buf, last))
 					log_printf("%s (len_main %d)\n", buf, len_main_palette), memcpy(last, buf, sizeof last);
 			}
+	/* the galaxy map's pan buttons: a stack above the rightmost button */
+	int top = BTN_BOTTOM + 1;
+	for (int i = 0; i < nb; i++)
+		if (b[i].dx + b[i].w == BTN_RIGHT && b[i].dy < top)
+			top = b[i].dy;
+	int stack = MAPSCREEN_PANS * PAN_SIZE + (MAPSCREEN_PANS - 1) * BTN_GAP, y0 = top - BTN_GAP - stack;
 	SDL_AtomicLock(&btn_lock);
 	memcpy(btns, b, sizeof b);
 	nbtns = nb;
+	npans = !real && owner == OWNER_GALAXY ? MAPSCREEN_PANS : 0;
+	for (int i = 0; i < npans; i++)
+	{
+		int r[4] = {BTN_RIGHT - PAN_SIZE + 1, y0 + i * (PAN_SIZE + BTN_GAP), PAN_SIZE, PAN_SIZE};
+		memcpy(pans[i], r, sizeof r);
+	}
 	SDL_AtomicUnlock(&btn_lock);
 }
 
@@ -293,11 +329,10 @@ typedef struct
 	Uint64 seen; /* the pointer was last on the screen */
 	unsigned char keys[MAX_KEYS];
 	int nkeys;
-	bool arrows[4]; /* held: up, down, left, right (a controller's stick) */
-	bool grabbed;	/* the stick scrolls the map until a press elsewhere */
+	int pan[MAPSCREEN_SOURCES]; /* the pan button each pointer holds, plus 1 */
 } SideInput;
 static SideInput ins[COCKPIT_SCREENS];
-#define mapin ins[COCKPIT_SCREEN_MAP] /* the map's, for the drag, the stick and the grab */
+#define mapin ins[COCKPIT_SCREEN_MAP] /* the map's, for the drag and the pan buttons */
 
 static void pointer_set(SideInput *in, int group, int source, bool on, int x, int y, int buttons, int dx, int dy)
 {
@@ -307,8 +342,6 @@ static void pointer_set(SideInput *in, int group, int source, bool on, int x, in
 		if ((buttons & 2) && !(p->on && (p->buttons & 2)))
 		{
 			p->pressed = true;
-			if (group == COCKPIT_SCREEN_MAP)
-				in->grabbed = true;
 		}
 		if (!(buttons & 2) && p->on && (p->buttons & 2))
 			p->released = true;
@@ -332,10 +365,15 @@ void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx,
 {
 	if (group == COCKPIT_SCREEN_MAP)
 		mapscreen_unmove(&x, &y);
+	/* a press on a pan button holds it and goes no further */
+	int pan = group == COCKPIT_SCREEN_MAP && (buttons & 2) ? pan_at(x, y) : -1;
 	SDL_AtomicLock(&in_lock);
+	mapin.pan[source] = pan + 1;
+	if (pan >= 0)
+		mapin.seen = SDL_GetPerformanceCounter();
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		if (g == COCKPIT_SCREEN_MAP || g == COCKPIT_SCREEN_SHIP)
-			pointer_set(&ins[g], g, source, g == group, x, y, buttons, dx, dy);
+			pointer_set(&ins[g], g, source, g == group && pan < 0, x, y, buttons, dx, dy);
 	SDL_AtomicUnlock(&in_lock);
 }
 
@@ -359,30 +397,6 @@ void mapscreen_key(int group, unsigned char scancode)
 	if (i->nkeys < MAX_KEYS)
 		i->keys[i->nkeys++] = scancode;
 	SDL_AtomicUnlock(&in_lock);
-}
-
-void mapscreen_scroll(bool up, bool down, bool left, bool right)
-{
-	SDL_AtomicLock(&in_lock);
-	mapin.arrows[0] = up, mapin.arrows[1] = down, mapin.arrows[2] = left, mapin.arrows[3] = right;
-	if (up || down || left || right)
-		mapin.seen = SDL_GetPerformanceCounter();
-	SDL_AtomicUnlock(&in_lock);
-}
-
-void mapscreen_grab(bool on)
-{
-	SDL_AtomicLock(&in_lock);
-	mapin.grabbed = on;
-	SDL_AtomicUnlock(&in_lock);
-}
-
-bool mapscreen_grabbed(void)
-{
-	SDL_AtomicLock(&in_lock);
-	bool g = mapin.grabbed;
-	SDL_AtomicUnlock(&in_lock);
-	return g;
 }
 
 bool mapscreen_pointed(int group)
@@ -727,7 +741,9 @@ static void take_input(int group, Batch *b)
 	b->nkeys = in->nkeys;
 	memcpy(b->keys, in->keys, sizeof b->keys);
 	in->nkeys = 0;
-	memcpy(b->arrows, in->arrows, sizeof b->arrows);
+	for (int i = 0; i < MAPSCREEN_SOURCES; i++)
+		if (in->pan[i])
+			b->arrows[in->pan[i] - 1] = true;
 	SDL_AtomicUnlock(&in_lock);
 
 	if (group == COCKPIT_SCREEN_MAP)

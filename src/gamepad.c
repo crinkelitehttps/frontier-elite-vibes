@@ -729,11 +729,6 @@ static bool control_down(const Control *c)
 	return v > threshold; /* + half, or a trigger */
 }
 
-static bool on_left_stick(const Control *c)
-{
-	return c->source == SRC_AXIS && (c->index == SDL_CONTROLLER_AXIS_LEFTX || c->index == SDL_CONTROLLER_AXIS_LEFTY);
-}
-
 /* ---- keys --------------------------------------------------------------- */
 static void send(SDL_Keycode key, Uint16 mod, bool down)
 {
@@ -787,7 +782,6 @@ static void scroll_map(float x, float y)
 static void release_all(void)
 {
 	scroll_map(0, 0);
-	mapscreen_scroll(false, false, false, false);
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
@@ -843,8 +837,17 @@ static void write_steering(float x, float y)
 	wrword(GAME_A6 + 14510, (int)lrintf(y * 32767.0f));
 }
 
+extern volatile int debug_shot_request; /* TEMPORARY: gl_screen.c */
+
 void gamepad_update(void)
 {
+	static bool l3_was;
+	bool l3 = (pad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSTICK)) ||
+			  (vpad.active && (vpad.buttons >> SDL_CONTROLLER_BUTTON_LEFTSTICK & 1));
+	if (l3 && !l3_was)
+		debug_shot_request = 1;
+	l3_was = l3;
+
 	float steer[2] = {0, 0}, strafe[2] = {0, 0}, roll = 0, yaw = 0, point[2] = {0, 0};
 	look[0] = look[1] = 0;
 	/* the click ends the pointer (input.c) */
@@ -863,14 +866,10 @@ void gamepad_update(void)
 		return;
 	}
 
-	/* on the galaxy map the sticks scroll it instead of flying (the right
-	 * one unless it moves the pointer); on the cockpit's screen only the
-	 * left one, as the ship flies on round it */
-	bool galaxy = game_screen() == SCREEN_GALAXY_MAP;
-	bool map = galaxy && !cockpit_screen_frame();
-	bool focused = cockpit_map_focused();
-	bool side_map = !galaxy && mapscreen_group_up(COCKPIT_SCREEN_MAP) && cockpit_side_map_shown() && mapscreen_grabbed();
-	bool left_map = (galaxy && !map && focused) || side_map;
+	/* on the full-screen galaxy map the sticks scroll it instead of flying
+	 * (the right one unless it moves the pointer); on the cockpit's screen
+	 * they never do: its buttons pan the map, and the ship flies on */
+	bool map = game_screen() == SCREEN_GALAXY_MAP && !cockpit_screen_frame();
 	if (map)
 	{
 		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
@@ -878,34 +877,14 @@ void gamepad_update(void)
 		float ry = pointer_on ? 0.0f : raw_axis(SDL_CONTROLLER_AXIS_RIGHTY);
 		scroll_map(fabsf(rx) > fabsf(mx) ? rx : mx, fabsf(ry) > fabsf(my) ? ry : my);
 	}
-	else if (side_map)
-	{
-		float mx = raw_axis(SDL_CONTROLLER_AXIS_LEFTX), my = raw_axis(SDL_CONTROLLER_AXIS_LEFTY);
-		mapscreen_scroll(my < -threshold, my > threshold, mx < -threshold, mx > threshold);
-		scroll_map(0, 0);
-	}
-	else if (left_map)
-		scroll_map(raw_axis(SDL_CONTROLLER_AXIS_LEFTX), raw_axis(SDL_CONTROLLER_AXIS_LEFTY));
 	else
 		scroll_map(0, 0);
-	if (!side_map)
-		mapscreen_scroll(false, false, false, false);
 
 	int layer = current_layer();
 	bool out = clipboard_out();
 	for (int i = 0; i < n_bindings; i++)
 	{
 		Binding *b = &bindings[i];
-		if (left_map && on_left_stick(&b->control))
-		{
-			/* let go of what it held when the map came up */
-			if (b->held)
-				chord(&b->sent, false);
-			b->held = false;
-			b->was_down = false;
-			b->repeating = false;
-			continue;
-		}
 		if (is_axis_action(b->action))
 		{
 			bool acts = b->layer ? b->layer == layer : !(layer > 0 && (b->axis_shadowed & (1 << layer)));

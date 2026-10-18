@@ -70,12 +70,6 @@ void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx,
 void mapscreen_drag(bool held, int dx, int dy);
 /* A key for the screen (ST scancode), as if pressed with it up */
 void mapscreen_key(int group, unsigned char scancode);
-/* The arrow keys held for the screen (a controller's stick), and whether the
- * stick is the map's: a press on the screen takes it, one elsewhere gives
- * it back */
-void mapscreen_scroll(bool up, bool down, bool left, bool right);
-void mapscreen_grab(bool on);
-bool mapscreen_grabbed(void);
 /* The screens can be up (in flight with the cockpit's screens, or beside the
  * station's services), and the one of `group` is (its setting on too) */
 bool mapscreen_up(void);
@@ -107,6 +101,12 @@ typedef struct
 	int id; /* the game's icon number */
 } MapButton;
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
+
+/* The galaxy map's pan buttons, up, down, left, right from the top down, in a
+ * stack above the rightmost button: x, y, w, h on the screen each, 0 of them
+ * when the view is not the galaxy map. A press holds the arrow key. */
+#define MAPSCREEN_PANS 4
+int mapscreen_pans(int out[MAPSCREEN_PANS][4]);
 
 /* The game's own map screen is up and its buttons are moved too (the picture
  * is drawn with them); a point on the screen, put back where the game has it */

@@ -452,6 +452,28 @@ static unsigned int icon6_rgb(char k)
 	}
 }
 
+/* The galaxy map's pan buttons: a frame and an arrow each, up, down, left, right */
+static void draw_pans(void)
+{
+	int p[MAPSCREEN_PANS][4], n = mapscreen_pans(p);
+	const unsigned int back = 0xff402010, edge = 0xffe0c080, arrow = 0xffffffff; /* ABGR */
+	for (int i = 0; i < n; i++)
+	{
+		int x0 = p[i][0], y0 = p[i][1], w = p[i][2], h = p[i][3];
+		for (int y = 0; y < h; y++)
+			for (int x = 0; x < w; x++)
+				framebuf[(y0 + y) * SCR_W + x0 + x] = (x == 0 || y == 0 || x == w - 1 || y == h - 1) ? edge : back;
+		/* a triangle pointing the way, its tip `d` = 0 and 7 rows deep */
+		int cx = x0 + w / 2, cy = y0 + h / 2;
+		for (int d = 0; d < 7; d++)
+			for (int k = -(d / 2); k <= d / 2; k++)
+			{
+				int along = i == 0 || i == 2 ? d - 3 : 3 - d;
+				framebuf[(cy + (i < 2 ? along : k)) * SCR_W + cx + (i < 2 ? k : along)] = arrow;
+			}
+	}
+}
+
 static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
 
 void gl_screen_upload(void)
@@ -482,6 +504,8 @@ void gl_screen_upload(void)
 						framebuf[(b[i].dy + y) * SCR_W + b[i].dx + x] = px;
 				}
 	}
+	if (page_buttons)
+		draw_pans();
 	draw_pointer();
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, screen_tex);
