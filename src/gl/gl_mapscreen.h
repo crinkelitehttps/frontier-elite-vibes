@@ -102,9 +102,10 @@ typedef struct
 } MapButton;
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
 
-/* The galaxy map's pan buttons, up, down, left, right from the top down, in a
+/* The maps' pan (galaxy) or turn (system) buttons, up, down, left, right from the top down, in a
  * stack above the rightmost button: x, y, w, h on the screen each, 0 of them
- * when the view is not the galaxy map. A press holds the arrow key. */
+ * when the view is neither map. A press holds the arrow key (galaxy) or a right
+ * drag that way (system). */
 #define MAPSCREEN_PANS 4
 int mapscreen_pans(int out[MAPSCREEN_PANS][4]);
 

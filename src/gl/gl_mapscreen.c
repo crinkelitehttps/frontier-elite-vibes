@@ -148,11 +148,12 @@ static int hand_up, after_polls;
 #define BTN_RIGHT  316 /* the buttons' right edge, bottom edge */
 #define BTN_BOTTOM 164
 #define PAN_SIZE    14
+#define TURN_STEP    4 /* mouse units a batch, a held button on the system map */
 
 static SDL_SpinLock btn_lock;
 static MapButton btns[MAPSCREEN_BUTTONS];
 static int nbtns;
-/* the galaxy map's pan buttons (up, down, left, right), on the screen */
+/* the maps' pan (galaxy) or turn (system) buttons (up, down, left, right), on the screen */
 static int pans[MAPSCREEN_PANS][4], npans;
 
 int mapscreen_pans(int out[MAPSCREEN_PANS][4])
@@ -273,7 +274,7 @@ static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bo
 	SDL_AtomicLock(&btn_lock);
 	memcpy(btns, b, sizeof b);
 	nbtns = nb;
-	npans = !real && owner == OWNER_GALAXY ? MAPSCREEN_PANS : 0;
+	npans = !real && (owner == OWNER_GALAXY || owner == OWNER_SYSTEM) ? MAPSCREEN_PANS : 0;
 	for (int i = 0; i < npans; i++)
 	{
 		int r[4] = {BTN_RIGHT - PAN_SIZE + 1, y0 + i * (PAN_SIZE + BTN_GAP), PAN_SIZE, PAN_SIZE};
@@ -741,8 +742,17 @@ static void take_input(int group, Batch *b)
 	b->nkeys = in->nkeys;
 	memcpy(b->keys, in->keys, sizeof b->keys);
 	in->nkeys = 0;
+	/* the galaxy map pans with the arrow keys; the system map turns with a
+	 * right drag, which the buttons make as they are held */
 	for (int i = 0; i < MAPSCREEN_SOURCES; i++)
-		if (in->pan[i])
+		if (in->pan[i] && kept.owner == OWNER_SYSTEM)
+		{
+			static const int TURN[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+			b->drag = true;
+			b->drag_dx += TURN[in->pan[i] - 1][0] * TURN_STEP;
+			b->drag_dy += TURN[in->pan[i] - 1][1] * TURN_STEP;
+		}
+		else if (in->pan[i])
 			b->arrows[in->pan[i] - 1] = true;
 	SDL_AtomicUnlock(&in_lock);
 
