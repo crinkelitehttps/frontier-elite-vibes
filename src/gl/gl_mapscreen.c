@@ -51,6 +51,9 @@ bool cockpit_ship_live = true;
  * the game's A6_mouse_motion_ctrl_x, y (the view's angles are these) */
 #define KEEP2_FIRST 14488
 #define KEEP2_LEN   4
+#define PICKED      708 /* A6: the object picked (708), and the flag that it was (709) */
+#define OBJS_FIRST  17348
+#define OBJS_LEN    0x8030
 /* The key state the maps read: the arrows and right shift, and the game's
  * keyboard queue (the flight view's keys are not the map's) */
 #define A6_MOUSE_ABS_X     14494 /* words */
@@ -95,6 +98,8 @@ static struct
 	bool held;
 	int owner;
 	uint8_t ctrl[KEEP2_LEN];
+	uint8_t picked[2];
+	uint8_t objs[OBJS_LEN]; /* the objects as the last frame drew them: a click is tested against them */
 } kept;
 
 #define SHIP_STATE_LEN (4 + SHIP_KEEP_A_LEN + 1)
@@ -832,6 +837,9 @@ static void take_input(int group, Batch *b)
 		 * back): the press goes to its own panel, where they are too. The 2
 		 * is F2, as it is for the game's map. Neither reaches the map. */
 		static bool swallow;
+		if (getenv("GLF_MAP_LOG") && (b->p.pressed || b->p.released))
+			log_printf("map take: pressed %d released %d held %d at %d,%d id %d swallow %d\n", b->p.pressed,
+					   b->p.released, b->p.buttons & 2, b->p.x, b->p.y, button_at(b->p.x, b->p.y), swallow);
 		if (b->p.pressed)
 		{
 			int id = button_at(b->p.x, b->p.y);
@@ -911,8 +919,9 @@ static bool play_input(const Batch *b)
 			ok = update_mouse(0, 0, 0);
 		if (ok && right)
 			ok = update_mouse(p->dx + b->drag_dx, p->dy + b->drag_dy, 1);
-		else if (ok && !p->pressed && !p->released && p->on && !(p->buttons & 2))
-			ok = update_mouse(0, 0, p->buttons & 2); /* (a held left button stays held: the zoom icons repeat) */
+		else if (ok && !p->pressed && !p->released && p->on && (p->buttons & 2))
+			ok = update_mouse(0, 0, 2); /* (a held left button is pressed again each batch, which the machine
+										 * is put back from: the zoom icons repeat) */
 	}
 	for (int i = 0; ok && i < b->nkeys; i++)
 	{
@@ -1015,8 +1024,14 @@ bool mapscreen_page(int group, MapPage *out)
 			for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
 				wrbyte(a6 + KEEP_FIRST + (uint32_t)i, state[i]);
 			if (kept.held)
+			{
 				for (int i = 0; i < KEEP2_LEN; i++)
 					wrbyte(a6 + KEEP2_FIRST + (uint32_t)i, kept.ctrl[i]);
+				for (int i = 0; i < 2; i++)
+					wrbyte(a6 + PICKED + (uint32_t)i, kept.picked[i]);
+				for (int i = 0; i < OBJS_LEN; i++)
+					wrbyte(a6 + OBJS_FIRST + (uint32_t)i, kept.objs[i]);
+			}
 		}
 		else
 		{
@@ -1065,6 +1080,10 @@ bool mapscreen_page(int group, MapPage *out)
 				end_state[i] = (uint8_t)rdbyte(a6 + KEEP_FIRST + (uint32_t)i);
 			for (int i = 0; i < KEEP2_LEN; i++)
 				kept.ctrl[i] = (uint8_t)rdbyte(a6 + KEEP2_FIRST + (uint32_t)i);
+			for (int i = 0; i < 2; i++)
+				kept.picked[i] = (uint8_t)rdbyte(a6 + PICKED + (uint32_t)i);
+			for (int i = 0; i < OBJS_LEN; i++)
+				kept.objs[i] = (uint8_t)rdbyte(a6 + OBJS_FIRST + (uint32_t)i);
 			kept.held = true;
 			keep = true;
 			int rects[64][4];
