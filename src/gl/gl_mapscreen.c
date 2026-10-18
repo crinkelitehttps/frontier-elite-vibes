@@ -176,14 +176,21 @@ static bool kept_icon(int id, int owner)
 	return id == ICON_MAP || (id > ICON_6 && id <= ICON_10);
 }
 
-static void layout_buttons(int rects[][4], const int ids[], int n, int owner)
+/* the real map screens (the system information's own buttons are ids below
+ * 128): the time controls and flight icons are not wanted */
+static bool kept_real(int id)
+{
+	return id < 128 || id == ICON_MAP || (id >= ICON_6 && id <= ICON_10);
+}
+
+static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bool real)
 {
 	MapButton b[MAPSCREEN_BUTTONS];
 	int nb = 0;
 	for (int i = 0; i < n && nb < MAPSCREEN_BUTTONS; i++)
 	{
 		const int *r = rects[i];
-		if (!kept_icon(ids[i], owner) || r[1] < PANEL_ROW0 || r[3] > 199 || r[0] < 0 || r[2] > 319 || r[2] < r[0] || r[3] < r[1])
+		if (!(real ? kept_real(ids[i]) : kept_icon(ids[i], owner)) || r[1] < PANEL_ROW0 || r[3] > 199 || r[0] < 0 || r[2] > 319 || r[2] < r[0] || r[3] < r[1])
 			continue;
 		MapButton m = {r[0], r[1], r[2] - r[0] + 1, r[3] - r[1] + 1, 0, 0, ids[i]};
 		int j = nb++;
@@ -253,7 +260,7 @@ static int button_at(int x, int y)
 
 /* A point on the screen -> where the game has it: a button's pixels are the
  * panel's */
-static void unmove_point(int *x, int *y)
+void mapscreen_unmove(int *x, int *y)
 {
 	SDL_AtomicLock(&btn_lock);
 	for (int i = 0; i < nbtns; i++)
@@ -324,7 +331,7 @@ static void pointer_set(SideInput *in, int group, int source, bool on, int x, in
 void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx, int dy)
 {
 	if (group == COCKPIT_SCREEN_MAP)
-		unmove_point(&x, &y);
+		mapscreen_unmove(&x, &y);
 	SDL_AtomicLock(&in_lock);
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
 		if (g == COCKPIT_SCREEN_MAP || g == COCKPIT_SCREEN_SHIP)
@@ -396,8 +403,72 @@ bool mapscreen_handing(void)
 	return hand_polls > 0;
 }
 
+/* (log) what the real game's screen has after a hand-over: its owner and icons, when they change */
+static void log_real_screen(void)
+{
+	static int last_owner = -1;
+	static char last[2048];
+	int o = game_screen_owner();
+	if (game_screen() == SCREEN_FLIGHT || o == OWNER_GALAXY)
+	{
+		last_owner = -1;
+		return;
+	}
+	int rects[64][4], n = game_icon_rects(rects, 64);
+	char buf[2048];
+	int len = snprintf(buf, sizeof buf, "real screen (owner %d, screen %d):", o, (int)game_screen());
+	for (int i = 0; i < n && len < 1900; i++)
+		len += snprintf(buf + len, sizeof buf - (size_t)len, " [id %d %d,%d-%d,%d]",
+						(uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8), rects[i][0], rects[i][1],
+						rects[i][2], rects[i][3]);
+	if (o != last_owner || strcmp(buf, last))
+		log_printf("%s\n", buf), memcpy(last, buf, sizeof last);
+	last_owner = o;
+}
+
+/* The game's own map screens (the system information, the hand-over's
+ * result) have their buttons in rows the screen does not show: moved as the
+ * batch's are */
+static volatile bool real_buttons;
+
+bool mapscreen_real_buttons(void)
+{
+	return real_buttons;
+}
+
+static void real_layout(void)
+{
+	static char last[2048];
+	bool real = cockpit_screens_on() && !game_screen_in_batch() &&
+				(game_screen() == SCREEN_GALAXY_MAP || game_screen() == SCREEN_SYSTEM_MAP);
+	if (!real)
+	{
+		real_buttons = false;
+		return;
+	}
+	int rects[64][4], ids[64], n = game_icon_rects(rects, 64);
+	char buf[2048];
+	int len = 0;
+	for (int i = 0; i < n; i++)
+	{
+		ids[i] = (uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8);
+		if (len < 1900)
+			len += snprintf(buf + len, sizeof buf - (size_t)len, "%d,%d,%d,%d,%d;", ids[i], rects[i][0], rects[i][1],
+							rects[i][2], rects[i][3]);
+	}
+	if (!real_buttons || strcmp(buf, last))
+	{
+		memcpy(last, buf, sizeof last);
+		layout_buttons(rects, ids, n, game_screen_owner(), true);
+	}
+	real_buttons = true;
+}
+
 void mapscreen_poll(void)
 {
+	if (getenv("GLF_MAP_LOG"))
+		log_real_screen();
+	real_layout();
 	if (hand_polls <= 0)
 		return;
 	hand_polls--;
@@ -853,7 +924,7 @@ bool mapscreen_page(int group, MapPage *out)
 				if (strcmp(buf, last))
 					log_printf("%s\n", buf), memcpy(last, buf, sizeof last);
 			}
-			layout_buttons(rects, ids, n, owner);
+			layout_buttons(rects, ids, n, owner, false);
 		}
 	}
 	if (!is_ship && getenv("GLF_MAP_LOG"))

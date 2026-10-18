@@ -1418,6 +1418,8 @@ static bool ray_to_screen(const float eye[3], const float d[3], bool cam_shown, 
 	{
 		*sx = (int)(u * GL_SCREEN_W);
 		*sy = (int)(v * (full_page(live) ? GL_SCREEN_H : PANEL_ROW0));
+		if (live == COCKPIT_SCREEN_MAP && mapscreen_real_buttons())
+			mapscreen_unmove(sx, sy);
 		*dist = t;
 		return true;
 	}

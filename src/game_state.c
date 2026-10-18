@@ -45,6 +45,11 @@ void game_screen_freeze(bool on)
 		frozen_owner = -1;
 }
 
+bool game_screen_in_batch(void)
+{
+	return frozen_owner >= 0 && frozen_thread == (unsigned long)SDL_ThreadID();
+}
+
 int game_screen_owner(void)
 {
 	int f = frozen_owner;

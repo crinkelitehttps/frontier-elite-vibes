@@ -108,6 +108,11 @@ typedef struct
 } MapButton;
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
 
+/* The game's own map screen is up and its buttons are moved too (the picture
+ * is drawn with them); a point on the screen, put back where the game has it */
+bool mapscreen_real_buttons(void);
+void mapscreen_unmove(int *x, int *y);
+
 /* Forgets what the map was showing (a new game was loaded) */
 void mapscreen_forget(void);
 

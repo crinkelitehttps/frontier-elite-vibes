@@ -1283,7 +1283,11 @@ static void draw_picture(bool with_menu)
 	bool new_frame = acquire_frame();
 	log_rates(new_frame);
 	if (scr_show.sub)
+	{
+		page_buttons = scr_show.group == COCKPIT_SCREEN_MAP && mapscreen_real_buttons();
 		draw_sub(scr_show.group);
+		page_buttons = false;
+	}
 	if (scr_show.page_new && new_frame)
 		draw_page();
 	draw_coms_flight(new_frame);
