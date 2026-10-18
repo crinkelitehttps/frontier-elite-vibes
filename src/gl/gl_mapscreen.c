@@ -606,6 +606,37 @@ static bool finish_frame(void)
 	return true;
 }
 
+/* The galaxy map's wrench (icon 9) draws its menu over the icons once, into
+ * the panel: the batch does not keep the panel, so it is drawn again for as
+ * long as the menu is up (fn 16's code at the F9 key, with 935 the options) */
+#define MENU_FLAG 1075
+#define MENU_OPT  935
+static void draw_menu(void)
+{
+	uint32_t a6 = GAME_A6;
+	if (!rdbyte(a6 + MENU_FLAG))
+		return;
+	static const struct
+	{
+		uint32_t bmp, fn;
+		int d0, bit;
+	} icons[] = {{FE2_L8a16e, FE2_L83fcc, 0x100, -1},
+				 {FE2_L8a2d2, FE2_L83fcc, 0x100, 5},
+				 {FE2_L8a32e, FE2_L83fd0, 0x110, 0},
+				 {FE2_L8a38a, FE2_L83fd0, 0x120, 3},
+				 {FE2_L8a3e6, FE2_L83fd0, 0x130, 6}};
+	for (size_t i = 0; i < sizeof icons / sizeof *icons; i++)
+	{
+		if (icons[i].bit >= 0 && (rdbyte(a6 + MENU_OPT) >> icons[i].bit & 1))
+			continue;
+		fe2vm_regs r;
+		memset(&r, 0, sizeof r);
+		r.a[0] = icons[i].bmp;
+		r.d[0] = (uint32_t)icons[i].d0;
+		fe2vm_call(icons[i].fn, &r);
+	}
+}
+
 /* The map module's fn 8, as the game's F2 key runs it */
 static bool enter_map(void)
 {
@@ -886,6 +917,8 @@ bool mapscreen_page(int group, MapPage *out)
 			ship.last = now;
 			wrlong(a6 + A6_FRAME_TIME, (uint32_t)(VBLANK_TIME * vblanks));
 		}
+		if (!is_ship && kept.owner == OWNER_GALAXY)
+			draw_menu();
 		no_keys();
 		ok = (step = 3, play_input(&input)) && call(FE2_UIKeyboardPoll) && (step = 4, call(MODULES_FN16)) &&
 			 (step = 5, finish_frame()) && (step = 6, got_page);

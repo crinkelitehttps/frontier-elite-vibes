@@ -55,7 +55,7 @@ HEADER = 0x1C
 # The galaxy map routines the galaxy atlas calls (src/galaxy/galaxy_labels.h)
 EXTRA_LABELS = ["L3e894",
                 "L4beee", "L83b46", "L83d3c", "L84616", "L84700", "L84830", "L849a2", "L84ae6",
-                "L8ad0e", "l84b34", "l84c04", "l84cde", "l84f02"]
+                "L8ad0e", "L83fcc", "L83fd0", "L8a16e", "L8a2d2", "L8a32e", "L8a38a", "L8a3e6", "l84b34", "l84c04", "l84cde", "l84f02"]
 
 # The two things this script can build. Everything each variant needs is
 # named here explicitly, rather than derived cleverly from the source name,

@@ -317,6 +317,8 @@
 #define FE2_mod2_fn20_StarSystemsViewDoHUD           0x77c02 /* L83a32_mod2_fn20_StarSystemsViewDoHUD */
 #define FE2_L83b46                                   0x77d16 /* L83b46 */
 #define FE2_L83d3c                                   0x77f0c /* L83d3c */
+#define FE2_L83fcc                                   0x7819c /* L83fcc */
+#define FE2_L83fd0                                   0x781a0 /* L83fd0 */
 #define FE2_mod2_fn16_StarSystemsViewDraw            0x781a8 /* L83fd8_mod2_fn16_StarSystemsViewDraw */
 #define FE2_StarSystemsViewDrawSystems               0x7861a /* L8444a_StarSystemsViewDrawSystems */
 #define FE2_StaticSysPositions                       0x78700 /* L84530_StaticSysPositions */
@@ -331,6 +333,11 @@
 #define FE2_l84cde                                   0x78eae /* l84cde */
 #define FE2_l84f02                                   0x790d2 /* l84f02 */
 #define FE2_star_bmps                                0x79274 /* L850a4_star_bmps */
+#define FE2_L8a16e                                   0x7e33e /* L8a16e */
+#define FE2_L8a2d2                                   0x7e4a2 /* L8a2d2 */
+#define FE2_L8a32e                                   0x7e4fe /* L8a32e */
+#define FE2_L8a38a                                   0x7e55a /* L8a38a */
+#define FE2_L8a3e6                                   0x7e5b6 /* L8a3e6 */
 #define FE2_L8ad0e                                   0x7eed2 /* L8ad0e */
 #define FE2_galaxy_bmp                               0x7ef84 /* L8adc0_galaxy_bmp */
 #define FE2_Lmods_MakeSaveData                       0x83006 /* Lmods_MakeSaveData */
