@@ -168,10 +168,12 @@ static bool time_icon(int id)
 	return (id >= ICON_TIME_FIRST && id <= ICON_TIME_LAST) || id == ICON_TIME_PAUSE;
 }
 
-/* the time controls are the system map's only */
+/* the time controls are not overlaid, nor icon 6 on the system map */
 static bool kept_icon(int id, int owner)
 {
-	return (time_icon(id) && owner == OWNER_SYSTEM) || id == ICON_MAP || (id >= ICON_6 && id <= ICON_10);
+	if (id == ICON_6)
+		return owner != OWNER_SYSTEM;
+	return id == ICON_MAP || (id > ICON_6 && id <= ICON_10);
 }
 
 static void layout_buttons(int rects[][4], const int ids[], int n, int owner)
