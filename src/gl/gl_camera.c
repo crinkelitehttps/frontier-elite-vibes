@@ -8,7 +8,6 @@
 
 #include "gl_camera.h"
 
-#include "clipboard_font.h"
 #include "audio.h" /* Call_PlaySFX */
 #include "galaxy/fe2vm.h"
 #include "game_state.h"
@@ -63,7 +62,6 @@ enum
 	CAM_DOWN,
 	CAM_COUNT
 };
-static const char *const NAMES[CAM_COUNT] = {"FRONT", "REAR", "LEFT", "RIGHT", "UP", "DOWN"};
 /* Each camera's axes (right, up, ahead) in the game's view of the ship: x
  * right, y up, z ahead */
 static const float AXES[CAM_COUNT][3][3] = {
@@ -139,11 +137,19 @@ static bool slot_shown(uint32_t space, int i)
 	return i > 0 && i < NUM_SLOTS && (flags & 0x08) && !(flags & 0x20);
 }
 
+static int button_at(float x, float y);
+
 void camera_tap(float u, float v)
 {
 	if (!lock)
 		return;
 	float x = u * CAMERA_W, y = v * CAMERA_H;
+	int b = button_at(x, y);
+	if (b >= 0)
+	{
+		SDL_AtomicSet(&cam_dir, b);
+		return;
+	}
 	int best = -1;
 	float best_d = 0;
 	SDL_LockMutex(lock);
@@ -396,20 +402,61 @@ static uint32_t rgb(uint16_t c)
 }
 
 /* The direction's name in the top left corner, shadowed */
-static void label(const char *s)
+/* The direction buttons, bottom right of the picture: FORWARD, BACK, LEFT,
+ * RIGHT, UP, DOWN left to right (the CAM_ order) */
+#define BTN_SIZE   14
+#define BTN_GAP    2
+#define BTN_RIGHT  316
+#define BTN_BOTTOM 164
+
+static void button_rect(int i, int *x, int *y)
 {
-	for (int pass = 0; pass < 2; pass++)
+	*x = BTN_RIGHT - (CAM_COUNT - i) * BTN_SIZE - (CAM_COUNT - 1 - i) * BTN_GAP + 1;
+	*y = BTN_BOTTOM - BTN_SIZE + 1;
+}
+
+/* Which button a point of the picture is on, -1 if none */
+static int button_at(float x, float y)
+{
+	for (int i = 0; i < CAM_COUNT; i++)
 	{
-		uint32_t col = pass ? 0xffffffffu : 0xff000000u;
-		int x0 = 4 + !pass, y0 = 3 + !pass;
-		for (int k = 0; s[k]; k++)
-			for (int y = 0; y < 16; y++)
+		int bx, by;
+		button_rect(i, &bx, &by);
+		if (x >= bx && x < bx + BTN_SIZE && y >= by && y < by + BTN_SIZE)
+			return i;
+	}
+	return -1;
+}
+
+/* The map's pan buttons' look: a frame and a triangle; UP and DOWN have a
+ * bar on the far side, FORWARD and BACK are plain */
+static void draw_buttons(int current)
+{
+	const uint32_t edge = 0xffc08040, arrow = 0xffffffff; /* ABGR */
+	for (int i = 0; i < CAM_COUNT; i++)
+	{
+		int bx, by;
+		button_rect(i, &bx, &by);
+		uint32_t back = i == current ? 0xff805020 : 0xff402010;
+		for (int y = 0; y < BTN_SIZE; y++)
+			for (int x = 0; x < BTN_SIZE; x++)
+				pixels[(by + y) * CAMERA_W + bx + x] =
+					(x == 0 || y == 0 || x == BTN_SIZE - 1 || y == BTN_SIZE - 1) ? edge : back;
+		int cx = bx + BTN_SIZE / 2, cy = by + BTN_SIZE / 2;
+		bool horiz = i == CAM_LEFT || i == CAM_RIGHT;
+		/* the way the tip points: -1 up / left, +1 down / right */
+		int sign = (i == CAM_REAR || i == CAM_DOWN || i == CAM_RIGHT) ? 1 : -1;
+		for (int d = 0; d < 7; d++)
+			for (int k = -(d / 2); k <= d / 2; k++)
 			{
-				unsigned char bits = clipboard_font_8x16[(unsigned char)s[k] * 16 + y];
-				for (int x = 0; x < 8; x++)
-					if (bits & (0x80 >> x))
-						pixels[(y0 + y) * CAMERA_W + x0 + k * 8 + x] = col;
+				int along = sign > 0 ? 3 - d : d - 3;
+				int px = horiz ? cx + along : cx + k;
+				int py = horiz ? cy + k : cy + along;
+				pixels[py * CAMERA_W + px] = arrow;
 			}
+		if (i == CAM_UP || i == CAM_DOWN)
+			for (int x = -3; x <= 3; x++)
+				pixels[(cy + sign * 5) * CAMERA_W + cx + x] = arrow;
 	}
 }
 
@@ -513,7 +560,7 @@ void camera_capture(bool screen)
 	failed = !ok;
 	if (!ok)
 		return;
-	label(NAMES[batch_dir]);
+	draw_buttons(batch_dir);
 	SDL_LockMutex(lock);
 	memcpy(pub, pixels, sizeof pub);
 	memcpy(pub_hits, hits, (size_t)nhits * sizeof hits[0]);
