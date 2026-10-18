@@ -78,17 +78,15 @@ int headtrack_port = HEADTRACK_DEFAULT_PORT;
  * drawn this bright. */
 #define SUB_W    0.30f
 #define SUB_H    (SUB_W * 168.0f / 320.0f * 1.2f)
-/* The SHIP screen shows the whole page when it runs live, its top edge where
- * the others' are */
-#define MAP_H    (SUB_W * (float)GL_SCREEN_H / 320.0f * 1.2f)
-#define SUB_DOWN 10.8f
-/* The SHIP screen shows the whole page when it runs live (its buttons are in
- * the strip below). The MAP screen's buttons are put on its view
- * (gl_mapscreen.h). */
+/* All the cockpit screens show only the view rows (0..167); the SHIP screen's
+ * dashboard is redundant (touch toggles the mode), the MAP screen's buttons
+ * are put on its view (gl_mapscreen.h). */
 static bool full_page(int g)
 {
-	return g == COCKPIT_SCREEN_SHIP && cockpit_ship_live;
+	(void)g;
+	return false;
 }
+#define SUB_DOWN 10.8f
 #define SUB_DIM  0.65f
 
 /* The camera screen (gl_camera.h): beside it, on its right, smaller */
@@ -345,11 +343,7 @@ static void place_screens(float k)
 	const float cam_right = atanf(((SUB_W + CAM_W) * 0.5f + CAM_GAP + CAM_W * 0.5f) / r);
 	place_facing(SUB_DOWN, 0.0f, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_MAP]);
 	place_facing(SUB_DOWN, 2.0f * half + gap, SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_COMS]);
-	if (full_page(COCKPIT_SCREEN_SHIP))
-		place_facing(SUB_DOWN - atanf((MAP_H - SUB_H) * 0.5f / PANEL_DIST) * 180.0f / GLM_PI, -(cam_right + gap + half),
-					 SUB_W, MAP_H, k, subs[COCKPIT_SCREEN_SHIP]);
-	else
-		place_facing(SUB_DOWN, -(cam_right + gap + half), SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_SHIP]);
+	place_facing(SUB_DOWN, -(cam_right + gap + half), SUB_W, SUB_H, k, subs[COCKPIT_SCREEN_SHIP]);
 	place_facing(SUB_DOWN, 0.0f, CAM_W, CAM_H, k, cam);
 	for (int i = 0; i < 4; i++)
 		cam[i][0] += (SUB_W + CAM_W) * 0.5f * k + CAM_GAP * k;
