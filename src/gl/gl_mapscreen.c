@@ -52,6 +52,7 @@ bool cockpit_ship_live = true;
 #define KEEP2_FIRST 14488
 #define KEEP2_LEN   4
 #define PICKED      708 /* A6: the object picked (708), and the flag that it was (709) */
+#define SCREEN_MODE 704 /* A6: 4 in flight */
 #define OBJS_FIRST  17348
 #define OBJS_LEN    0x8030
 /* The key state the maps read: the arrows and right shift, and the game's
@@ -990,6 +991,8 @@ bool mapscreen_page(int group, MapPage *out)
 
 	Batch input;
 	take_input(group, &input);
+	const bool in_flight = game_screen() == SCREEN_FLIGHT;
+	uint8_t was_picked = 0;
 
 	game_screen_freeze(true);
 	scene_mute_object(0); /* (the frame before may have left one: its stack is above the batch's) */
@@ -1048,6 +1051,7 @@ bool mapscreen_page(int group, MapPage *out)
 		}
 		if (!is_ship && kept.owner == OWNER_GALAXY)
 			draw_menu();
+		was_picked = (uint8_t)rdbyte(a6 + PICKED);
 		no_keys();
 		ok = (step = 3, play_input(&input)) && call(FE2_UIKeyboardPoll) && (step = 4, call(MODULES_FN16)) &&
 			 (step = 5, finish_frame()) && (step = 6, got_page);
@@ -1115,6 +1119,15 @@ bool mapscreen_page(int group, MapPage *out)
 					   input.p.x, input.p.y);
 		last_owner = now;
 	}
+	/* a pick on the map in flight sets the ship's target: the machine is put
+	 * back, so that is done on the real one */
+	bool set_target = false;
+	uint8_t target = 0;
+	if (ok && !is_ship && in_flight && rdbyte(a6 + PICKED) && rdbyte(a6 + PICKED) != was_picked)
+		set_target = true, target = (uint8_t)rdbyte(a6 + PICKED);
+	if (getenv("GLF_MAP_LOG") && input.p.pressed && !is_ship)
+		log_printf("map pick: mode %d picked %d>%d set %d\n", rdbyte(a6 + SCREEN_MODE), was_picked,
+				   rdbyte(a6 + PICKED), set_target);
 	int d_owner = (uint16_t)rdword(a6 + A6_SCREEN_OWNER), d_clr = (uint8_t)rdbyte(a6 + A6_DO_CLR);
 	memcpy(hcalls, saved, (size_t)hcalls_count * sizeof(HOSTCALL));
 	fe2vm_end();
@@ -1122,6 +1135,8 @@ bool mapscreen_page(int group, MapPage *out)
 	if (keep)
 		for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
 			wrbyte(a6 + KEEP_FIRST + (uint32_t)i, end_state[i]);
+	if (set_target)
+		wrbyte(a6 + PICKED, target); /* (the flight view's click does just that: its target) */
 	host_screen_restore(&host);
 	game_screen_freeze(false);
 	flipped = NULL;
