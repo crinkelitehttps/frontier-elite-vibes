@@ -161,7 +161,7 @@ static int take_laser(int *mx, int *my)
 	SDL_AtomicUnlock(&laser_lock);
 
 	/* the system map's button, as for the mouse (main.c) */
-	if ((pressed & 0x2) && (int)x >= 18 && (int)x <= 31 && (int)y * 240 / 200 >= 226)
+	if ((pressed & 0x2) && !mapscreen_dashboard_up() && (int)x >= 18 && (int)x <= 31 && (int)y * 240 / 200 >= 226)
 	{
 		Input_PressSTKey(0x3c, TRUE); /* F2 */
 		Input_PressSTKey(0x3c, FALSE);
@@ -224,22 +224,35 @@ void Call_GetMouseInput(void)
 		drag_x = drag_y = 0;
 	}
 
-	mouse_mov[0] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[0]) + input.motion_x + drag_x);
-	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y + drag_y);
-	mouse_mov[2] = SDL_SwapBE16(0xf8 | (on_map ? 0 : input.cur_mousebut_state) | laser_btn);
-
 	/* window pixels -> game screen (letterboxed game area, or the cockpit),
 	 * or the gamepad's pointer, or the laser's */
 	int gx, gy;
+	bool got = false;
 	if (!on_map && (Input_PadPointer(&gx, &gy) || Input_LaserPointer(&gx, &gy) ||
 					Screen_WindowToGame(input.abs_x, input.abs_y, &gx, &gy)))
 	{
+		got = true;
 		mouse_abs[0] = SDL_SwapBE16(gx);
 		mouse_abs[1] = SDL_SwapBE16(gy);
 		last_x = gx;
 		last_y = gy;
 		have_last = true;
 	}
+
+	mouse_mov[0] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[0]) + input.motion_x + drag_x);
+	mouse_mov[1] = SDL_SwapBE16(SDL_SwapBE16(mouse_mov[1]) + input.motion_y + drag_y);
+	/* a press on the dashboard's buttons 2-4 shows or hides a screen, and is
+	 * the game's no more (till it is let go) */
+	static bool dash_held, dash_left;
+	int buttons = (on_map ? 0 : input.cur_mousebut_state) | laser_btn;
+	if (!(buttons & 0x2))
+		dash_held = false;
+	else if (!dash_left && got && mapscreen_dashboard_press(gx, gy))
+		dash_held = true;
+	dash_left = (buttons & 0x2) != 0;
+	if (dash_held)
+		buttons &= ~0x2;
+	mouse_mov[2] = SDL_SwapBE16(0xf8 | buttons);
 
 	input.motion_x = input.motion_y = 0;
 
@@ -280,6 +293,21 @@ void Input_TapSTKey(unsigned char scancode)
 
 void Input_PressSTKey(unsigned char scancode, BOOL press)
 {
+	/* the key of a screen the dashboard has hidden shows it again */
+	static bool shown_by[3];
+	if (scancode >= 0x3c && scancode <= 0x3e)
+	{
+		int g = scancode - 0x3c;
+		if (getenv("GLF_MAP_LOG") && press)
+			log_printf("key F%d: group %d hidden %d\n", g + 2, g, mapscreen_hidden(g));
+		if (press ? mapscreen_hidden(g) : shown_by[g])
+		{
+			shown_by[g] = press;
+			if (press)
+				mapscreen_show(g);
+			return;
+		}
+	}
 	/* F2 with the MAP screen up in flight is the screen's (the galaxy map
 	 * and the system map take turns on it), not the game's (but for the one
 	 * that opens the real map for it, mapscreen_poll) */

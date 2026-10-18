@@ -8,6 +8,7 @@
 #include <SDL.h>
 
 #include "gl_mapscreen.h"
+#include "gl_camera.h"
 
 #include "galaxy/fe2vm.h"
 #include "game_state.h"
@@ -134,7 +135,10 @@ void mapscreen_forget(void)
 #define ICON_TIME_FIRST 193 /* 193..197 and 254 */
 #define ICON_TIME_LAST  197
 #define ICON_TIME_PAUSE 254
+#define ICON_VIEW       241 /* the flight panel's icons 1 to 4 (F1 to F4) */
 #define ICON_MAP        242
+#define ICON_SHIP       243
+#define ICON_COMS       244
 #define ICON_6          246
 #define SCAN_F2         0x3c
 /* A press on icon 6 opens the real map and presses it there: when the map is
@@ -543,13 +547,79 @@ bool mapscreen_up(void)
 	return game_screen() == SCREEN_FLIGHT || game_screen() == SCREEN_STATION;
 }
 
+/* The screens the dashboard's buttons have hidden (the shown screens are
+ * the default) */
+static volatile bool hidden[COCKPIT_SCREENS];
+
 bool mapscreen_group_up(int group)
 {
 	if (group == COCKPIT_SCREEN_MAP)
-		return cockpit_map_live && mapscreen_up();
+		return cockpit_map_live && mapscreen_up() && !hidden[group];
 	/* (not for a moment after it opens the real screen: the key is the game's) */
 	if (group == COCKPIT_SCREEN_SHIP)
-		return cockpit_ship_live && mapscreen_up() && SDL_GetTicks() - ship.handed >= HAND_OVER_MS;
+		return cockpit_ship_live && mapscreen_up() && !hidden[group] && SDL_GetTicks() - ship.handed >= HAND_OVER_MS;
+	return false;
+}
+
+bool mapscreen_hidden(int group)
+{
+	if (group < 0 || group >= COCKPIT_SCREENS || !hidden[group] || !mapscreen_up() || game_screen() != SCREEN_FLIGHT)
+		return false;
+	return group == COCKPIT_SCREEN_MAP ? cockpit_map_live : group == COCKPIT_SCREEN_SHIP ? cockpit_ship_live : true;
+}
+
+void mapscreen_show(int group)
+{
+	if (group >= 0 && group < COCKPIT_SCREENS)
+		hidden[group] = false;
+}
+
+bool mapscreen_dashboard_up(void)
+{
+	return mapscreen_up() && game_screen() == SCREEN_FLIGHT;
+}
+
+bool mapscreen_dashboard_press(int x, int y)
+{
+	const bool dbg = getenv("GLF_MAP_LOG") != NULL;
+	if (!mapscreen_up() || game_screen() != SCREEN_FLIGHT)
+	{
+		if (dbg)
+			log_printf("dashboard press %d,%d: ignored (screens up %d, game screen %d)\n", x, y, mapscreen_up(),
+					   (int)game_screen());
+		return false;
+	}
+	int rects[64][4], n = game_icon_rects(rects, 64);
+	if (dbg)
+	{
+		char buf[1024];
+		int len = snprintf(buf, sizeof buf, "dashboard press %d,%d; icons:", x, y);
+		for (int i = 0; i < n && len < 900; i++)
+			len += snprintf(buf + len, sizeof buf - (size_t)len, " [id %d %d,%d-%d,%d]",
+							(uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8), rects[i][0],
+							rects[i][1], rects[i][2], rects[i][3]);
+		log_printf("%s\n", buf);
+	}
+	for (int i = 0; i < n; i++)
+	{
+		int id = (uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8);
+		if (id == ICON_VIEW && x >= rects[i][0] && x <= rects[i][2] && y >= rects[i][1] && y <= rects[i][3])
+		{
+			cockpit_camera = !cockpit_camera;
+			if (dbg)
+				log_printf("dashboard: icon %d toggles the camera screen, now %s\n", id, cockpit_camera ? "shown" : "hidden");
+			return true;
+		}
+		int group = id == ICON_MAP ? COCKPIT_SCREEN_MAP : id == ICON_SHIP ? COCKPIT_SCREEN_SHIP : id == ICON_COMS ? COCKPIT_SCREEN_COMS : -1;
+		if (group < 0 || x < rects[i][0] || x > rects[i][2] || y < rects[i][1] || y > rects[i][3])
+			continue;
+		if (group == COCKPIT_SCREEN_MAP ? !cockpit_map_live : group == COCKPIT_SCREEN_SHIP && !cockpit_ship_live)
+			return false;
+		hidden[group] = !hidden[group];
+		if (dbg)
+			log_printf("dashboard: icon %d toggles group %d, now %s\n", id, group, hidden[group] ? "hidden" : "shown");
+		return true;
+	}
 	return false;
 }
 

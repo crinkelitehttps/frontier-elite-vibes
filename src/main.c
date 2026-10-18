@@ -16,6 +16,7 @@
 #include "m68000.h"
 #include "hostcall.h"
 #include "input.h"
+#include "gl/gl_mapscreen.h"
 #include "keymap.h"
 #include "manual.h"
 #include "custom_ships.h"
@@ -174,7 +175,7 @@ static bool hit_game_region_clicked(const SDL_Event *event, int x1, int y1, int 
  * system view icon sends F2 instead. */
 static bool systemview_button(const SDL_Event *event)
 {
-	if (event->button.button != SDL_BUTTON_LEFT || !hit_game_region_clicked(event, 18, 226, 31, 240))
+	if (event->button.button != SDL_BUTTON_LEFT || mapscreen_dashboard_up() || !hit_game_region_clicked(event, 18, 226, 31, 240))
 		return false;
 	SDL_Keysym key = {.scancode = SDL_SCANCODE_F2, .sym = SDLK_F2};
 	Keymap_KeyDown(&key);

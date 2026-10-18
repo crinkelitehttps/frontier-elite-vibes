@@ -102,6 +102,7 @@ static bool side_on[COCKPIT_SCREENS]; /* ... which of them are shown (they run o
 static GLuint sub_tex[COCKPIT_SCREENS]; /* their pictures, 0: none yet */
 static bool cam_on;      /* ... with the camera screen */
 static GLuint cam_tex;
+static GLuint blank_tex; /* the COMS screen with nothing yet on it */
 static bool flat_saved;  /* active, while cockpit_draw_flat */
 static bool game_active; /* the game's frames are (game thread) */
 static float aspect = 16.0f / 9.0f;
@@ -550,9 +551,16 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	if (side_beside)
 		for (int g = COCKPIT_SCREEN_MAP; g <= COCKPIT_SCREEN_SHIP; g++)
 			side_on[g] = mapscreen_group_up(g) && sub_tex[g];
+	/* the dashboard's button hides the COMS screen in flight */
+	const bool coms_hidden = !sub_on && mapscreen_hidden(COCKPIT_SCREEN_COMS);
+	if (coms_hidden)
+		sub_tex[COCKPIT_SCREEN_COMS] = 0;
 	/* in flight, the COMS screen shows the comms menu's text */
-	if (active && !sub_on && gl_screen_coms_menu())
+	if (active && !sub_on && !coms_hidden && gl_screen_coms_menu())
 		sub_tex[COCKPIT_SCREEN_COMS] = gl_screen_coms_menu();
+	/* the screen is there, blank, before the game has drawn anything on it */
+	if (active && !sub_on && !coms_hidden && !sub_tex[COCKPIT_SCREEN_COMS] && mapscreen_up())
+		sub_tex[COCKPIT_SCREEN_COMS] = blank_tex;
 	/* the menu's rows stay out of the view a while after the game stops
 	 * drawing its boxes: its text can outlast them (the screen keeps it) */
 	static int coms_hold;
@@ -751,6 +759,12 @@ void cockpit_init(void)
 		shared_lock = SDL_CreateMutex();
 	camera_init();
 	build_panel();
+	static const unsigned char dark[4] = {10, 10, 24, 255};
+	glGenTextures(1, &blank_tex);
+	glBindTexture(GL_TEXTURE_2D, blank_tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, dark);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	static const char *const attribs[] = {"aPos", "aUV"};
 	prog = gd_build_program(VS_QUAD, FS_QUAD, attribs, 2);
 	u_tex = glGetUniformLocation(prog, "uTex");
@@ -771,6 +785,7 @@ void cockpit_init(void)
 void cockpit_shutdown(void)
 {
 	camera_shutdown();
+	glDeleteTextures(1, &blank_tex);
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 	glDeleteProgram(prog);

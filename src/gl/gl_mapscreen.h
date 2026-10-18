@@ -79,6 +79,19 @@ void mapscreen_poll(void);
 /* ... and it is waiting for the real map: F2 is the game's meanwhile */
 bool mapscreen_handing(void);
 bool mapscreen_group_up(int group);
+/* In flight the dashboard's buttons 1 to 4 show and hide the camera, MAP, SHIP
+ * and COMS screens (the game's own F2, F3, F4 are the screens' to touch now). A
+ * hidden screen is not drawn and cannot be touched. `group` is hidden now
+ * (false off the flight view); shown again (the key for it does that too) */
+bool mapscreen_hidden(int group);
+void mapscreen_show(int group);
+/* Game thread: a press at screen pixel (x, y) of the real flight panel: if it
+ * is on one of those buttons, it toggles the screen and is done (true), the
+ * game is not to see it */
+bool mapscreen_dashboard_press(int x, int y);
+/* The dashboard's buttons are those (the cockpit's screens, in flight): the
+ * workarounds that make button 2 the game's F2 are off then */
+bool mapscreen_dashboard_up(void);
 /* The screen is being used: the pointer is on it, or it was a moment ago */
 bool mapscreen_pointed(int group);
 
