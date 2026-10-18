@@ -1116,6 +1116,7 @@ static void log_rates(bool new_frame)
 #define SUB_H 960
 static GLuint sub_fbos[COCKPIT_SCREENS], sub_texs[COCKPIT_SCREENS], sub_depth;
 static bool sub_drawn[COCKPIT_SCREENS];
+static bool coms_station_drawn; /* the station's services have drawn the COMS texture */
 
 GLuint gl_screen_sub_texture(int group)
 {
@@ -1180,6 +1181,8 @@ static void draw_sub(int group)
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	sub_drawn[group] = true;
+	if (group == COCKPIT_SCREEN_COMS)
+		coms_station_drawn = true;
 }
 
 /* The COMS screen when it isn't the game's live screen and the ship is
@@ -1197,14 +1200,17 @@ static int coms_state;
 static void draw_coms_flight(bool new_frame)
 {
 	FlightStatus fs = game_flight_status();
-	if (!cockpit_screens_on() || fs == FLIGHT_DOCKED || fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH ||
+	bool station = fs == FLIGHT_DOCKED || fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH;
+	/* (landed, with none of the station's services drawn yet, the texture is
+	 * not anyone's: the flight's view is in it, as at take-off) */
+	if (!cockpit_screens_on() || (station && coms_station_drawn) ||
 		(scr_show.sub && scr_show.group == COCKPIT_SCREEN_COMS))
 	{
 		coms_state = COMS_KEPT;
 		return;
 	}
 	int y0, y1;
-	bool menu = scr_show.cockpit && !scr_show.sub && gl_screen_menu_rows(&y0, &y1);
+	bool menu = !station && scr_show.cockpit && !scr_show.sub && gl_screen_menu_rows(&y0, &y1);
 	/* the last menu's text stays up after the game's own has gone */
 	if (!menu && coms_state != COMS_KEPT)
 		return;

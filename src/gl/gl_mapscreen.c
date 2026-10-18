@@ -142,7 +142,7 @@ void mapscreen_forget(void)
 #define HAND_POLLS      200
 #define HAND_WAIT       6
 static volatile int hand_polls, hand_x, hand_y;
-static int hand_up;
+static int hand_up, after_polls;
 #define ICON_10         250
 #define BTN_GAP         2
 #define BTN_RIGHT  316 /* the buttons' right edge, bottom edge */
@@ -469,6 +469,18 @@ void mapscreen_poll(void)
 	if (getenv("GLF_MAP_LOG"))
 		log_real_screen();
 	real_layout();
+	if (after_polls > 0 && getenv("GLF_MAP_LOG"))
+	{
+		/* (log) what the game does after the hand-over's click */
+		static int last_screen = -1, last_o = -1, last_val;
+		int v = (uint8_t)rdbyte(GAME_A6 + 592) | (uint8_t)rdbyte(GAME_A6 + 593) << 8 | (uint8_t)rdbyte(GAME_A6 + 595) << 16;
+		if ((int)game_screen() != last_screen || game_screen_owner() != last_o || v != last_val)
+			log_printf("after click (%d polls left): screen %d owner %d a6[592,593,595] %06x\n", after_polls,
+					   (int)game_screen(), game_screen_owner(), v);
+		last_screen = (int)game_screen(), last_o = game_screen_owner(), last_val = v;
+	}
+	if (after_polls > 0)
+		after_polls--;
 	if (hand_polls <= 0)
 		return;
 	hand_polls--;
@@ -501,6 +513,7 @@ void mapscreen_poll(void)
 			log_printf("\n");
 		}
 		Input_ClickAt(hand_x, hand_y);
+		after_polls = 400;
 		hand_polls = 0;
 		hand_up = 0;
 	}
@@ -726,7 +739,7 @@ static void take_input(int group, Batch *b)
 		if (b->p.pressed)
 		{
 			int id = button_at(b->p.x, b->p.y);
-			if (id == ICON_6 && kept.owner == OWNER_GALAXY)
+			if (id >= ICON_6 && id <= ICON_10 && kept.owner == OWNER_GALAXY)
 			{
 				/* what it opens is the game's own screen: the real map, and the
 				 * button pressed there (mapscreen_poll) */
