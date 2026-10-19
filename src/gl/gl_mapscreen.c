@@ -654,6 +654,12 @@ bool mapscreen_dashboard_press(int x, int y)
 			continue;
 		if (group == COCKPIT_SCREEN_MAP ? !cockpit_map_live : group == COCKPIT_SCREEN_SHIP && !cockpit_ship_live)
 			return false;
+		/* the COMS screen has nothing on it (no services, no message): the button is the game's, to connect */
+		if (group == COCKPIT_SCREEN_COMS && gl_screen_coms_clear())
+		{
+			hidden[group] = false;
+			return false;
+		}
 		hidden[group] = !hidden[group];
 		if (dbg)
 			log_printf("dashboard: icon %d toggles group %d, now %s\n", id, group, hidden[group] ? "hidden" : "shown");

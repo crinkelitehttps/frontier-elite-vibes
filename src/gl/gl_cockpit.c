@@ -759,7 +759,7 @@ void cockpit_init(void)
 		shared_lock = SDL_CreateMutex();
 	camera_init();
 	build_panel();
-	static const unsigned char dark[4] = {10, 10, 24, 255};
+	static const unsigned char dark[4] = {0, 0, 0, 0};
 	glGenTextures(1, &blank_tex);
 	glBindTexture(GL_TEXTURE_2D, blank_tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, dark);
@@ -920,7 +920,7 @@ void cockpit_draw(void)
 	for (int g = 0; g < COCKPIT_SCREENS; g++) /* their textures are bottom up */
 		if (sub_tex[g])
 			queue_tex_quad(&cp, (const float(*)[3])subs[g], sub_tex[g], 1.0f, full_page(g) ? 0.0f : GL_SCREEN_SUB_V0,
-						   g == live || side_on[g] ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && gl_screen_coms_clear());
+						   g == live || side_on[g] ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && (gl_screen_coms_clear() || sub_tex[g] == blank_tex));
 	if (cam_on)
 		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
 	gd_pop();
