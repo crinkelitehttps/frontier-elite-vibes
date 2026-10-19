@@ -126,6 +126,9 @@ int mapscreen_pans(int out[MAPSCREEN_PANS][4]);
  * is drawn with them); a point on the screen, put back where the game has it */
 bool mapscreen_real_buttons(void);
 void mapscreen_unmove(int *x, int *y);
+/* the station's services' screen: the phone icon (Button 4), moved onto it */
+bool mapscreen_phone(MapButton *out);
+void mapscreen_phone_unmove(int *x, int *y);
 
 /* Forgets what the map was showing (a new game was loaded) */
 void mapscreen_forget(void);

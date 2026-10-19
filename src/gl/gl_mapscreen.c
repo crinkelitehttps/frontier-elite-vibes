@@ -165,6 +165,29 @@ static MapButton btns[MAPSCREEN_BUTTONS];
 static int nbtns;
 /* the maps' pan (galaxy) or turn (system) buttons (up, down, left, right), on the screen */
 static int pans[MAPSCREEN_PANS][4], npans;
+/* the station's services' own: the phone icon alone, apart from the map's */
+static MapButton phone;
+static bool has_phone;
+
+bool mapscreen_phone(MapButton *out)
+{
+	SDL_AtomicLock(&btn_lock);
+	bool on = has_phone;
+	*out = phone;
+	SDL_AtomicUnlock(&btn_lock);
+	return on;
+}
+
+void mapscreen_phone_unmove(int *x, int *y)
+{
+	SDL_AtomicLock(&btn_lock);
+	if (has_phone && *x >= phone.dx && *x < phone.dx + phone.w && *y >= phone.dy && *y < phone.dy + phone.h)
+	{
+		*x += phone.sx - phone.dx;
+		*y += phone.sy - phone.dy;
+	}
+	SDL_AtomicUnlock(&btn_lock);
+}
 
 int mapscreen_pans(int out[MAPSCREEN_PANS][4])
 {
@@ -225,7 +248,7 @@ static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bo
 	for (int i = 0; i < n && nb < MAPSCREEN_BUTTONS; i++)
 	{
 		const int *r = rects[i];
-		if (!(real ? kept_real(ids[i]) : kept_icon(ids[i], owner)) || r[1] < PANEL_ROW0 || r[3] > 199 || r[0] < 0 || r[2] > 319 || r[2] < r[0] || r[3] < r[1])
+		if (!(real ? (owner == OWNER_STATION ? ids[i] == ICON_COMS : kept_real(ids[i])) : kept_icon(ids[i], owner)) || r[1] < PANEL_ROW0 || r[3] > 199 || r[0] < 0 || r[2] > 319 || r[2] < r[0] || r[3] < r[1])
 			continue;
 		MapButton m = {r[0], r[1], r[2] - r[0] + 1, r[3] - r[1] + 1, 0, 0, ids[i]};
 		int j = nb++;
@@ -257,6 +280,15 @@ static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bo
 			x += b[i].w + BTN_GAP;
 		}
 		y -= h + BTN_GAP;
+	}
+	if (real && owner == OWNER_STATION)
+	{
+		SDL_AtomicLock(&btn_lock);
+		has_phone = nb > 0;
+		if (nb)
+			phone = b[0];
+		SDL_AtomicUnlock(&btn_lock);
+		return;
 	}
 	if (getenv("GLF_MAP_LOG"))
 		for (int i = 0; i < nb; i++)
@@ -465,10 +497,11 @@ static void real_layout(void)
 {
 	static char last[2048];
 	bool real = cockpit_screens_on() && !game_screen_in_batch() &&
-				(game_screen() == SCREEN_GALAXY_MAP || game_screen() == SCREEN_SYSTEM_MAP);
+				(game_screen() == SCREEN_GALAXY_MAP || game_screen() == SCREEN_SYSTEM_MAP || game_screen() == SCREEN_STATION);
 	if (!real)
 	{
 		real_buttons = false;
+		has_phone = false;
 		return;
 	}
 	int rects[64][4], ids[64], n = game_icon_rects(rects, 64);
@@ -486,7 +519,7 @@ static void real_layout(void)
 		memcpy(last, buf, sizeof last);
 		layout_buttons(rects, ids, n, game_screen_owner(), true);
 	}
-	real_buttons = true;
+	real_buttons = game_screen() != SCREEN_STATION;
 }
 
 void mapscreen_poll(void)

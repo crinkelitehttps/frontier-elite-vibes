@@ -474,6 +474,7 @@ static void draw_pans(void)
 	}
 }
 
+static bool page_phone; /* the picture is the station's services': the phone icon on it */
 static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
 
 void gl_screen_upload(void)
@@ -504,6 +505,15 @@ void gl_screen_upload(void)
 						framebuf[(b[i].dy + y) * SCR_W + b[i].dx + x] = px;
 				}
 	}
+	MapButton ph;
+	if (page_phone && mapscreen_phone(&ph))
+		for (int y = 0; y < ph.h; y++)
+			for (int x = 0; x < ph.w; x++)
+			{
+				uint8_t c = src[(ph.sy + y) * SCR_W + ph.sx + x];
+				if (c != 255)
+					framebuf[(ph.dy + y) * SCR_W + ph.dx + x] = scr_show.ctrl_rgb[c & 15];
+			}
 	if (page_buttons)
 		draw_pans();
 	draw_pointer();
@@ -1316,7 +1326,7 @@ static void draw_picture(bool with_menu)
 	{
 		page_buttons = scr_show.group == COCKPIT_SCREEN_MAP && mapscreen_real_buttons();
 		draw_sub(scr_show.group);
-		page_buttons = false;
+		page_buttons = page_phone = false;
 	}
 	if (scr_show.page_new && new_frame)
 		draw_page();
@@ -1348,6 +1358,7 @@ static int render_main(void *arg)
 			SDL_GL_MakeCurrent(window, gl_context);
 		}
 		SDL_UnlockMutex(ctx_lock);
+		page_phone = scr_show.group == COCKPIT_SCREEN_COMS;
 
 		Uint64 t0 = SDL_GetPerformanceCounter();
 		draw_picture(false);

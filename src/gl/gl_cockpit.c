@@ -1435,6 +1435,8 @@ static bool ray_to_screen(const float eye[3], const float d[3], bool cam_shown, 
 		*sy = (int)(v * (full_page(live) ? GL_SCREEN_H : PANEL_ROW0));
 		if (live == COCKPIT_SCREEN_MAP && mapscreen_real_buttons())
 			mapscreen_unmove(sx, sy);
+		else if (live == COCKPIT_SCREEN_COMS)
+			mapscreen_phone_unmove(sx, sy);
 		*dist = t;
 		return true;
 	}
