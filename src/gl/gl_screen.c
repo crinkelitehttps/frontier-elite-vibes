@@ -1150,7 +1150,12 @@ static void log_rates(bool new_frame)
 #define SUB_H 960
 static GLuint sub_fbos[COCKPIT_SCREENS], sub_texs[COCKPIT_SCREENS], sub_depth;
 static bool sub_drawn[COCKPIT_SCREENS];
-static bool coms_station_drawn; /* the station's services have drawn the COMS texture */
+static volatile bool coms_station_drawn; /* the station's services have drawn the COMS texture */
+
+void gl_screen_coms_forget(void)
+{
+	coms_station_drawn = false;
+}
 
 GLuint gl_screen_sub_texture(int group)
 {
@@ -1235,6 +1240,10 @@ static void draw_coms_flight(bool new_frame)
 {
 	FlightStatus fs = game_flight_status();
 	bool station = fs == FLIGHT_DOCKED || fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH;
+	/* (in flight the station's page is gone, and a flag left from an earlier
+	 * visit must not make a later landing's COMS button look like it has one) */
+	if (!station)
+		coms_station_drawn = false;
 	/* (landed, with none of the station's services drawn yet, the texture is
 	 * not anyone's: the flight's view is in it, as at take-off) */
 	if (!cockpit_screens_on() || (station && coms_station_drawn) ||

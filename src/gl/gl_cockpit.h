@@ -89,6 +89,8 @@ GLuint gl_screen_sub_texture(int group);
  * and not the station's page it last had) */
 GLuint gl_screen_coms_menu(void);
 bool gl_screen_coms_clear(void);
+/* A saved game or a new one was loaded: no station's services are on the COMS screen */
+void gl_screen_coms_forget(void);
 /* With the cockpit's screen: the labels on things in the world round it,
  * the flight view's text layer, laid out as the emulated screen's
  * texture (transparent where there is none); 0 when there are none */

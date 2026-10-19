@@ -655,7 +655,10 @@ bool mapscreen_dashboard_press(int x, int y)
 		if (group == COCKPIT_SCREEN_MAP ? !cockpit_map_live : group == COCKPIT_SCREEN_SHIP && !cockpit_ship_live)
 			return false;
 		/* the COMS screen has nothing on it (no services, no message): the button is the game's, to connect */
-		if (group == COCKPIT_SCREEN_COMS && gl_screen_coms_clear())
+		/* (landed or docked it is the game's too: it opens the services again) */
+		FlightStatus fs = game_flight_status();
+		bool at_station = fs == FLIGHT_DOCKED || fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH;
+		if (group == COCKPIT_SCREEN_COMS && (gl_screen_coms_clear() || at_station))
 		{
 			hidden[group] = false;
 			return false;

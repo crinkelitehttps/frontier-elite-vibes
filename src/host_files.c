@@ -14,6 +14,7 @@
 #include "game_state.h"
 #include "main.h"
 #include "station_resume.h"
+#include "gl/gl_cockpit.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -115,6 +116,7 @@ void Call_Fread(void)
 	host_path(name, path, sizeof(path));
 
 	station_resume_forget(); /* a saved game, likely: not the station kept */
+	gl_screen_coms_forget();
 	FILE *f = fopen(path, "rb");
 	if (!f)
 	{
