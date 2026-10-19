@@ -2,6 +2,8 @@
  * gl_hud.c - see gl_hud.h.
  */
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gl_cockpit.h"
@@ -41,6 +43,14 @@ typedef struct
 
 typedef struct
 {
+	bool on, bound;
+	float ap, pe; /* heights above the body, km */
+	float tap;    /* game seconds to the next apsis (bound, not circular) */
+	bool has_tap, to_pe; /* to_pe: past the apoapsis, so it is the periapsis */
+} HudOrbit;
+
+typedef struct
+{
 	bool cross;     /* the crosshair: the view has a gun */
 	bool vel;       /* the velocity marker */
 	float dir[3];   /* the velocity in view space (unit) */
@@ -57,6 +67,8 @@ typedef struct
 	int nlabels;
 	HudLabel label[MAX_LABELS];
 	float lrgb[3];
+	/* the orbit round the body the ship is relative to */
+	HudOrbit orbit;
 } HudFrame;
 
 static HudFrame pending, pub, show;
@@ -223,12 +235,112 @@ void Call_HudLabels(void)
  * still seen round it: the crosshair as the last flight frame had it (and
  * its colour: the screen's palette is not the flight view's), the velocity
  * as it is now */
+/* The orbit round the frame's body (the ship's parent, with a gravity
+ * term at +122/+124): L43ed6 pulls the velocity by G * dt / r^2 per tick
+ * (G = mantissa * 2^(exponent - 51), r in position units, the velocity in
+ * its own units; found by flying with the engines off), and the position
+ * moves by v * (dt >> 7) / 4 / 2^32 per tick. So per tick in position
+ * units u = v * (dt >> 7) / 2^34 and mu = G * dt * (dt >> 7) / 2^34; the
+ * position units are 2^32 of the game's altitude units (1 mm). */
+#define OBJ_POS_LO    44
+#define OBJ_POS_HI    56
+#define OBJ_VEL_FRAC  192
+#define OBJ_GRAV_MANT 122
+#define OBJ_RADIUS_LO 266 /* long: the fraction */
+#define OBJ_RADIUS_HI 270 /* word: the whole part */
+#define A6_TICK_DT    14446
+#define PU_KM         4294.967296 /* a position unit in km */
+#define TICK_DT       994         /* 50 ticks a second */
+
+static bool orbit_calc(unsigned int ship, HudOrbit *o)
+{
+	unsigned int a6 = GAME_A6;
+	int par = (uint8_t)rdbyte(ship + 68);
+	if (!par)
+		return false;
+	unsigned int po = slot_object((unsigned int)rdlong(a6 + A6_BIG_SPACE), par);
+	int mant = (int16_t)rdword(po + OBJ_GRAV_MANT), exp = (int16_t)rdword(po + OBJ_GRAV_MANT + 2);
+	if (mant <= 0)
+		return false;
+	double dt = (double)(uint32_t)rdlong(a6 + A6_TICK_DT);
+	if (dt < 128 || dt > 1e8)
+		dt = TICK_DT;
+	double tq = floor(dt / 128.0), k = tq / 17179869184.0; /* 2^34 */
+	double mu = (double)mant * ldexp(1.0, exp - 51) * dt * k;
+	double r[3], u[3];
+	for (int i = 0; i < 3; i++)
+	{
+		r[i] = (double)rdlong(ship + OBJ_POS_HI + 4 * i) +
+			   (double)(uint32_t)rdlong(ship + OBJ_POS_LO + 4 * i) / 4294967296.0;
+		u[i] = k * ((double)rdlong(ship + OBJ_VELOCITY + 4 * i) + (double)(rdword(ship + OBJ_VEL_FRAC + 2 * i) & 0xffff) / 65536.0);
+	}
+	double rr = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+	double uu = u[0] * u[0] + u[1] * u[1] + u[2] * u[2];
+	double h[3] = {r[1] * u[2] - r[2] * u[1], r[2] * u[0] - r[0] * u[2], r[0] * u[1] - r[1] * u[0]};
+	double hh = h[0] * h[0] + h[1] * h[1] + h[2] * h[2];
+	double ev[3] = {(u[1] * h[2] - u[2] * h[1]) / mu - r[0] / rr, (u[2] * h[0] - u[0] * h[2]) / mu - r[1] / rr,
+					(u[0] * h[1] - u[1] * h[0]) / mu - r[2] / rr};
+	double e = sqrt(ev[0] * ev[0] + ev[1] * ev[1] + ev[2] * ev[2]);
+	double energy = uu / 2 - mu / rr;
+	double radius = (double)rdword(po + OBJ_RADIUS_HI) + (double)(uint32_t)rdlong(po + OBJ_RADIUS_LO) / 4294967296.0;
+	if (!(rr > radius) || !(mu > 0) || !(hh > 0))
+		return false;
+	double rp = hh / (mu * (1 + e));
+	o->pe = (float)((rp - radius) * PU_KM);
+	o->bound = energy < 0;
+	o->ap = o->bound ? (float)((-mu / (2 * energy) * (1 + e) - radius) * PU_KM) : 0;
+	o->has_tap = false;
+	if (o->bound && e > 1e-4 && e < 1)
+	{
+		/* true anomaly -> eccentric -> mean; the apoapsis is at M = pi */
+		double nu = acos(fmax(-1.0, fmin(1.0, (ev[0] * r[0] + ev[1] * r[1] + ev[2] * r[2]) / (e * rr))));
+		if (r[0] * u[0] + r[1] * u[1] + r[2] * u[2] < 0)
+			nu = 2 * GLM_PI - nu;
+		double a = -mu / (2 * energy);
+		double ea = 2 * atan2(sqrt(1 - e) * sin(nu / 2), sqrt(1 + e) * cos(nu / 2));
+		double m = fmod(ea - e * sin(ea) + 2 * GLM_PI, 2 * GLM_PI);
+		o->to_pe = m > GLM_PI;
+		double ticks = (o->to_pe ? 2 * GLM_PI - m : GLM_PI - m) / sqrt(mu / (a * a * a));
+		o->tap = (float)(ticks * (dt / TICK_DT) / 50.0);
+		o->has_tap = true;
+	}
+	return true;
+}
+
+/* A height in km, as the game has it in its panel: the unit with the size */
+static void fmt_km(char *dst, size_t n, const char *tag, float km)
+{
+	if (fabsf(km) < 100)
+		snprintf(dst, n, "%s %.1f km", tag, km);
+	else
+		snprintf(dst, n, "%s %.0f km", tag, km);
+}
+
+/* A time as h/m/s, the largest two units */
+static void fmt_time(char *dst, size_t n, const char *tag, float sec)
+{
+	int t = (int)sec;
+	if (t >= 3600)
+		snprintf(dst, n, "%s %dh %02dm", tag, t / 3600, t / 60 % 60);
+	else if (t >= 60)
+		snprintf(dst, n, "%s %dm %02ds", tag, t / 60, t % 60);
+	else
+		snprintf(dst, n, "%s %ds", tag, t);
+}
+
 void hud_publish(bool screen)
 {
 	static HudFrame flight;
+	unsigned int own = game_player_ship();
+	HudOrbit orbit = {0};
+	if (hud_on() && own)
+		orbit.on = orbit_calc(own, &orbit);
 	if (!screen)
 	{
 		pub = flight = pending;
+		pub.orbit = orbit;
+		if (orbit.on)
+			palette_rgb(HUD_COLOUR, 0x0f0, pub.rgb);
 		return;
 	}
 	memset(&pub, 0, sizeof pub);
@@ -238,6 +350,9 @@ void hud_publish(bool screen)
 	pub.cross = flight.cross && game_flight_status() != FLIGHT_DOCKED;
 	memcpy(pub.rgb, flight.rgb, sizeof pub.rgb);
 	pub.vel = velocity_dir(ship, pub.dir);
+	pub.orbit = orbit;
+	if (orbit.on && !pub.cross)
+		palette_rgb(HUD_COLOUR, 0x0f0, pub.rgb);
 }
 
 void hud_frame_end(void)
@@ -424,7 +539,7 @@ static void draw_velocity(const Spot *p, bool retro)
 
 void hud_draw(const mat4 *dir_proj)
 {
-	if (!show.cross && !show.vel && !show.target && !show.nlabels)
+	if (!show.cross && !show.vel && !show.target && !show.nlabels && !show.orbit.on)
 		return;
 	gd_set_viewport(GD_VP_VIEW3D);
 	gd_set_projection(dir_proj);
@@ -438,6 +553,25 @@ void hud_draw(const mat4 *dir_proj)
 		const float ahead[3] = {0, 0, -1};
 		spot_at(&p, ahead);
 		draw_cross(&p);
+	}
+	if (show.orbit.on)
+	{
+		/* below and right of the crosshair */
+		const float ahead[3] = {0, 0, -1};
+		unsigned char text[TEXT_LEN * 3];
+		char ap[TEXT_LEN], pe[TEXT_LEN], ta[TEXT_LEN];
+		if (show.orbit.bound)
+			fmt_km(ap, sizeof ap, "Ap", show.orbit.ap);
+		else
+			snprintf(ap, sizeof ap, "Ap ---");
+		fmt_km(pe, sizeof pe, "Pe", show.orbit.pe);
+		if (show.orbit.has_tap)
+			fmt_time(ta, sizeof ta, show.orbit.to_pe ? "T-Pe" : "T-Ap", show.orbit.tap);
+		else
+			snprintf(ta, sizeof ta, "T-Ap ---");
+		snprintf((char *)text, sizeof text, "%s\r%s\r%s", ap, pe, ta);
+		spot_at(&p, ahead);
+		spot_text(&p, 22, -18, text);
 	}
 	if (show.vel)
 	{
