@@ -252,6 +252,8 @@ void Call_GetMouseInput(void)
 	dash_left = (buttons & 0x2) != 0;
 	if (dash_held)
 		buttons &= ~0x2;
+	if (mapscreen_real_pan(got ? gx : -1, got ? gy : -1, buttons & 0x2))
+		buttons &= ~0x2;
 	mouse_mov[2] = SDL_SwapBE16(0xf8 | buttons);
 
 	input.motion_x = input.motion_y = 0;

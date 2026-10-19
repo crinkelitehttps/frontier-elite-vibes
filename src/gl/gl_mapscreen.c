@@ -316,7 +316,7 @@ static void layout_buttons(int rects[][4], const int ids[], int n, int owner, bo
 	SDL_AtomicLock(&btn_lock);
 	memcpy(btns, b, sizeof b);
 	nbtns = nb;
-	npans = !real && (owner == OWNER_GALAXY || owner == OWNER_SYSTEM) ? MAPSCREEN_PANS : 0;
+	npans = (real ? owner == OWNER_GALAXY : owner == OWNER_GALAXY || owner == OWNER_SYSTEM) ? MAPSCREEN_PANS : 0;
 	for (int i = 0; i < npans; i++)
 	{
 		int r[4] = {BTN_RIGHT - PAN_SIZE + 1, y0 + i * (PAN_SIZE + BTN_GAP), PAN_SIZE, PAN_SIZE};
@@ -493,6 +493,26 @@ bool mapscreen_real_buttons(void)
 	return real_buttons;
 }
 
+/* The pan buttons on the game's own galaxy map hold the arrow keys; true
+ * while a press is on one (it is theirs, not the game's) */
+bool mapscreen_real_pan(int x, int y, bool down)
+{
+	static const unsigned char KEYS[4] = {0x48, 0x50, 0x4b, 0x4d};
+	static int held = -1;
+	int want = -1;
+	if (real_buttons && down && game_screen() == SCREEN_GALAXY_MAP && game_screen_owner() == OWNER_GALAXY)
+		want = held >= 0 ? held : pan_at(x, y);
+	if (want != held)
+	{
+		if (held >= 0)
+			Input_PressSTKey(KEYS[held], false);
+		if (want >= 0)
+			Input_PressSTKey(KEYS[want], true);
+		held = want;
+	}
+	return held >= 0;
+}
+
 static void real_layout(void)
 {
 	static char last[2048];
@@ -500,6 +520,13 @@ static void real_layout(void)
 				(game_screen() == SCREEN_GALAXY_MAP || game_screen() == SCREEN_SYSTEM_MAP || game_screen() == SCREEN_STATION);
 	if (!real)
 	{
+		if (real_buttons)
+		{
+			/* (the batch's own layout comes with its next page) */
+			SDL_AtomicLock(&btn_lock);
+			npans = 0;
+			SDL_AtomicUnlock(&btn_lock);
+		}
 		real_buttons = false;
 		has_phone = false;
 		return;
