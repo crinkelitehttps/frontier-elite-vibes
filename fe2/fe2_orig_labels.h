@@ -349,6 +349,8 @@
 #define FE2_Lpos_dt                                  0x83472 /* Lpos_dt */
 #define FE2_Lgrav_step                               0x8354c /* Lgrav_step */
 #define FE2_Lpos_player                              0x835a6 /* Lpos_player */
+#define FE2_Lgrav_norm                               0x835ba /* Lgrav_norm */
+#define FE2_Lgrav_mass                               0x835c8 /* Lgrav_mass */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f38 /* L7e87a */

@@ -12826,16 +12826,11 @@ extern void __F3864c ();
 extern void __F3864e ();
 extern void __F38650 ();
 extern void __F38652 ();
-extern void __F38654 ();
-extern void __F38656 ();
-extern void __F3865a ();
 extern void __F3865e ();
 extern void __F38668 ();
 extern void __F38670 ();
 extern void __F38674 ();
 extern void __F38676 ();
-extern void __F3867a ();
-extern void __F3867c ();
 extern void __F3867e ();
 extern void __F38684 ();
 extern void __F38686 ();
@@ -12849,7 +12844,6 @@ extern void __F38696 ();
 extern void __F38698 ();
 extern void __F3869c ();
 extern void __F3869e ();
-extern void __F386a4 ();
 extern void __F386a6 ();
 extern void __F386aa ();
 extern void __F386ac ();
@@ -24976,6 +24970,14 @@ extern void __Fa9486 ();
 extern void __Fa948e ();
 extern void __Fa94a0 ();
 extern void __Fa94a8 ();
+extern void __Fa94b0 ();
+extern void __Fa94b2 ();
+extern void __Fa94b4 ();
+extern void __Fa94b6 ();
+extern void __Fa94b8 ();
+extern void __Fa94ba ();
+extern void __Fa94c2 ();
+extern void __Fa94c4 ();
 #endif /* PART1 */
 #define __DL22_PlayEffect (0x22)
 #define __DL54_StopMusic (0x28)
@@ -28320,11 +28322,15 @@ extern void __Fa94a8 ();
 #define __Dl43f46 (0x3863a)
 #define __Dl43f4e (0x38642)
 #define __Dl43f5a (0x3864e)
+#define __Dlgrav_t1 (0x38654)
+#define __Dl43f64 (0x3865a)
 #define __D3866e (0x3866e)
 #define __Dl43f7e (0x38672)
+#define __D3867a (0x3867a)
 #define __Dl43f88 (0x3867c)
 #define __Dl43fa0 (0x38694)
 #define __Dl43faa (0x3869e)
+#define __D386a4 (0x386a4)
 #define __Dl43fce (0x386c2)
 #define __Dl43fda (0x386ce)
 #define __Dl43fe8 (0x386dc)
@@ -34909,6 +34915,8 @@ extern void __Fa94a8 ();
 #define __Da948c (0xa948c)
 #define __DLpos_player (0xa949a)
 #define __Dlpos_player_done (0xa94ac)
+#define __DLgrav_norm (0xa94ae)
+#define __DLgrav_mass (0xa94bc)
 #ifdef PART2
 void __F36 ()
 {
@@ -156760,37 +156768,10 @@ void __F38652 ()
 {
 	s32 val = Regs[7]._s16;
 	Regs[3]._s16 = val;
-}
-void __F38654 ()
-{
-	u32 val = (u16)Regs[3]._s16;
-
-	u32 sign = (0x8000 & val) >> 15;
-	val >>= 0;
-	X = val & 1;
-	val >>= 1;
-	val |= (0xffff << 15) & (u32)-sign;
-	Regs[3]._s16 = val;
-}
-void __F38656 ()
-{
-	s32 dest = Regs[3]._s16;
-
-	s32 src = Regs[7]._s16;
-
-	s32 val = (s16)dest + (s16)src;
-	X = ((u16)(~src)) < ((u16)dest);
-	Regs[3]._s16 = val;
-}
-void __F3865a ()
-{
-	s32 dest = Regs[3]._s16;
-
-	s32 src = rdword(Regs[9]._s32+176);
-
-	u32 newv = (s16)dest - (s16)src;
-	X = ((u16)src) > ((u16)dest);
-	Regs[3]._s16 = newv;
+	nZ = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
 }
 void __F3865e ()
 {
@@ -156841,25 +156822,6 @@ void __F38676 ()
 	X = ((u16)(~src)) < ((u16)dest);
 	C = X;
 	N = (flgn != 0);
-	Regs[0]._s16 = val;
-}
-void __F3867a ()
-{
-	s32 dest = Regs[7]._s16;
-
-	s32 src = 1;
-
-	s32 val = (s16)dest + (s16)src;
-	X = ((u16)(~src)) < ((u16)dest);
-	Regs[7]._s16 = val;
-}
-void __F3867c ()
-{
-	u32 val = (u16)Regs[0]._s16;
-
-	val >>= 0;
-	X = val & 1;
-	val >>= 1;
 	Regs[0]._s16 = val;
 }
 void __F3867e ()
@@ -156983,14 +156945,6 @@ void __F3869e ()
 	N = ((s16)(val)) < 0;
 	V = 0;
 	Regs[0]._s16 = val;
-}
-void __F386a4 ()
-{
-	s32 src = (Regs[9]._s32+122);
-	Regs[5]._s32 = rdword (src);
-	src += 2;
-	Regs[6]._s32 = rdword (src);
-	src += 2;
 }
 void __F386a6 ()
 {
@@ -270575,6 +270529,97 @@ void __Fa94a8 ()
 	Regs[3]._s32 = rdlong (src);
 	src += 4;
 }
+void __Fa94b0 ()
+{
+	s32 dest = Regs[7]._s16;
+
+	s32 src = 1;
+
+	s32 val = (s16)dest + (s16)src;
+	X = ((u16)(~src)) < ((u16)dest);
+	Regs[7]._s16 = val;
+}
+void __Fa94b2 ()
+{
+	u32 val = (u16)Regs[0]._s16;
+
+	val >>= 0;
+	X = val & 1;
+	val >>= 1;
+	Regs[0]._s16 = val;
+}
+void __Fa94b4 ()
+{
+	s16 src = Regs[3]._s16;
+	u16 dest = ((s16)0) - ((s16)src);
+	int flgs, flgn;
+	flgs = ((s16)src) < 0;
+	flgn = ((s16)dest) < 0;
+	X = (dest != 0);
+	Regs[3]._s16 = dest;
+}
+void __Fa94b6 ()
+{
+	s32 dest = Regs[3]._s16;
+
+	s32 src = Regs[7]._s16;
+
+	s32 val = (s16)dest + (s16)src;
+	X = ((u16)(~src)) < ((u16)dest);
+	Regs[3]._s16 = val;
+}
+void __Fa94b8 ()
+{
+	s16 src = Regs[3]._s16;
+	u16 dest = ((s16)0) - ((s16)src);
+	int flgs, flgn;
+	flgs = ((s16)src) < 0;
+	flgn = ((s16)dest) < 0;
+	X = (dest != 0);
+	Regs[3]._s16 = dest;
+}
+void __Fa94ba ()
+{
+	s32 dest = Regs[3]._s16;
+
+	s32 src = 1;
+
+	u32 newv = (s16)dest - (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)newv) < 0;
+	nZ = newv;
+	V = (flgs ^ flgo) & (flgn ^ flgo);
+	X = ((u16)src) > ((u16)dest);
+	C = X;
+	N = (flgn != 0);
+	Regs[3]._s16 = newv;
+}
+void __Fa94c2 ()
+{
+	s32 src = (Regs[9]._s32+122);
+	Regs[5]._s32 = rdword (src);
+	src += 2;
+	Regs[6]._s32 = rdword (src);
+	src += 2;
+}
+void __Fa94c4 ()
+{
+	s32 dest = Regs[6]._s16;
+
+	s32 src = Regs[3]._s16;
+
+	s32 val = (s16)dest + (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)val) < 0;
+	nZ = val;
+	V = (flgs ^ flgn) & (flgo ^ flgn);
+	X = ((u16)(~src)) < ((u16)dest);
+	C = X;
+	N = (flgn != 0);
+	Regs[6]._s16 = val;
+}
 #endif /* PART2 */
 #ifdef PART1
 void Init680x0 () {
@@ -365628,15 +365673,19 @@ __Nl43f5a:
 	#ifdef M68K_DEBUG
 		line_no = 26191;
 	#endif
-	__F38654 ();
+	{
+		goto __Nl43f64;
+	}
+__Nlgrav_t1:
+	case (0x38654):
 	#ifdef M68K_DEBUG
 		line_no = 26192;
 	#endif
-	__F38656 ();
-	#ifdef M68K_DEBUG
-		line_no = 26193;
-	#endif
-	__F3865a ();
+	{
+		goto __NLgrav_norm;
+	}
+__Nl43f64:
+	case (0x3865a):
 	#ifdef M68K_DEBUG
 		line_no = 26194;
 	#endif
@@ -365704,11 +365753,15 @@ __Nl43f7e:
 	#ifdef M68K_DEBUG
 		line_no = 26203;
 	#endif
-	__F3867a ();
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D3867a);
+	{
+		goto __Nlgrav_t1;
+	}
+	case (0x3867a):
 	#ifdef M68K_DEBUG
 		line_no = 26204;
 	#endif
-	__F3867c ();
 __Nl43f88:
 	case (0x3867c):
 	#ifdef M68K_DEBUG
@@ -365803,7 +365856,12 @@ __Nl43faa:
 	#ifdef M68K_DEBUG
 		line_no = 26221;
 	#endif
-	__F386a4 ();
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D386a4);
+	{
+		goto __NLgrav_mass;
+	}
+	case (0x386a4):
 	#ifdef M68K_DEBUG
 		line_no = 26222;
 	#endif
@@ -484038,6 +484096,54 @@ __Nlpos_player_done:
 	case (0xa94ac):
 	#ifdef M68K_DEBUG
 		line_no = 67969;
+	#endif
+	jdest = rdlong (Regs[15]._u32);
+	Regs[15]._s32 += 4;
+	goto jumptable;
+__NLgrav_norm:
+	case (0xa94ae):
+	#ifdef M68K_DEBUG
+		line_no = 67978;
+	#endif
+	__Fa94b0 ();
+	#ifdef M68K_DEBUG
+		line_no = 67979;
+	#endif
+	__Fa94b2 ();
+	#ifdef M68K_DEBUG
+		line_no = 67980;
+	#endif
+	__Fa94b4 ();
+	#ifdef M68K_DEBUG
+		line_no = 67981;
+	#endif
+	__Fa94b6 ();
+	#ifdef M68K_DEBUG
+		line_no = 67982;
+	#endif
+	__Fa94b8 ();
+	#ifdef M68K_DEBUG
+		line_no = 67983;
+	#endif
+	__Fa94ba ();
+	#ifdef M68K_DEBUG
+		line_no = 67984;
+	#endif
+	jdest = rdlong (Regs[15]._u32);
+	Regs[15]._s32 += 4;
+	goto jumptable;
+__NLgrav_mass:
+	case (0xa94bc):
+	#ifdef M68K_DEBUG
+		line_no = 67986;
+	#endif
+	__Fa94c2 ();
+	#ifdef M68K_DEBUG
+		line_no = 67987;
+	#endif
+	__Fa94c4 ();
+	#ifdef M68K_DEBUG
+		line_no = 67988;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;

@@ -26188,9 +26188,9 @@ L43ed6:
 		moveq	#0,d6
 	l43f5a:	add.w	d6,d7
 		move.w	d7,d3
-		asr.w	#1,d3
-		add.w	d7,d3
-		sub.w	176(a1),d3
+		bra.s	l43f64
+lgrav_t1:	jmp	Lgrav_norm
+	l43f64:
 		tst.w	122(a1)
 		beq.w	l44040
 		movem.w	d0-2,16008(a6)
@@ -26200,8 +26200,8 @@ L43ed6:
 	l43f7e:	subq.w	#1,d7
 		add.w	d0,d0
 		bpl.s	l43f7e
-		addq.w	#1,d7
-		lsr.w	#1,d0
+		bsr.s	lgrav_t1
+		nop
 	l43f88:	move.w	d0,d1
 		beq.w	l44040
 		muls	d0,d0
@@ -26218,7 +26218,7 @@ L43ed6:
 		bpl.s	l43fa0
 		addq.w	#1,d7
 		lsr.w	#1,d0
-	l43faa:	movem.w	122(a1),d5-6
+	l43faa:	jsr	Lgrav_mass
 		tst.w	d0
 		beq.s	l43fce
 		sub.w	d7,d6
@@ -67966,4 +67966,23 @@ Lpos_player:
 		movem.l	696(a6),d2-3
 		jmp	570(a5)
 lpos_player_done:
+		rts
+
+* Gravity (L43ed6) fix: the r^3 exponent is built from 2*e, not 3*e, so the
+* pull is wrong by 2^-sigma, sigma = how far |r| was shifted up to normalise
+* it. The error steps by 2 wherever the position exponent e changes. Lgrav_norm
+* (called from the normalisation loop; d3 holds e) leaves sigma-1 in d3 and
+* Lgrav_mass applies it to the exponent, so the pull always matches sigma = 1
+* (the old e = 19 behaviour).
+Lgrav_norm:
+		addq.w	#1,d7
+		lsr.w	#1,d0
+		neg.w	d3
+		add.w	d7,d3
+		neg.w	d3
+		subq.w	#1,d3
+		rts
+Lgrav_mass:
+		movem.w	122(a1),d5-6
+		add.w	d3,d6
 		rts
