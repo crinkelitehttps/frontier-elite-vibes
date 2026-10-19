@@ -64,10 +64,10 @@ bool cockpit_ship_live = true;
 #define A6_PUSHED_ASCII    16337
 #define A6_SCANCODE_ASCII2 16339
 #define A6_KEY_RSHIFT      16396
-#define A6_KEY_CURSDOWN    16414
+#define A6_KEY_CURSDOWN    16422
 #define A6_KEY_CURSLEFT    16417
 #define A6_KEY_CURSRIGHT   16419
-#define A6_KEY_CURSUP      16422
+#define A6_KEY_CURSUP      16414
 
 /* The ship screen's module (L7ded6): what it keeps of itself, the angles the
  * ship is turned to, the page it will show next (fn 8 shows that page and
