@@ -5,11 +5,22 @@
 #ifndef HOSTCALL_H
 #define HOSTCALL_H
 
+#include <stdbool.h>
+
 #include "m68000.h"
 
 /* hostcall.c */
 void Call_DumpRegs(void);
 void Call_DumpDebug(void);
+void Call_OrbitAssist(void);
+void Call_FlightLog(void);
+void Call_KillLog(void);
+extern bool orbit_assist;
+extern bool exact_step;
+void Call_ExactStep(void);
+void Call_SubSteps(void);
+void Call_SubSkip(void);
+int substep_shift(unsigned int dt);
 
 /* host_screen.c */
 void Call_Memset(void);

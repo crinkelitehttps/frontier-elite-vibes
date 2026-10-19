@@ -32,6 +32,7 @@ extern "C"
 #include "gl/gl_mapscreen.h"
 #include "gl/gl_screen_place.h"
 #include "headtrack.h"
+#include "hostcall.h"
 #include "vr.h"
 }
 
@@ -209,6 +210,10 @@ void page_settings()
 	{
 		Screen_SetLetterboxMode(!keep_aspect);
 	}
+
+	ui_heading("Flight");
+	wrapped_checkbox("Ship turns belly-down to a planet below 40 km", &orbit_assist);
+	wrapped_checkbox("Exact motion at every time acceleration step (orbits stay put)", &exact_step);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

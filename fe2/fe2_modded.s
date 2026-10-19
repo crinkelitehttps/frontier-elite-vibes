@@ -168,6 +168,18 @@ Call_StationResume	equ	$8b
 * Cockpit screen: the dust is made under a game screen (src/gl/gl_cockpit.c)
 Call_ScreenWorld	equ	$8c
 
+* Flight: the host says whether the ship turns itself belly-down to a planet
+* below 40 km (d0 = 1 from Call_OrbitAssist, glfrontier.cfg orbit_assist).
+Call_OrbitAssist	equ	$8d
+
+* Flight debugging: the player's physics frame and the landing zeroing of
+* the velocity are logged by the host (hostcall.c, Call_FlightLog / Call_KillLog).
+Call_ExactStep	equ	$90
+Call_SubSteps	equ	$91
+Call_SubSkip	equ	$92
+Call_FlightLog	equ	$8e
+Call_KillLog	equ	$8f
+
 * don't change. it won't work yet.
 SCR_W			equ	320
 SCR_H			equ	200
@@ -19701,7 +19713,9 @@ L3f566:
 		muls	14(a0),d5
 		add.l	d5,d3
 		add.l	d3,d3
-		cmp.l	#$78000000,d3
+* Orbit assist switch (the landing alignment). Hook, same size. See Lland_cmp
+* at the end of the file.
+		jsr	Lland_cmp
 		bcs.s	l3f766
 		movem.w	(a7)+,d3-5
 		bset	#$6,16015(a6)
@@ -28350,9 +28364,10 @@ l45afc:
 		bne.s	l45aa8
 
 l45afe:
-		lsr.l	#7,d2
-		cmp.l	#$7fff,d2
-		bgt.s	l45ad0
+* Exact time step. Hook, same size. See Lpos_dt at the end of the file.
+		jmp	Lpos_dt
+		nop
+		nop
 
 * Multiply (d4.l, d5.l, d6.l) by s16 d2*4.
 l45b08:
@@ -40390,7 +40405,8 @@ L61a56:
 		rts
 
 L61af2_mod3_fn24_PlayerPhysics:
-		movem.l	126(a0),d0-1
+* Flight log. Hook, same size. See Lflight_log at the end of the file.
+		jsr	Lflight_log
 		movem.l	d2-3,126(a0)
 		sub.l	d0,d2
 		subx.l	d1,d3
@@ -41406,12 +41422,16 @@ L627ac:
 		move.l	14446(a6),d7
 		lsr.l	#1,d7
 		jsr	672(a5)
-		move.l	14446(a6),d7
-		jsr	750(a5)
+* Sub-steps. Hook, same size. See Lgrav_step at the end of the file.
+		jsr	Lgrav_step
+		nop
 		cmpi.l	#$2625a00,692(a6)
 		bhi.s	l627e0
-		jsr	690(a5)
-		move.w	230(a0),136(a0)
+* Orbit assist switch. Hook, same size. See Lorbit_align at the end of the
+* file.
+		jsr	Lorbit_align
+		nop
+		nop
 	l627e0:	subq.b	#1,281(a0)
 		bpl.s	l627f0
 		jsr	756(a5)
@@ -41432,9 +41452,8 @@ L627ac:
 		jmp	726(a5)
 
 L6281a:
-		moveq	#0,d0
-		moveq	#0,d1
-		moveq	#0,d2
+* Kill log. Hook, same size. See Lkill_log at the end of the file.
+		jsr	Lkill_log
 		movem.l	d0-2,98(a0)
 		movem.w	d0-2,134(a0)
 		move.l	d0,A6_plr_speed_set(a6)
@@ -41471,8 +41490,9 @@ L6281a:
 		jmp	726(a5)
 
 L6287c:
-		movem.l	696(a6),d2-3
-		jmp	570(a5)
+* Sub-steps. Hook, same size. See Lpos_player at the end of the file.
+		jmp	Lpos_player
+		nop
 
 L62886:
 		bsr.s	L6287c
@@ -67714,3 +67734,236 @@ Lgame_start:
 		movea.l	A6_stack_base(a6),a7
 		lea	A6_main_palette1(a6),a1
 		jmp	L42542_after
+
+******************************************************************************
+* Below 40 km the game turns the ship belly-down to the planet (pitch rate
+* = the alignment, L4342c) and so makes a stable orbit impossible. The host
+* says whether to do it (d0 = 1 from Call_OrbitAssist). Replaces
+* "jsr 690(a5) / move.w 230(a0),136(a0)" in L627ac (jsr + 2 nops).
+******************************************************************************
+Lorbit_align:
+		move.l	d0,-(a7)
+		hcall	#Call_OrbitAssist
+		tst.w	d0
+		movem.l	(a7)+,d0
+		beq.s	lorbit_align_off
+		jsr	690(a5)
+		move.w	230(a0),136(a0)
+lorbit_align_off:
+		rts
+
+******************************************************************************
+* A ship slow, low and nearly belly-down to a body is landed by the game
+* (flag bit 6: velocity zeroed, status $64, turned flat). With the orbit
+* assist off (Call_OrbitAssist) the comparison is made to fail in the
+* carry: d3 is reloaded on that path. Replaces "cmp.l #$78000000,d3" in
+* L3f566 (the bcs.s after it stays).
+******************************************************************************
+Lland_cmp:
+		move.l	d0,-(a7)
+		hcall	#Call_OrbitAssist
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	lland_cmp_on
+		moveq	#0,d3
+lland_cmp_on:
+		cmp.l	#$78000000,d3
+		rts
+
+******************************************************************************
+* Flight debugging (see Call_FlightLog). Each replaces the instructions it
+* hooks, which are run here.
+******************************************************************************
+Lflight_log:
+		hcall	#Call_FlightLog
+		movem.l	126(a0),d0-1
+		rts
+
+Lkill_log:
+		hcall	#Call_KillLog
+		moveq	#0,d0
+		moveq	#0,d1
+		moveq	#0,d2
+		rts
+
+******************************************************************************
+* Moving an object by its velocity (L45af8: velocity * time / 512) cut the
+* time down with lsr.l #7 before taking its top 15 bits, so a tick of 994
+* (1x) became 7 where 7.77 is meant, and 10x became 77 for 77.7: the
+* position moved up to 10% slower than the gravity, which uses the exact
+* time, pulls the velocity. An orbit therefore changed with the time
+* acceleration step (the apoapsis moved when it was switched). With
+* Call_ExactStep the top 15 bits are taken of the time itself and the result
+* shifted down by the 7. Replaces the 10 bytes at l45afe (jmp + 2 nops), the
+* old code runs here when the host says no; returns to the caller of l45afe.
+******************************************************************************
+Lpos_dt:
+		hcall	#Call_ExactStep
+		tst.w	d0
+		bne.s	lpos_exact
+		lsr.l	#7,d2
+		cmp.l	#$7fff,d2
+		bgt.s	lpos_big
+		bra.s	lpos_mul
+lpos_big:
+		moveq	#-1,d0
+lpos_big1:
+		addq.w	#1,d0
+		lsr.l	#1,d2
+		cmp.l	#$7fff,d2
+		bgt.s	lpos_big1
+		move.w	d0,-(a7)
+		bsr.s	lpos_mul
+		move.w	(a7)+,d6
+lpos_shl:
+		asl.l	#1,d0
+		roxl.l	#1,d3
+		asl.l	#1,d1
+		roxl.l	#1,d4
+		asl.l	#1,d2
+		roxl.l	#1,d5
+		dbra	d6,lpos_shl
+		rts
+lpos_exact:
+		moveq	#0,d0
+lpos_e1:
+		cmp.l	#$7fff,d2
+		bls.s	lpos_e2
+		lsr.l	#1,d2
+		addq.w	#1,d0
+		bra.s	lpos_e1
+lpos_e2:
+		move.w	d0,-(a7)
+		bsr.s	lpos_mul
+		move.w	(a7)+,d6
+		subq.w	#7,d6
+		beq.s	lpos_done
+		bmi.s	lpos_shr
+lpos_shl2:
+		asl.l	#1,d0
+		roxl.l	#1,d3
+		asl.l	#1,d1
+		roxl.l	#1,d4
+		asl.l	#1,d2
+		roxl.l	#1,d5
+		subq.w	#1,d6
+		bne.s	lpos_shl2
+		rts
+lpos_shr:
+		neg.w	d6
+lpos_shr1:
+		asr.l	#1,d3
+		roxr.l	#1,d0
+		asr.l	#1,d4
+		roxr.l	#1,d1
+		asr.l	#1,d5
+		roxr.l	#1,d2
+		subq.w	#1,d6
+		bne.s	lpos_shr1
+lpos_done:
+		rts
+* (d4.l, d5.l, d6.l) * d2 (15 bits) / 4, as l45b08 does it
+lpos_mul:
+		move.l	d2,d7
+		move.w	d4,d0
+		swap	d4
+		mulu	d7,d0
+		muls	d7,d4
+		swap	d4
+		move.w	d4,d3
+		ext.l	d3
+		sub.w	d4,d4
+		add.l	d4,d0
+		moveq	#0,d4
+		addx.l	d4,d3
+		move.w	d5,d1
+		swap	d5
+		mulu	d7,d1
+		muls	d7,d5
+		swap	d5
+		move.w	d5,d4
+		ext.l	d4
+		sub.w	d5,d5
+		add.l	d5,d1
+		moveq	#0,d5
+		addx.l	d5,d4
+		move.w	d6,d2
+		swap	d6
+		mulu	d7,d2
+		muls	d7,d6
+		swap	d6
+		move.w	d6,d5
+		ext.l	d5
+		sub.w	d6,d6
+		add.l	d6,d2
+		moveq	#0,d6
+		addx.l	d6,d5
+		asr.l	#1,d3
+		roxr.l	#1,d0
+		asr.l	#1,d4
+		roxr.l	#1,d1
+		asr.l	#1,d5
+		roxr.l	#1,d2
+		asr.l	#1,d3
+		roxr.l	#1,d0
+		asr.l	#1,d4
+		roxr.l	#1,d1
+		asr.l	#1,d5
+		roxr.l	#1,d2
+		rts
+
+******************************************************************************
+* Sub-steps. The game takes one gravity step and one move step a frame
+* however much time that is, so at the top time acceleration steps (100x and
+* more: seconds of orbit a step) the orbit drifts. The host says by how many
+* halvings to cut the step (d0 = s from Call_SubSteps, 0 = leave it as it
+* is): then 2^s times the gravity (L43ed6) and the move (570(a5)) of the
+* player with the time >> s are done here, and the move the frame makes
+* later (L6287c) is skipped (Call_SubSkip). Replaces "move.l 14446(a6),d7 /
+* jsr 750(a5)" in L627ac (jsr + nop).
+******************************************************************************
+Lgrav_step:
+		hcall	#Call_SubSteps
+		tst.w	d0
+		bne.s	lgrav_sub
+		move.l	14446(a6),d7
+		jsr	750(a5)
+		rts
+lgrav_sub:
+		move.l	a0,-(a7)
+		move.w	d0,-(a7)
+		moveq	#1,d4
+		lsl.w	d0,d4
+		move.w	d4,-(a7)
+lgrav_loop:
+		movea.l	4(a7),a0
+		move.w	2(a7),d0
+		move.l	14446(a6),d7
+		lsr.l	d0,d7
+		jsr	750(a5)
+		movea.l	4(a7),a0
+		move.w	2(a7),d0
+		movem.l	696(a6),d2-3
+lgrav_sh:
+		tst.w	d0
+		beq.s	lgrav_mv
+		lsr.l	#1,d3
+		roxr.l	#1,d2
+		subq.w	#1,d0
+		bra.s	lgrav_sh
+lgrav_mv:
+		jsr	570(a5)
+		subq.w	#1,(a7)
+		bne.s	lgrav_loop
+		movea.l	4(a7),a0
+		lea	8(a7),a7
+		rts
+
+Lpos_player:
+		hcall	#Call_SubSkip
+		tst.w	d0
+		bne.s	lpos_player_done
+		movem.l	696(a6),d2-3
+		jmp	570(a5)
+lpos_player_done:
+		rts

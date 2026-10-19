@@ -14,6 +14,7 @@
 
 #include "game_state.h"
 #include "host.h" /* rdlong, rdword */
+#include "hostcall.h"
 #include "m68000.h"
 #include "renderer.h"
 #include "screen_text.h"
@@ -265,7 +266,8 @@ static bool orbit_calc(unsigned int ship, HudOrbit *o)
 	double dt = (double)(uint32_t)rdlong(a6 + A6_TICK_DT);
 	if (dt < 128 || dt > 1e8)
 		dt = TICK_DT;
-	double tq = floor(dt / 128.0), k = tq / 17179869184.0; /* 2^34 */
+	dt = (double)((uint32_t)dt >> substep_shift((uint32_t)dt)); /* the step the game's gravity takes */
+	double tq = exact_step ? dt / 128.0 : floor(dt / 128.0), k = tq / 17179869184.0; /* 2^34 */
 	double mu = (double)mant * ldexp(1.0, exp - 51) * dt * k;
 	double r[3], u[3];
 	for (int i = 0; i < 3; i++)

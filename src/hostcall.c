@@ -62,6 +62,140 @@ void Call_DumpRegs(void)
 			   GetReg(12), GetReg(13), GetReg(14), GetReg(15));
 }
 
+/* the ship turns itself belly-down to a planet below 40 km (the game's own
+   behaviour); off lets the pilot fly a stable orbit */
+bool orbit_assist = true;
+
+/* the game moves a ship by velocity * (time >> 7), so the motion is up to 10%
+   short at 1x and the orbit changes with the time acceleration step; on moves
+   it by the exact time (see Lpos_dt in fe2.s) */
+bool exact_step = true;
+
+void Call_ExactStep(void)
+{
+	SetReg(REG_D0, exact_step);
+}
+
+/* A time step longer than this (10x) is cut in 2^s: the game's single
+   gravity + move step a frame is too coarse for an orbit at 100x and more */
+#define SUBSTEP_MAX 10000
+#define SUBSTEP_SHIFT_MAX 7
+
+int substep_shift(unsigned int dt)
+{
+	int s = 0;
+	if (!exact_step)
+		return 0;
+	while (s < SUBSTEP_SHIFT_MAX && (dt >> s) > SUBSTEP_MAX)
+		s++;
+	return s;
+}
+
+static bool substepped;
+
+void Call_SubSteps(void)
+{
+	int s = substep_shift((unsigned int)rdlong((uint32_t)GetReg(REG_A6) + 14446));
+	substepped = s > 0;
+	SetReg(REG_D0, s);
+}
+
+void Call_SubSkip(void)
+{
+	SetReg(REG_D0, substepped);
+	substepped = false;
+}
+
+void Call_OrbitAssist(void)
+{
+	SetReg(REG_D0, orbit_assist);
+}
+
+/* Flight log, to find what kills the ship's speed near a planet: every
+   physics frame of the player goes into a ring; when the speed falls to under
+   half in a frame the ring is written to the log (lines "FLT"), then the
+   next frames too. Call_KillLog notes each landing zeroing and its caller. */
+#define FLT_RING 48
+#define FLT_AFTER 12
+
+typedef struct
+{
+	int n, alt, spd, speed_set, dt, dt2, v[3], rate[3], thrust[3];
+	unsigned char status, parent, frame, f14, f15, f20, b673, b598, eng;
+	unsigned short gear;
+	unsigned int target;
+} FltFrame;
+
+static FltFrame flt_ring[FLT_RING];
+static int flt_n, flt_after;
+
+static void flt_print(const char *tag, const FltFrame *f)
+{
+	log_printf("FLT %s n=%d alt=%d spd=%d set=%d dt=%d/%d eng=%02x v=%d,%d,%d thr=%d,%d,%d rate=%d,%d,%d st=%02x par=%d fr=%d "
+			   "flags=%02x/%02x/%02x b673=%02x b598=%02x gear=%04x tgt=%x\n",
+		tag, f->n, f->alt, f->spd, f->speed_set, f->dt, f->dt2, f->eng, f->v[0], f->v[1], f->v[2], f->thrust[0], f->thrust[1], f->thrust[2],
+		f->rate[0], f->rate[1], f->rate[2], f->status, f->parent, f->frame, f->f14, f->f15, f->f20, f->b673,
+		f->b598, f->gear, f->target);
+}
+
+void Call_FlightLog(void)
+{
+	uint32_t a6 = (uint32_t)GetReg(REG_A6), a0 = (uint32_t)GetReg(REG_A0);
+	substepped = false; /* a frame's own: set again by Call_SubSteps */
+	if (a0 != rdlong(a6 + 674))
+		return;
+	FltFrame f = {.n = flt_n++,
+		.alt = (int)rdlong(a6 + 692),
+		.spd = (int)rdlong(a6 + 688),
+		.speed_set = (int)rdlong(a6 + 848),
+		.dt = (int)rdlong(a6 + 14446),
+		.dt2 = (int)rdlong(a6 + 696),
+		.eng = rdbyte(a6 + 705),
+		.status = rdbyte(a6 + 704),
+		.parent = rdbyte(a0 + 68),
+		.frame = rdbyte(a0 + 69),
+		.f14 = rdbyte(a6 + 16014),
+		.f15 = rdbyte(a6 + 16015),
+		.f20 = rdbyte(a6 + 16020),
+		.b673 = rdbyte(a6 + 673),
+		.b598 = rdbyte(a6 + 598),
+		.gear = rdword(a0 + 116),
+		.target = rdlong(a6 + 678)};
+	for (int i = 0; i < 3; i++)
+	{
+		f.v[i] = (int)rdlong(a0 + 98 + 4 * i);
+		f.rate[i] = (short)rdword(a0 + 134 + 2 * i);
+		f.thrust[i] = (short)rdword(a0 + 140 + 2 * i);
+	}
+	const FltFrame *p = &flt_ring[(f.n + FLT_RING - 1) % FLT_RING];
+	long long now = llabs(f.v[0]) + llabs(f.v[1]) + llabs(f.v[2]);
+	long long was = llabs(p->v[0]) + llabs(p->v[1]) + llabs(p->v[2]);
+	flt_ring[f.n % FLT_RING] = f;
+	if (f.n > 0 && was > 300 && now * 20 < was * 17 || now * 17 > was * 20)
+	{
+		log_printf("FLT ---- speed jumped %lld -> %lld, the last frames:\n", was, now);
+		for (int i = FLT_RING - 1; i >= 0; i--)
+			if (f.n - i >= 0)
+				flt_print("pre", &flt_ring[(f.n - i) % FLT_RING]);
+		flt_after = FLT_AFTER;
+	}
+	else if (flt_after > 0)
+	{
+		flt_after--;
+		flt_print("post", &f);
+	}
+	else if (f.n % 50 == 0)
+		flt_print("tick", &f);
+	else if (f.n > 0 && (f.status != p->status || f.frame != p->frame || f.parent != p->parent))
+		flt_print("change", &f);
+}
+
+void Call_KillLog(void)
+{
+	uint32_t a7 = (uint32_t)GetReg(REG_A7);
+	log_printf("FLT kill: velocity zeroed (L6281a), called from %x\n", rdlong(a7 + 4));
+}
+
 void Call_DumpDebug(void)
 {
 #ifdef M68K_DEBUG
@@ -163,5 +297,11 @@ HOSTCALL hcalls[] = {
 	[0x8a] = Call_ScreenLeave,
 	[0x8b] = Call_StationResume,
 	[0x8c] = Call_ScreenWorld,
+	[0x8d] = Call_OrbitAssist,
+	[0x8e] = Call_FlightLog,
+	[0x8f] = Call_KillLog,
+	[0x90] = Call_ExactStep,
+	[0x91] = Call_SubSteps,
+	[0x92] = Call_SubSkip,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
