@@ -8,7 +8,9 @@
  *   0x28-0x29  mods framework (mods.c)
  *   0x60-0x79  renderer hooks (renderer.h)
  */
+#include <math.h>
 #include <SDL.h>
+#include <string.h>
 
 #include "audio.h"
 #include "freecam.h"
@@ -16,6 +18,7 @@
 #include "gl/gl_hud.h"
 #include "gl/gl_native.h"
 #include "host.h"
+#include "game_state.h"
 #include "hostcall.h"
 #include "input.h"
 #include "keymap.h"
@@ -34,8 +37,37 @@ static void SetExceptionHandler(void)
 }
 
 /* Called regularly by the game: shortcuts and SDL events */
+/* Watches the player from the host's per-frame call, which keeps running
+   after the player physics (Call_FlightLog) stops, e.g. in a death: logs
+   "WATCH" when the mode, flags or player object change, and every 50 calls
+   while any of them changed in the last 200. */
+static void watch_player(void)
+{
+	static unsigned int calls, hot;
+	static int last[8];
+	uint32_t a6 = GAME_A6;
+	if (!a6)
+		return;
+	uint32_t a0 = rdlong(a6 + 674);
+	int now[8] = {rdbyte(a6 + 704), rdbyte(a6 + 705), rdbyte(a6 + 673), (int)a0, a0 ? rdbyte(a0 + 68) : -1, a0 ? rdbyte(a0 + 69) : -1,
+		0, a0 ? (int)rdword(a0 + 116) : -1};
+	bool changed = memcmp(now, last, sizeof now) != 0;
+	calls++;
+	if (changed)
+		hot = calls + 200;
+	if (changed || (calls < hot && calls % 50 == 0))
+	{
+		log_printf("WATCH %s mode=%02x/%02x b673=%02x obj=%x par=%d fr=%d b19=%02x gear=%x alt=%d spd=%d dt=%d v=%d,%d,%d phi=%d,%d,%d\n", changed ? "change" : "tick",
+			now[0], now[1], now[2], now[3], now[4], now[5], now[6], now[7], (int)rdlong(a6 + 692), (int)rdlong(a6 + 688), (int)rdlong(a6 + 14446),
+			a0 ? (int)rdlong(a0 + 98) : 0, a0 ? (int)rdlong(a0 + 102) : 0, a0 ? (int)rdlong(a0 + 106) : 0, a0 ? (int)rdlong(a0 + 56) : 0,
+			a0 ? (int)rdlong(a0 + 60) : 0, a0 ? (int)rdlong(a0 + 64) : 0);
+	}
+	memcpy(last, now, sizeof now);
+}
+
 static void Call_HostUpdate(void)
 {
+	watch_player();
 	Keymap_DebounceAllKeys();
 	ShortCut_CheckKeys();
 	Main_EventHandler();
@@ -120,7 +152,10 @@ void Call_OrbitAssist(void)
 
 typedef struct
 {
-	int n, alt, spd, speed_set, dt, dt2, v[3], rate[3], thrust[3];
+	int n, alt, spd, speed_set, dt, dt2, v[3], rate[3], thrust[3], plo[3], phi[3], e;
+	int near_slot, near_model, near_frame;
+	double near_d; /* nearest other object with the same parent, position units */
+	double acc, k; /* |dv| per unit dt against the last frame, and acc * r^2 (r in position units): constant under 1/r^2 gravity */
 	unsigned char status, parent, frame, f14, f15, f20, b673, b598, eng;
 	unsigned short gear;
 	unsigned int target;
@@ -129,19 +164,67 @@ typedef struct
 static FltFrame flt_ring[FLT_RING];
 static int flt_n, flt_after;
 
+/* The position exponent L43ed6 (gravity) normalises by, as it computes it:
+   17 + bits of the folded high parts, or the low-part shift if they are all 0 */
+static int flt_exp(const int *lo, const int *hi)
+{
+	uint32_t d6 = 0, d7 = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		uint32_t l = (uint32_t)lo[i], h = (uint32_t)hi[i];
+		if ((int32_t)h < 0)
+			h = ~h, l = ~l;
+		d6 |= l;
+		d7 |= h;
+	}
+	d7 = (d7 << 1) | (d6 >> 31);
+	d6 <<= 1;
+	int e = 0;
+	if (d7 == 0)
+	{
+		for (; d6 >= 0x4000; d6 >>= 1)
+			e++;
+		return e;
+	}
+	for (; d7; d7 >>= 1)
+		e++;
+	return 17 + e;
+}
+
 static void flt_print(const char *tag, const FltFrame *f)
 {
 	log_printf("FLT %s n=%d alt=%d spd=%d set=%d dt=%d/%d eng=%02x v=%d,%d,%d thr=%d,%d,%d rate=%d,%d,%d st=%02x par=%d fr=%d "
-			   "flags=%02x/%02x/%02x b673=%02x b598=%02x gear=%04x tgt=%x\n",
+			   "flags=%02x/%02x/%02x b673=%02x b598=%02x gear=%04x tgt=%x phi=%d,%d,%d plo=%08x,%08x,%08x e=%d acc=%.4g k=%.4g near=%d/m%d/fr%d/d%.4f\n",
 		tag, f->n, f->alt, f->spd, f->speed_set, f->dt, f->dt2, f->eng, f->v[0], f->v[1], f->v[2], f->thrust[0], f->thrust[1], f->thrust[2],
 		f->rate[0], f->rate[1], f->rate[2], f->status, f->parent, f->frame, f->f14, f->f15, f->f20, f->b673,
-		f->b598, f->gear, f->target);
+		f->b598, f->gear, f->target, f->phi[0], f->phi[1], f->phi[2], (unsigned)f->plo[0], (unsigned)f->plo[1],
+		(unsigned)f->plo[2], f->e, f->acc, f->k, f->near_slot, f->near_model, f->near_frame, f->near_d);
 }
 
 void Call_FlightLog(void)
 {
 	uint32_t a6 = (uint32_t)GetReg(REG_A6), a0 = (uint32_t)GetReg(REG_A0);
 	substepped = false; /* a frame's own: set again by Call_SubSteps */
+	{
+		/* the player's mode and object, seen from any object's call: a death
+		   replaces the player object, after which no frame below is logged */
+		static int last_mode = -1, last_obj, quiet;
+		int mode = rdbyte(a6 + 704);
+		uint32_t obj = rdlong(a6 + 674);
+		if (last_mode >= 0 && (mode != last_mode || obj != (uint32_t)last_obj))
+		{
+			log_printf("FLT ---- player mode %02x -> %02x, object %x -> %x (b673=%02x, alt=%d, speed=%d), the last frames:\n", last_mode, mode, last_obj, obj, rdbyte(a6 + 673),
+				(int)rdlong(a6 + 692), (int)rdlong(a6 + 688));
+			for (int i = 11; i >= 0; i--)
+				if (flt_n - 1 - i >= 0)
+					flt_print("pre", &flt_ring[(flt_n - 1 - i) % FLT_RING]);
+			quiet = 40;
+		}
+		else if (quiet > 0 && a0 == obj && --quiet >= 0)
+			log_printf("FLT after mode=%02x b673=%02x alt=%d speed=%d dt=%d\n", mode, rdbyte(a6 + 673), (int)rdlong(a6 + 692), (int)rdlong(a6 + 688), (int)rdlong(a6 + 14446));
+		last_mode = mode;
+		last_obj = (int)obj;
+	}
 	if (a0 != rdlong(a6 + 674))
 		return;
 	FltFrame f = {.n = flt_n++,
@@ -166,8 +249,37 @@ void Call_FlightLog(void)
 		f.v[i] = (int)rdlong(a0 + 98 + 4 * i);
 		f.rate[i] = (short)rdword(a0 + 134 + 2 * i);
 		f.thrust[i] = (short)rdword(a0 + 140 + 2 * i);
+		f.plo[i] = (int)rdlong(a0 + 44 + 4 * i);
+		f.phi[i] = (int)rdlong(a0 + 56 + 4 * i);
+	}
+	f.e = flt_exp(f.plo, f.phi);
+	f.near_slot = -1;
+	f.near_d = 1e9;
+	for (int i = 0; i < 0x73; i++)
+	{
+		uint32_t o = a0 - (uint32_t)(int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)rdbyte(a0 + 93)) + (uint32_t)(int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)i);
+		if (o == a0 || o == (uint32_t)rdlong(a6 + 16024) || rdbyte(o + 68) != f.parent || !rdword(o + 90))
+			continue;
+		double d2 = 0;
+		for (int j = 0; j < 3; j++)
+		{
+			double c = (double)(int)(rdlong(a0 + 56 + 4 * j) - rdlong(o + 56 + 4 * j)) + ((double)(uint32_t)rdlong(a0 + 44 + 4 * j) - (double)(uint32_t)rdlong(o + 44 + 4 * j)) / 4294967296.0;
+			d2 += c * c;
+		}
+		if (d2 < f.near_d * f.near_d)
+			f.near_d = sqrt(d2), f.near_slot = i, f.near_model = rdword(o + 90), f.near_frame = rdbyte(o + 69);
 	}
 	const FltFrame *p = &flt_ring[(f.n + FLT_RING - 1) % FLT_RING];
+	double dv[3] = {f.v[0] - p->v[0], f.v[1] - p->v[1], f.v[2] - p->v[2]};
+	if (f.n > 0 && f.dt > 0)
+		f.acc = sqrt(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2]) / f.dt;
+	double r2 = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		double c = f.phi[i] + (double)(uint32_t)f.plo[i] / 4294967296.0;
+		r2 += c * c;
+	}
+	f.k = f.acc * r2;
 	long long now = llabs(f.v[0]) + llabs(f.v[1]) + llabs(f.v[2]);
 	long long was = llabs(p->v[0]) + llabs(p->v[1]) + llabs(p->v[2]);
 	flt_ring[f.n % FLT_RING] = f;
@@ -175,6 +287,23 @@ void Call_FlightLog(void)
 	{
 		log_printf("FLT ---- speed jumped %lld -> %lld, the last frames:\n", was, now);
 		for (int i = FLT_RING - 1; i >= 0; i--)
+			if (f.n - i >= 0)
+				flt_print("pre", &flt_ring[(f.n - i) % FLT_RING]);
+		flt_after = FLT_AFTER;
+	}
+	else if (f.n > 1 && f.frame != p->frame)
+	{
+		log_printf("FLT ---- frame byte %d -> %d (alt %d -> %d), the last frames:\n", p->frame, f.frame, p->alt, f.alt);
+		for (int i = 8; i >= 0; i--)
+			if (f.n - i >= 0)
+				flt_print("pre", &flt_ring[(f.n - i) % FLT_RING]);
+		flt_after = FLT_AFTER;
+	}
+	else if (f.n > 1 && f.dt >= 100000 && f.dt == p->dt && f.parent == p->parent && f.frame == p->frame && p->k > 0 && f.k > 0
+		&& (f.k > p->k * 1.25 || f.k < p->k / 1.25) && !f.thrust[0] && !f.thrust[1] && !f.thrust[2])
+	{
+		log_printf("FLT ---- gravity step: k %.4g -> %.4g (e %d -> %d), the last frames:\n", p->k, f.k, p->e, f.e);
+		for (int i = 8; i >= 0; i--)
 			if (f.n - i >= 0)
 				flt_print("pre", &flt_ring[(f.n - i) % FLT_RING]);
 		flt_after = FLT_AFTER;
@@ -188,6 +317,29 @@ void Call_FlightLog(void)
 		flt_print("tick", &f);
 	else if (f.n > 0 && (f.status != p->status || f.frame != p->frame || f.parent != p->parent))
 		flt_print("change", &f);
+}
+
+/* L3f566's squared distance d0 reached 2^30 and is clamped (see Lprox_log):
+   the first 30 times for the player are logged */
+void Call_ProxLog(void)
+{
+	uint32_t a6 = GAME_A6, a0 = (uint32_t)GetReg(REG_A0);
+	if (a0 != rdlong(a6 + 674))
+		return;
+	double rr = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		double c = (double)(int)rdlong(a0 + 56 + 4 * i) + (double)(uint32_t)rdlong(a0 + 44 + 4 * i) / 4294967296.0;
+		rr += c * c;
+	}
+	static int logged;
+	if (logged++ >= 30)
+		return;
+	uint32_t a1 = (uint32_t)GetReg(REG_A1);
+	log_printf("PROX r=%.5f fr=%d d0=%08x d5=%08x  sp=%08x,%08x,%08x,%08x a1=%x 266=%x 270=%x 272=%x ship266=%x 272=%x\n", sqrt(rr), rdbyte(a0 + 69), (unsigned)GetReg(0),
+		(unsigned)GetReg(5), (unsigned)rdlong(GetReg(REG_A7)), (unsigned)rdlong(GetReg(REG_A7) + 4), (unsigned)rdlong(GetReg(REG_A7) + 8),
+		(unsigned)rdlong(GetReg(REG_A7) + 12), a1, (unsigned)rdlong(a1 + 266), (unsigned)rdword(a1 + 270), (unsigned)rdlong(a1 + 272),
+		(unsigned)rdlong(a0 + 266), (unsigned)rdlong(a0 + 272));
 }
 
 void Call_KillLog(void)
@@ -303,5 +455,6 @@ HOSTCALL hcalls[] = {
 	[0x90] = Call_ExactStep,
 	[0x91] = Call_SubSteps,
 	[0x92] = Call_SubSkip,
+	[0x93] = Call_ProxLog,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

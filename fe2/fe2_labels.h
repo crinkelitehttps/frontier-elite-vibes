@@ -399,5 +399,7 @@
 #define FE2_Lpos_player                              0xa949c /* Lpos_player */
 #define FE2_Lgrav_norm                               0xa94b0 /* Lgrav_norm */
 #define FE2_Lgrav_mass                               0xa94be /* Lgrav_mass */
+#define FE2_Lcool_dec                                0xa94c8 /* Lcool_dec */
+#define FE2_Lprox_log                                0xa94de /* Lprox_log */
 
 #endif /* FE2_LABELS_H */

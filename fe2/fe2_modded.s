@@ -179,6 +179,7 @@ Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
 Call_KillLog	equ	$8f
+Call_ProxLog	equ	$93
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -19448,8 +19449,7 @@ L3f460:
 		tst.w	278(a0)
 		beq.s	l3f4a2
 		move.l	14446(a6),d7
-		lsr.l	#1,d7
-		sub.w	d7,278(a0)
+		jsr	Lcool_dec
 		bcc.s	l3f4c4
 		clr.w	278(a0)
 	l3f4a2:	btst	#$1,d0
@@ -19640,9 +19640,7 @@ L3f566:
 		swap	d3
 		mulu	d5,d5
 		add.l	d3,d5
-		add.l	d1,d0
-		add.l	d2,d0
-		cmp.l	d5,d0
+		jsr	Lprox_log
 		bhi.w	l3f864
 		movem.l	(a7)+,d3-5
 		addq.l	#6,a7
@@ -67986,4 +67984,37 @@ Lgrav_norm:
 Lgrav_mass:
 		movem.w	122(a1),d5-6
 		add.w	d3,d6
+		rts
+
+* Frame-switch cooldown (278(a0), L3f45a): it ran down by dt/2 a frame, so at
+* time acceleration it was gone in a frame or two and the ship flapped between
+* frames 255 and 0 at the zone edge (alt read 0 there: drag, damage, death).
+* Take at most the 1x amount a frame (d7 = dt, 994 at 1x); leaves the carry
+* of the subtraction for the caller.
+Lcool_dec:
+		lsr.l	#1,d7
+		cmp.l	#497,d7
+		bls.s	lcool_ok
+		move.l	#497,d7
+	lcool_ok:	sub.w	d7,278(a0)
+		rts
+
+* Proximity test (L3f566): d0 = x^2 + y^2 + z^2, compared with d5 = the squared
+* radius, both normalised so that no single coordinate reaches 2.0 (2^30
+* squared). The altitude square root below (l3f864) is signed 32 bit and only
+* valid for d0 < 2^30, i.e. r < 2.0 when no coordinate was shifted: past that
+* it returned a small altitude of 0, the game took the ship for landed (drag,
+* damage, death). Replaces add, add, cmp (same size). A d0 that large is far
+* outside the planet, so it is clamped to just under 2^30, where the altitude
+* does not fit its result and stays -1 (unknown).
+Lprox_log:
+		add.l	d1,d0
+		add.l	d2,d0
+		cmp.l	#$40000000,d0
+		bcs.s	lprox_ok
+		cmp.l	#$3fffffff,d5
+		bcc.s	lprox_ok
+		hcall	#Call_ProxLog
+		move.l	#$3fffffff,d0
+	lprox_ok:	cmp.l	d5,d0
 		rts
