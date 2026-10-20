@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "gl_cockpit.h"
 #include "gl_draw.h"
@@ -35,9 +36,12 @@ bool orbit_display = false;
 #define A6_BIG_SPACE   14466
 #define NUM_SLOTS      0x73  /* objects 0..$72 (L4477c) */
 #define MAX_LABELS     32
-#define CONIC_PTS      1500
-#define DOT_PX         4.0f /* view pixels: a dot of the line behind the planet, and the gap after it */
-#define CONIC_STEP     0.02f /* radians between the conic's points as seen from the ship */
+#define TUNNEL_SQ      200
+#define TUNNEL_GAP     0.15  /* squares this far apart along the orbit, and with half sides this much, in radii from the planet's centre */
+#define TUNNEL_HALF    0.02
+#define TUNNEL_PERIOD  1.5   /* seconds for the squares to flow on by one gap */
+#define TUNNEL_MIN_PX  1.5f  /* view pixels: the half side of the last square */
+#define TUNNEL_EDGE    0.1f  /* radians: the longest piece of a square's side */
 #define TEXT_LEN       48
 
 typedef struct
@@ -52,12 +56,11 @@ typedef struct
 	float ap, pe; /* heights above the body, km */
 	float tap;    /* game seconds to the next apsis (bound, not circular) */
 	bool has_tap, to_pe; /* to_pe: past the apoapsis, so it is the periapsis */
-	/* the conic as directions from the ship in view space (unit), n of them
-	 * in order along the orbit; closed for an ellipse */
+	/* the orbit as a tunnel of n squares ahead of the ship, nearest first:
+	 * each square's corners as directions from the ship in view space
+	 * (unit), in order round it */
 	int n;
-	bool closed;
-	float pt[CONIC_PTS][3];
-	bool hid[CONIC_PTS]; /* the planet is between the ship and the point */
+	float sq[TUNNEL_SQ][4][3];
 	bool has_pe, has_ap;
 	float pe_dir[3], ap_dir[3];
 } HudOrbit;
@@ -289,68 +292,98 @@ static bool dir_from_ship(unsigned int ship, const double r[3], const double P[3
 	return true;
 }
 
+/* The tunnel's squares: along the orbit from the ship, half the way round
+ * each way (or to the asymptotes), TUNNEL_GAP radii apart, each square
+ * TUNNEL_HALF radii to the side of the path, across it (in the orbit's
+ * plane and square to it), so that perspective alone makes them shrink and
+ * curve away. They flow against the ship's motion, as the orbit passes
+ * under it: ahead they grow from nothing as they come on, behind they
+ * shrink to nothing as they go. Those behind the planet are left out. */
 typedef struct
 {
 	unsigned int ship;
 	HudOrbit *o;
-	const double *r, *pe, *q;
-	double p, e, radius;
-} ConicCtx;
+	const double *r, *pe, *q, *hn;
+	double p, e, k, half, gap, ns;
+} TunnelCtx;
 
-static bool conic_dir(const ConicCtx *c, double nu, float out[3], bool *hid)
+/* The square at true anomaly nu, scaled by f (0..1); returns the arc's
+ * step in nu for one gap there */
+static double tunnel_square(const TunnelCtx *t, double nu, double f)
 {
-	double rad = c->p / (1 + c->e * cos(nu)), P[3];
+	double c = cos(nu), s = sin(nu), den = 1 + t->e * c, rad = t->p / den, drad = t->p * t->e * s / (den * den);
+	double P[3], T[3], m[3];
 	for (int i = 0; i < 3; i++)
-		P[i] = rad * (cos(nu) * c->pe[i] + sin(nu) * c->q[i]);
-	/* hidden if the sight line from the ship to the point meets the body
-	 * (centred on the origin) before the point */
-	double d[3] = {P[0] - c->r[0], P[1] - c->r[1], P[2] - c->r[2]};
+	{
+		P[i] = rad * (c * t->pe[i] + s * t->q[i]);
+		T[i] = drad * (c * t->pe[i] + s * t->q[i]) + rad * (-s * t->pe[i] + c * t->q[i]);
+	}
+	double tl = sqrt(T[0] * T[0] + T[1] * T[1] + T[2] * T[2]);
+	if (f <= 0 || t->o->n >= TUNNEL_SQ)
+		return t->gap / tl;
+	for (int i = 0; i < 3; i++)
+		T[i] /= tl;
+	const double *hn = t->hn, *r = t->r;
+	m[0] = hn[1] * T[2] - hn[2] * T[1];
+	m[1] = hn[2] * T[0] - hn[0] * T[2];
+	m[2] = hn[0] * T[1] - hn[1] * T[0];
+	double sz = t->half * f;
+	double d[3] = {P[0] - r[0], P[1] - r[1], P[2] - r[2]};
 	double a = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
-	double b = c->r[0] * d[0] + c->r[1] * d[1] + c->r[2] * d[2];
-	double k = c->r[0] * c->r[0] + c->r[1] * c->r[1] + c->r[2] * c->r[2] - c->radius * c->radius;
-	double disc = b * b - a * k, t = a > 0 ? (-b - sqrt(fmax(disc, 0))) / a : 2;
-	*hid = disc > 0 && t > 0 && t < 1;
-	return dir_from_ship(c->ship, c->r, P, out);
+	double b = r[0] * d[0] + r[1] * d[1] + r[2] * d[2];
+	double disc = b * b - a * t->k, u = a > 0 ? (-b - sqrt(fmax(disc, 0))) / a : 2;
+	if ((disc > 0 && u > 0 && u < 1) || !(sz / sqrt(a) > TUNNEL_MIN_PX * view_pixel()))
+		return t->gap / tl;
+	static const int sx[4] = {-1, 1, 1, -1}, sy[4] = {-1, -1, 1, 1};
+	float out[4][3];
+	for (int j = 0; j < 4; j++)
+	{
+		double C[3];
+		for (int i = 0; i < 3; i++)
+			C[i] = P[i] + sz * (sx[j] * hn[i] + sy[j] * m[i]);
+		if (!dir_from_ship(t->ship, r, C, out[j]))
+			return t->gap / tl;
+	}
+	memcpy(t->o->sq[t->o->n++], out, sizeof out);
+	return t->gap / tl;
 }
 
-/* Points from nu0 to nu1 (the end included), halving the step until
- * neighbours are CONIC_STEP apart in the view, so each piece is a short
- * straight line even where the orbit runs behind the eye or past the ship */
-static void conic_split(ConicCtx *c, double nu0, const float d0[3], bool h0, double nu1, const float d1[3], bool h1,
-						int depth)
+static void tunnel_calc(unsigned int ship, HudOrbit *o, const double r[3], const double pe[3], const double q[3],
+						const double h[3], double hl, double p, double e, double radius, double lim, bool closed,
+						double ns)
 {
-	HudOrbit *o = c->o;
-	if (o->n >= CONIC_PTS - 1)
-		return;
-	if (depth < 16 && dir_angle(d0, d1) > CONIC_STEP)
+	double rr = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+	double hn[3] = {h[0] / hl, h[1] / hl, h[2] / hl};
+	TunnelCtx t = {ship, o, r, pe, q, hn, p, e, r[0] * r[0] + r[1] * r[1] + r[2] * r[2] - radius * radius,
+				   TUNNEL_HALF * rr, TUNNEL_GAP * rr, ns};
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	double phase = fmod((double)ts.tv_sec + ts.tv_nsec * 1e-9, TUNNEL_PERIOD) / TUNNEL_PERIOD;
+	o->n = 0;
+	/* dir +1 ahead, -1 behind; dist = arc from the ship, the first square
+	 * a bit short of a gap, moving in on the ship as phase grows */
+	for (int dir = 1; dir >= -1; dir -= 2)
 	{
-		double nm = (nu0 + nu1) / 2;
-		float dm[3];
-		bool hm;
-		if (conic_dir(c, nm, dm, &hm))
+		double span = closed ? GLM_PI : lim, dist = (dir > 0 ? 1 - phase : phase) * t.gap, nu = ns;
+		/* walk in nu to the first square */
 		{
-			conic_split(c, nu0, d0, h0, nm, dm, hm, depth + 1);
-			conic_split(c, nm, dm, hm, nu1, d1, h1, depth + 1);
-			return;
+			double st = tunnel_square(&t, nu, 0) / t.gap; /* nu per unit arc */
+			nu += dir * dist * st;
+		}
+		for (int it = 0; it < TUNNEL_SQ && o->n < TUNNEL_SQ; it++)
+		{
+			double left = span - dir * (nu - ns), f;
+			double st = tunnel_square(&t, nu, 0) / t.gap;
+			if (left <= 0)
+				break;
+			f = fmin(fmin(1.0, dist / t.gap), left / (t.gap * st));
+			if (dir < 0)
+				f = fmin(f, 1.0);
+			tunnel_square(&t, nu, f);
+			nu += dir * t.gap * st;
+			dist += t.gap;
 		}
 	}
-	o->hid[o->n] = h0 || h1;
-	memcpy(o->pt[o->n++], d1, sizeof(float) * 3);
-}
-
-/* A stroke from nu0 to nu1, a break (NaN) first if one went before it */
-static void conic_stroke(ConicCtx *c, double nu0, double nu1)
-{
-	HudOrbit *o = c->o;
-	float d0[3], d1[3];
-	bool h0, h1;
-	if (!conic_dir(c, nu0, d0, &h0) || !conic_dir(c, nu1, d1, &h1) || o->n >= CONIC_PTS - 2)
-		return;
-	if (o->n)
-		o->pt[o->n++][0] = NAN;
-	o->hid[o->n] = h0;
-	memcpy(o->pt[o->n++], d0, sizeof d0);
-	conic_split(c, nu0, d0, h0, nu1, d1, h1, 0);
 }
 
 static ConicElems last_conic;
@@ -372,28 +405,15 @@ static void conic_calc(unsigned int ship, HudOrbit *o, const double r[3], const 
 		lim = acos(-1.0 / e) - 0.002;
 	}
 	last_conic = (ConicElems){{pe[0], pe[1], pe[2]}, {q[0], q[1], q[2]}, p, e, rp, radius, lim, e < 1};
-	o->closed = e < 1;
-	o->n = 0;
-	ConicCtx cx = {ship, o, r, pe, q, p, e, radius};
-	/* The ship is on the orbit, at true anomaly ns: from it the orbit
-	 * starts along the velocity and ends against it, so the strokes run
-	 * from ns outwards (one for an ellipse, a forward and a back one for an
-	 * escape) and never join across the ship */
+	/* The ship is on the orbit, at true anomaly ns */
 	double ns = atan2(r[0] * q[0] + r[1] * q[1] + r[2] * q[2], r[0] * pe[0] + r[1] * pe[1] + r[2] * pe[2]);
-	const double eps = 1e-3;
-	if (o->closed)
-		conic_stroke(&cx, ns + eps, ns + 2 * GLM_PI - eps);
-	else
-	{
-		conic_stroke(&cx, ns + eps, fmax(lim, ns + 2 * eps));
-		conic_stroke(&cx, fmin(-lim, ns - 2 * eps), ns - eps);
-	}
+	tunnel_calc(ship, o, r, pe, q, h, hl, p, e, radius, lim, e < 1, ns);
 	double P[3];
 	for (int i = 0; i < 3; i++)
 		P[i] = rp * pe[i];
 	o->has_pe = dir_from_ship(ship, r, P, o->pe_dir);
 	o->has_ap = false;
-	if (o->closed)
+	if (e < 1)
 	{
 		for (int i = 0; i < 3; i++)
 			P[i] = -p / (1 - e) * pe[i];
@@ -724,35 +744,20 @@ static void arc_line(const float a[3], const float b[3])
 
 static void draw_conic(const HudOrbit *o)
 {
-	float acc = 0; /* pixels along the dotted stretch */
-	for (int i = 0; i + 1 < o->n; i++)
-	{
-		const float *a = o->pt[i], *b = o->pt[i + 1];
-		if (isnan(a[0]) || isnan(b[0]))
-			continue;
-		if (!o->hid[i + 1])
+	for (int i = 0; i < o->n; i++)
+		for (int j = 0; j < 4; j++)
 		{
-			acc = 0;
-			arc_line(a, b);
-			continue;
-		}
-		/* behind the planet: dots, DOT_PX lit, DOT_PX dark */
-		float len = dir_angle(a, b) / view_pixel(), done = 0;
-		while (done < len)
-		{
-			int cell = (int)(acc / DOT_PX);
-			float step = fminf((float)(cell + 1) * DOT_PX - acc, len - done);
-			if (!(cell & 1))
+			const float *a = o->sq[i][j], *b = o->sq[i][(j + 1) & 3];
+			int pieces = 1 + (int)(dir_angle(a, b) / TUNNEL_EDGE);
+			float prev[3] = {a[0], a[1], a[2]};
+			for (int k = 1; k <= pieces; k++)
 			{
-				float p0[3], p1[3];
-				dir_towards(a, b, done / len, p0);
-				dir_towards(a, b, (done + step) / len, p1);
-				arc_line(p0, p1);
+				float next[3];
+				dir_towards(a, b, (float)k / pieces, next);
+				arc_line(prev, next);
+				memcpy(prev, next, sizeof prev);
 			}
-			done += step;
-			acc += step;
 		}
-	}
 	/* From prograde round the planet to retrograde; nothing between them */
 	Spot p;
 	if (o->has_pe)
