@@ -55,6 +55,24 @@ extern "C"
  * the game's */
 extern bool own_hud;
 
+/* The orbit display: the conic and Ap / Pe / time to the next apsis (R3) */
+extern bool orbit_display;
+
+/* The orbit's conic round the ship's parent in the parent's frame (position
+ * units, 2^32 to the game's altitude unit): points are
+ * p / (1 + e cos nu) * (cos nu * pe + sin nu * q), the ship at nu0 */
+typedef struct
+{
+	double pe[3], q[3]; /* periapsis direction; in the plane, 90 degrees on, along the motion */
+	double p, e, rp;    /* semi-latus rectum, eccentricity, periapsis distance */
+	double radius;      /* the body's */
+	double lim;         /* |nu| out to the asymptotes (an escape orbit) */
+	bool closed;
+} ConicElems;
+
+/* Game thread: the orbit now, false when the display is off or there is none */
+bool hud_conic_elements(ConicElems *out);
+
 /* Host calls from the hooks (game thread): d0 = 1 to skip the game's */
 void Call_HudCross(void);
 void Call_HudVelocity(void);

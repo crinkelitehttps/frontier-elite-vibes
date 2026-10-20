@@ -2,11 +2,13 @@
  * shortcut.c - Ctrl+key emulator shortcuts:
  *   Ctrl-F11 fullscreen, Ctrl-M mouse grab, Ctrl-Q quit,
  *   Ctrl-D debug dump, Ctrl-E cycle renderer, Ctrl-K cockpit view on / off,
+ *   Ctrl-O orbit display (conic, Ap, Pe) on / off,
  *   Ctrl-C recentre head tracking (and the VR headset).
  */
 #include <SDL.h>
 
 #include "gl/gl_cockpit.h"
+#include "gl/gl_hud.h"
 #include "headtrack.h"
 #include "hostcall.h"
 #include "renderer.h"
@@ -45,6 +47,9 @@ void ShortCut_CheckKeys(void)
 		break;
 	case SDLK_k:
 		cockpit_enabled = !cockpit_enabled;
+		break;
+	case SDLK_o:
+		orbit_display = !orbit_display;
 		break;
 	case SDLK_c:
 		headtrack_recenter();

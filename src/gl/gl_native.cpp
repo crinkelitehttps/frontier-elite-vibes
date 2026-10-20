@@ -16,6 +16,7 @@ extern "C"
 {
 #include "gl_cockpit.h"
 #include "gl_draw.h"
+#include "gl_hud.h"
 #include "gl_native.h"
 #include "gl_planet.h"
 #include "gl_scene.h"
@@ -357,6 +358,16 @@ struct Far
 	uint16_t tint[8];
 };
 
+/* The orbit in the system map (map_orbit_build): points in the map's view
+ * space (GL), drawn over the scene; hid: the planet is between them and the eye */
+constexpr int MAP_ORBIT_PTS = 400;
+struct MapOrbit
+{
+	int n = 0;
+	float pt[MAP_ORBIT_PTS][3];
+	bool hid[MAP_ORBIT_PTS];
+};
+
 constexpr int MAX_OBJECTS = 256;
 constexpr int MAX_FAR = 64;
 struct Frame
@@ -368,6 +379,16 @@ struct Frame
 	/* The sky (stars, the Milky Way: L44200_DrawBGStars) */
 	Object sky;
 	bool has_sky = false;
+	/* The system map's camera (the matrix at 1082(a6), 1.15 words) while it
+	 * was drawn, and the orbit worked out from it */
+	bool cam_ok = false;
+	int16_t cam[9];
+	/* The ship in the map's own copy of the system (17348(a6)), read while
+	 * the map is drawn: outside that the memory is the flight's again */
+	uint32_t map_ship = 0;
+	int map_par = 0;
+	double map_r[3];
+	MapOrbit orbit;
 	/* Model text's strings by text_key (Nu_NativeText): the last the game
 	 * formatted for each, kept while it isn't run (off screen) */
 	std::unordered_map<uint64_t, std::string> texts;
@@ -573,6 +594,23 @@ extern "C" void Nu_NativeObject(void)
 {
 	scene_mute_object(0);
 	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	if (!rec.cam_ok && game_screen() == SCREEN_SYSTEM_MAP)
+	{
+		for (int i = 0; i < 9; i++)
+			rec.cam[i] = (int16_t)rdword(GAME_A6 + 1082 + 2 * (uint32_t)i);
+		rec.cam_ok = true;
+		uint32_t ship = game_player_ship();
+		if (ship)
+		{
+			uint32_t ms = (uint32_t)GAME_A6 + 17348 +
+						  (uint32_t)(int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)(uint8_t)rdbyte(ship + 93));
+			rec.map_ship = ms;
+			rec.map_par = (uint8_t)rdbyte(ms + 68);
+			for (int i = 0; i < 3; i++)
+				rec.map_r[i] = (double)rdlong(ms + 56 + 4 * (uint32_t)i) +
+							   (double)(uint32_t)rdlong(ms + 44 + 4 * (uint32_t)i) / 4294967296.0;
+		}
+	}
 	if (sky_hook(a6))
 		return;
 	uint32_t addr, table;
@@ -700,16 +738,201 @@ extern "C" void native_reset(void)
 	rec.n = 0;
 	rec.nfar = 0;
 	rec.has_sky = false;
+	rec.cam_ok = false;
+	rec.map_ship = 0;
+	rec.orbit.n = 0;
+}
+
+/* The ship's orbit in the system map. The map has its own copy of the
+ * system (17348(a6), at the time point); there the ship and its parent are
+ * drawn at view positions p_s and p_p, which relate to their frame
+ * positions (the ship's r, parent relative) as p_s - p_p = k * A * r, A the
+ * map camera's matrix (c_i = sum_j m[3j+i] w_j, as the game's own turning
+ * into the ship's axes) or its transpose, k the zoom. A is taken as
+ * whichever points the way p_s - p_p does and k from the lengths; the conic
+ * round the parent (hud_conic_elements) is then drawn from p_p. */
+static bool map_log()
+{
+	static int on = -1;
+	if (on < 0)
+		on = getenv("GLF_MAP_LOG") != nullptr;
+	return on;
+}
+
+static void map_orbit_build(Frame &f, bool page = false)
+{
+	f.orbit.n = 0;
+	ConicElems el;
+	/* GLF_MAP_LOG: why there is none, each time that changes while the map is up */
+	static int why = -1;
+	int now = !f.cam_ok ? 1 : !hud_conic_elements(&el) ? 2 : 0;
+	if (map_log() && (page || f.cam_ok) && now != why)
+	{
+		log_printf("map orbit: %s (orbit display %s)\n",
+				   now == 1 ? "no map frame captured" : now == 2 ? "no orbit round the ship's parent" : "orbit ready",
+				   orbit_display ? "on" : "off");
+		why = now;
+	}
+	if (now)
+		return;
+	uint32_t ship = game_player_ship();
+	uint32_t space = (uint32_t)GAME_A6 + 17348;
+	uint32_t ms = f.map_ship;
+	int par = f.map_par;
+	static int early = 0;
+	if (!ms || !par)
+	{
+		if (map_log() && ++early % 60 == 1)
+			log_printf("map orbit: no parent for the map's ship %x (slot %d, flight ship %x, its parent %d)\n", ms,
+					   (uint8_t)rdbyte(ship + 93), ship, (uint8_t)rdbyte(ship + 68));
+		return;
+	}
+	uint32_t mp = space + (uint32_t)(int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)par);
+	float ps[3], pp[3], sh_s, sh_p;
+	bool has_s = native_object_pos(ms, ps, &sh_s), has_p = native_object_pos(mp, pp, &sh_p);
+	/* GLF_MAP_LOG: the scene as the map has it, about once a second */
+	static int dump = 0;
+	if (map_log() && ++dump % 60 == 1)
+	{
+		log_printf("map orbit: ship %x (slot %d) %s, parent %x (slot %d) %s; cam %d %d %d / %d %d %d / %d %d %d\n", ms,
+				   (uint8_t)rdbyte(ship + 93), has_s ? "found" : "missing", mp, par, has_p ? "found" : "missing",
+				   f.cam[0], f.cam[1], f.cam[2], f.cam[3], f.cam[4], f.cam[5], f.cam[6], f.cam[7], f.cam[8]);
+		for (int i = 0; i < f.n; i++)
+		{
+			const Object &o = f.obj[i];
+			log_printf("map orbit:   obj %x model %d table %x s %d shrink %g pos %g %g %g\n", o.addr, o.model, o.table,
+					   o.scale, o.shrink, o.pos[0], o.pos[1], o.pos[2]);
+		}
+		for (int i = 0; i < f.nfar; i++)
+			log_printf("map orbit:   far %x shrink %g radius %g pos %g %g %g\n", f.far[i].addr, f.far[i].shrink,
+					   f.far[i].radius, f.far[i].pos[0], f.far[i].pos[1], f.far[i].pos[2]);
+		log_printf("map orbit:   ship r %g %g %g (position units)\n", f.map_r[0], f.map_r[1], f.map_r[2]);
+	}
+	if (!has_s || !has_p)
+		return;
+	/* The game keeps each object's view position at its own scale, so the
+	 * positions of two objects can't be compared, but their directions can:
+	 * u_p to the planet, u_s to the ship. The matrix A turns the frame
+	 * vector r (ship from planet) into the view: A r = ls u_s - lp u_p, the
+	 * distances ls, lp in position units (least squares; the residual
+	 * checks the matrix). The planet is then at lp u_p and a point P of
+	 * the orbit at lp u_p + A P. */
+	double r[3] = {f.map_r[0], f.map_r[1], f.map_r[2]}, up[3], us[3], best = 1e30, A[3][3] = {}, lp = 0;
+	double pl = std::sqrt((double)pp[0] * pp[0] + (double)pp[1] * pp[1] + (double)pp[2] * pp[2]);
+	double sl = std::sqrt((double)ps[0] * ps[0] + (double)ps[1] * ps[1] + (double)ps[2] * ps[2]);
+	if (!(pl > 0) || !(sl > 0))
+		return;
+	for (int i = 0; i < 3; i++)
+	{
+		up[i] = pp[i] / pl;
+		us[i] = ps[i] / sl;
+	}
+	for (int t = 0; t < 2; t++)
+	{
+		double a[3][3], c[3];
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				a[i][j] = (t ? f.cam[3 * i + j] : f.cam[3 * j + i]) / 32768.0;
+		for (int i = 0; i < 3; i++)
+			c[i] = a[i][0] * r[0] + a[i][1] * r[1] + a[i][2] * r[2];
+		c[2] = -c[2]; /* GL's view space */
+		/* c = ls us - lp up: normal equations in (ls, lp) */
+		double uu = us[0] * up[0] + us[1] * up[1] + us[2] * up[2];
+		double cs = c[0] * us[0] + c[1] * us[1] + c[2] * us[2], cp = c[0] * up[0] + c[1] * up[1] + c[2] * up[2];
+		double det = 1 - uu * uu;
+		if (std::fabs(det) < 1e-12)
+			continue;
+		/* [1 uu; uu 1] [ls; -lp] = [cs; cp] */
+		double ls = (cs - uu * cp) / det, lpp = (uu * cs - cp) / det;
+		double res = 0, cl = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
+		for (int i = 0; i < 3; i++)
+		{
+			double e = c[i] - (ls * us[i] - lpp * up[i]);
+			res += e * e;
+		}
+		res = std::sqrt(res / cl);
+		if (res < best)
+		{
+			best = res;
+			memcpy(A, a, sizeof A);
+			lp = lpp;
+		}
+	}
+	if (map_log() && dump % 60 == 1)
+		log_printf("map orbit: planet at %g position units, residual %.4f\n", lp, best);
+	if (best > 0.05 || !(lp > 0))
+		return;
+	double centre[3] = {lp * up[0], lp * up[1], lp * up[2]};
+	double k = 1; /* position units */
+	double rad_view = el.radius;
+	/* the path: a closed orbit all round, an escape out to 20 times the
+	 * larger of its periapsis and the ship's distance */
+	double nu0 = -3.14159265358979, nu1 = 3.14159265358979;
+	if (!el.closed)
+	{
+		double rmax = 20 * std::max(el.rp, std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]));
+		double lim = std::min(el.lim, std::acos(std::max(-1.0, std::min(1.0, (el.p / rmax - 1) / el.e))));
+		nu0 = -lim;
+		nu1 = lim;
+	}
+	double pts[MAP_ORBIT_PTS][3], big = 0;
+	int n = MAP_ORBIT_PTS - 1;
+	for (int j = 0; j <= n; j++)
+	{
+		double nu = nu0 + (nu1 - nu0) * j / n, rad = el.p / (1 + el.e * std::cos(nu)), w[3], c[3];
+		for (int i = 0; i < 3; i++)
+			w[i] = rad * (std::cos(nu) * el.pe[i] + std::sin(nu) * el.q[i]);
+		for (int i = 0; i < 3; i++)
+			c[i] = A[i][0] * w[0] + A[i][1] * w[1] + A[i][2] * w[2];
+		c[2] = -c[2];
+		for (int i = 0; i < 3; i++)
+		{
+			pts[j][i] = centre[i] + k * c[i];
+			big = std::max(big, std::fabs(pts[j][i]));
+		}
+		/* behind the planet from the eye (the origin) */
+		double a = 0, b = 0, cc = -rad_view * rad_view;
+		for (int i = 0; i < 3; i++)
+		{
+			a += pts[j][i] * pts[j][i];
+			b += -2 * pts[j][i] * centre[i];
+			cc += centre[i] * centre[i];
+		}
+		double disc = b * b - 4 * a * cc, t = a > 0 ? (-b - std::sqrt(std::max(disc, 0.0))) / (2 * a) : 2;
+		f.orbit.hid[j] = disc > 0 && t > 0 && t < 1;
+	}
+	/* a uniform scale about the eye changes nothing seen; it takes the
+	 * numbers, in position units, well beyond the projection's near plane */
+	double s = 1e6;
+	if (big * s > 5e9)
+		s = 5e9 / big;
+	for (int j = 0; j <= n; j++)
+		for (int i = 0; i < 3; i++)
+			f.orbit.pt[j][i] = (float)(pts[j][i] * s);
+	f.orbit.n = n + 1;
+}
+
+static void map_orbit_draw(const Frame &f)
+{
+	if (f.orbit.n < 2)
+		return;
+	gd_set_depth(nullptr);
+	gd_color3f(0.0f, 1.0f, 0.0f);
+	for (int i = 0; i + 1 < f.orbit.n; i++)
+		if (!(f.orbit.hid[i] || f.orbit.hid[i + 1]) || i % 2 == 0)
+			gd_line(f.orbit.pt[i], f.orbit.pt[i + 1]);
 }
 
 extern "C" void native_publish(void)
 {
+	map_orbit_build(rec);
 	pub = rec;
 	pub.texts = texts_seen;
 }
 
 extern "C" void native_publish_world(void)
 {
+	map_orbit_build(rec);
 	pub_world = rec;
 	pub_world.texts = texts_seen;
 }
@@ -728,6 +951,7 @@ extern "C" void native_acquire(bool screen, bool world)
 
 extern "C" void native_publish_page(void)
 {
+	map_orbit_build(rec, true);
 	pub_page = rec;
 	pub_page.texts = texts_seen;
 }
@@ -2328,5 +2552,6 @@ extern "C" void native_draw(void)
 	}
 	draw_unders(-1e30f);
 	gd_set_depth(nullptr);
+	map_orbit_draw(*shown);
 	gd_pop();
 }

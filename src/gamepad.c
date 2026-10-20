@@ -12,6 +12,7 @@
 #include "game_state.h"
 #include "gl/gl_clipboard.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
 #include "headtrack.h"
 #include "host.h"
@@ -41,7 +42,7 @@ static const char DEFAULT_CFG[] =
 	"#\n"
 	"# The manual layer: a binding prefixed `manual` acts only while the\n"
 	"# clipboard is out (whatever the shifts), and its control's other\n"
-	"# bindings don't then. Only key, cycle, recenter, cockpit, pointer,\n"
+	"# bindings don't then. Only key, cycle, recenter, cockpit, orbit, pointer,\n"
 	"# manual and manual-page bindings; axes keep flying the ship.\n"
 	"#\n"
 	"# Controls (SDL names):\n"
@@ -81,6 +82,8 @@ static const char DEFAULT_CFG[] =
 	"#   shift1, shift2             hold for that shift layer\n"
 	"#   recenter                   head tracking: the current pose is ahead\n"
 	"#   cockpit                    cockpit view on / off (also Ctrl-K)\n"
+	"#   orbit                      orbit display on / off: the orbit's conic on the HUD\n"
+	"#                              with Ap, Pe and the time to the next apsis\n"
 	"#   pointer                    a mouse pointer for the control panel and\n"
 	"#                              menus: press for it, press again to click\n"
 	"#                              there (left button) and put it away (not\n"
@@ -190,6 +193,7 @@ typedef enum
 	ACT_SHIFT,
 	ACT_RECENTER,
 	ACT_COCKPIT,
+	ACT_ORBIT,
 	ACT_POINTER,   /* a button: pointer on, or click and off */
 	ACT_POINTER_X, /* axes moving it while it is on */
 	ACT_POINTER_Y,
@@ -352,7 +356,7 @@ static bool is_axis_action(Action a)
 /* Bindings that take a press (and may be in the manual layer) */
 static bool is_press_action(Action a)
 {
-	return a == ACT_KEY || a == ACT_CYCLE || a == ACT_RECENTER || a == ACT_COCKPIT || a == ACT_POINTER ||
+	return a == ACT_KEY || a == ACT_CYCLE || a == ACT_RECENTER || a == ACT_COCKPIT || a == ACT_ORBIT || a == ACT_POINTER ||
 		   a == ACT_MANUAL || a == ACT_MANUAL_PAGE;
 }
 
@@ -490,6 +494,10 @@ static bool parse_line(char *line, const char *source, int line_no, bool *gap)
 	{
 		b.action = act[0] == 'r' ? ACT_RECENTER : act[0] == 'c' ? ACT_COCKPIT : ACT_POINTER;
 	}
+	else if (!strcmp(act, "orbit"))
+	{
+		b.action = ACT_ORBIT;
+	}
 	else if (!strcmp(act, "manual"))
 	{
 		b.action = ACT_MANUAL;
@@ -514,7 +522,7 @@ static bool parse_line(char *line, const char *source, int line_no, bool *gap)
 
 	if (b.manual_layer && !is_press_action(b.action))
 	{
-		log_printf("%s:%d: only key, cycle, recenter, cockpit, pointer, manual and manual-page bindings can be in "
+		log_printf("%s:%d: only key, cycle, recenter, cockpit, orbit, pointer, manual and manual-page bindings can be in "
 				   "the manual layer\n",
 				   source, line_no);
 		return false;
@@ -978,6 +986,9 @@ void gamepad_update(void)
 		case ACT_COCKPIT:
 			cockpit_enabled = !cockpit_enabled;
 			break;
+		case ACT_ORBIT:
+			orbit_display = !orbit_display;
+			break;
 		case ACT_MANUAL:
 			clipboard_toggle();
 			break;
@@ -1106,7 +1117,7 @@ void gamepad_help(int i, GamepadHelp *h)
 		[ACT_STEER_X] = "steer x", [ACT_STEER_Y] = "steer y",	  [ACT_ROLL] = "roll",
 		[ACT_YAW] = "yaw",		   [ACT_LOOK_X] = "look x",		  [ACT_LOOK_Y] = "look y",
 		[ACT_STRAFE_X] = "strafe x", [ACT_STRAFE_Y] = "strafe y", [ACT_RECENTER] = "recentre",
-		[ACT_COCKPIT] = "cockpit view", [ACT_POINTER] = "pointer", [ACT_POINTER_X] = "pointer x",
+		[ACT_COCKPIT] = "cockpit view", [ACT_ORBIT] = "orbit display", [ACT_POINTER] = "pointer", [ACT_POINTER_X] = "pointer x",
 		[ACT_POINTER_Y] = "pointer y", [ACT_MANUAL] = "clipboard",
 	};
 	switch (b->action)

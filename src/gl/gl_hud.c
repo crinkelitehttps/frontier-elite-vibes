@@ -20,6 +20,7 @@
 #include "screen_text.h"
 
 bool own_hud = true;
+bool orbit_display = false;
 
 #define HUD_COLOUR   0x3c   /* the game's colour for both (L63d4e, L63d76) */
 #define VEL_MIN      10     /* velocity units (about 0.095 m/s each): 1 m/s */
@@ -34,6 +35,9 @@ bool own_hud = true;
 #define A6_BIG_SPACE   14466
 #define NUM_SLOTS      0x73  /* objects 0..$72 (L4477c) */
 #define MAX_LABELS     32
+#define CONIC_PTS      1500
+#define DOT_PX         4.0f /* view pixels: a dot of the line behind the planet, and the gap after it */
+#define CONIC_STEP     0.02f /* radians between the conic's points as seen from the ship */
 #define TEXT_LEN       48
 
 typedef struct
@@ -48,6 +52,14 @@ typedef struct
 	float ap, pe; /* heights above the body, km */
 	float tap;    /* game seconds to the next apsis (bound, not circular) */
 	bool has_tap, to_pe; /* to_pe: past the apoapsis, so it is the periapsis */
+	/* the conic as directions from the ship in view space (unit), n of them
+	 * in order along the orbit; closed for an ellipse */
+	int n;
+	bool closed;
+	float pt[CONIC_PTS][3];
+	bool hid[CONIC_PTS]; /* the planet is between the ship and the point */
+	bool has_pe, has_ap;
+	float pe_dir[3], ap_dir[3];
 } HudOrbit;
 
 typedef struct
@@ -107,14 +119,22 @@ void Call_HudCross(void)
 /* The velocity turned into the ship's axes (the front view's camera) as
  * L43bc6 does: camera i = sum over j of m[3j + i] * v[j], m in 1.15. False
  * when too slow to show. */
-static bool velocity_dir(unsigned int ship, float dir[3])
+static void frame_to_view(unsigned int ship, const double v[3], double c[3])
 {
-	double v[3], c[3] = {0, 0, 0};
-	for (int j = 0; j < 3; j++)
-		v[j] = (double)rdlong(ship + OBJ_VELOCITY + 4 * j);
 	for (int i = 0; i < 3; i++)
+	{
+		c[i] = 0;
 		for (int j = 0; j < 3; j++)
 			c[i] += (double)rdword(ship + 2 * (3 * j + i)) * v[j];
+	}
+}
+
+static bool velocity_dir(unsigned int ship, float dir[3])
+{
+	double v[3], c[3];
+	for (int j = 0; j < 3; j++)
+		v[j] = (double)rdlong(ship + OBJ_VELOCITY + 4 * j);
+	frame_to_view(ship, v, c);
 	double speed = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
 	double len = sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
 	if (speed < VEL_MIN || len <= 0)
@@ -253,6 +273,135 @@ void Call_HudLabels(void)
 #define PU_KM         4294.967296 /* a position unit in km */
 #define TICK_DT       994         /* 50 ticks a second */
 
+/* The conic's points from the ship, in view space. In the orbit's plane
+ * the point at true anomaly nu is p / (1 + e cos nu) along
+ * cos nu * (periapsis direction) + sin nu * (h x it) */
+static bool dir_from_ship(unsigned int ship, const double r[3], const double P[3], float out[3])
+{
+	double d[3] = {P[0] - r[0], P[1] - r[1], P[2] - r[2]}, c[3];
+	frame_to_view(ship, d, c);
+	double len = sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
+	if (!(len > 0))
+		return false;
+	out[0] = (float)(c[0] / len);
+	out[1] = (float)(c[1] / len);
+	out[2] = (float)(-c[2] / len);
+	return true;
+}
+
+typedef struct
+{
+	unsigned int ship;
+	HudOrbit *o;
+	const double *r, *pe, *q;
+	double p, e, radius;
+} ConicCtx;
+
+static bool conic_dir(const ConicCtx *c, double nu, float out[3], bool *hid)
+{
+	double rad = c->p / (1 + c->e * cos(nu)), P[3];
+	for (int i = 0; i < 3; i++)
+		P[i] = rad * (cos(nu) * c->pe[i] + sin(nu) * c->q[i]);
+	/* hidden if the sight line from the ship to the point meets the body
+	 * (centred on the origin) before the point */
+	double d[3] = {P[0] - c->r[0], P[1] - c->r[1], P[2] - c->r[2]};
+	double a = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+	double b = c->r[0] * d[0] + c->r[1] * d[1] + c->r[2] * d[2];
+	double k = c->r[0] * c->r[0] + c->r[1] * c->r[1] + c->r[2] * c->r[2] - c->radius * c->radius;
+	double disc = b * b - a * k, t = a > 0 ? (-b - sqrt(fmax(disc, 0))) / a : 2;
+	*hid = disc > 0 && t > 0 && t < 1;
+	return dir_from_ship(c->ship, c->r, P, out);
+}
+
+/* Points from nu0 to nu1 (the end included), halving the step until
+ * neighbours are CONIC_STEP apart in the view, so each piece is a short
+ * straight line even where the orbit runs behind the eye or past the ship */
+static void conic_split(ConicCtx *c, double nu0, const float d0[3], bool h0, double nu1, const float d1[3], bool h1,
+						int depth)
+{
+	HudOrbit *o = c->o;
+	if (o->n >= CONIC_PTS - 1)
+		return;
+	if (depth < 16 && dir_angle(d0, d1) > CONIC_STEP)
+	{
+		double nm = (nu0 + nu1) / 2;
+		float dm[3];
+		bool hm;
+		if (conic_dir(c, nm, dm, &hm))
+		{
+			conic_split(c, nu0, d0, h0, nm, dm, hm, depth + 1);
+			conic_split(c, nm, dm, hm, nu1, d1, h1, depth + 1);
+			return;
+		}
+	}
+	o->hid[o->n] = h0 || h1;
+	memcpy(o->pt[o->n++], d1, sizeof(float) * 3);
+}
+
+/* A stroke from nu0 to nu1, a break (NaN) first if one went before it */
+static void conic_stroke(ConicCtx *c, double nu0, double nu1)
+{
+	HudOrbit *o = c->o;
+	float d0[3], d1[3];
+	bool h0, h1;
+	if (!conic_dir(c, nu0, d0, &h0) || !conic_dir(c, nu1, d1, &h1) || o->n >= CONIC_PTS - 2)
+		return;
+	if (o->n)
+		o->pt[o->n++][0] = NAN;
+	o->hid[o->n] = h0;
+	memcpy(o->pt[o->n++], d0, sizeof d0);
+	conic_split(c, nu0, d0, h0, nu1, d1, h1, 0);
+}
+
+static ConicElems last_conic;
+
+static void conic_calc(unsigned int ship, HudOrbit *o, const double r[3], const double h[3], double hh,
+					   const double ev[3], double e, double mu, double rp, double radius)
+{
+	double rr = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]), hl = sqrt(hh);
+	double pe[3], q[3], p = rp * (1 + e);
+	for (int i = 0; i < 3; i++)
+		pe[i] = e > 1e-6 ? ev[i] / e : r[i] / rr;
+	q[0] = (h[1] * pe[2] - h[2] * pe[1]) / hl;
+	q[1] = (h[2] * pe[0] - h[0] * pe[2]) / hl;
+	q[2] = (h[0] * pe[1] - h[1] * pe[0]) / hl;
+	double lim = GLM_PI;
+	if (e >= 1)
+	{
+		/* out to the asymptotes, where the path leaves for good */
+		lim = acos(-1.0 / e) - 0.002;
+	}
+	last_conic = (ConicElems){{pe[0], pe[1], pe[2]}, {q[0], q[1], q[2]}, p, e, rp, radius, lim, e < 1};
+	o->closed = e < 1;
+	o->n = 0;
+	ConicCtx cx = {ship, o, r, pe, q, p, e, radius};
+	/* The ship is on the orbit, at true anomaly ns: from it the orbit
+	 * starts along the velocity and ends against it, so the strokes run
+	 * from ns outwards (one for an ellipse, a forward and a back one for an
+	 * escape) and never join across the ship */
+	double ns = atan2(r[0] * q[0] + r[1] * q[1] + r[2] * q[2], r[0] * pe[0] + r[1] * pe[1] + r[2] * pe[2]);
+	const double eps = 1e-3;
+	if (o->closed)
+		conic_stroke(&cx, ns + eps, ns + 2 * GLM_PI - eps);
+	else
+	{
+		conic_stroke(&cx, ns + eps, fmax(lim, ns + 2 * eps));
+		conic_stroke(&cx, fmin(-lim, ns - 2 * eps), ns - eps);
+	}
+	double P[3];
+	for (int i = 0; i < 3; i++)
+		P[i] = rp * pe[i];
+	o->has_pe = dir_from_ship(ship, r, P, o->pe_dir);
+	o->has_ap = false;
+	if (o->closed)
+	{
+		for (int i = 0; i < 3; i++)
+			P[i] = -p / (1 - e) * pe[i];
+		o->has_ap = dir_from_ship(ship, r, P, o->ap_dir);
+	}
+	(void)mu;
+}
+
 static bool orbit_calc(unsigned int ship, HudOrbit *o)
 {
 	unsigned int a6 = GAME_A6;
@@ -306,6 +455,17 @@ static bool orbit_calc(unsigned int ship, HudOrbit *o)
 		o->tap = (float)(ticks * (dt / TICK_DT) / 50.0);
 		o->has_tap = true;
 	}
+	conic_calc(ship, o, r, h, hh, ev, e, mu, rp, radius);
+	return true;
+}
+
+bool hud_conic_elements(ConicElems *out)
+{
+	static HudOrbit tmp;
+	unsigned int own = game_player_ship();
+	if (!orbit_display || !hud_on() || !own || !orbit_calc(own, &tmp))
+		return false;
+	*out = last_conic;
 	return true;
 }
 
@@ -335,7 +495,7 @@ void hud_publish(bool screen)
 	static HudFrame flight;
 	unsigned int own = game_player_ship();
 	HudOrbit orbit = {0};
-	if (hud_on() && own)
+	if (hud_on() && own && orbit_display)
 		orbit.on = orbit_calc(own, &orbit);
 	if (!screen)
 	{
@@ -539,6 +699,82 @@ static void draw_velocity(const Spot *p, bool retro)
 	}
 }
 
+/* A line LINE_W view pixels wide between two directions, on the sphere
+ * of radius DIST */
+static void arc_line(const float a[3], const float b[3])
+{
+	float A[3], B[3], m[3], d[3], n[3];
+	for (int i = 0; i < 3; i++)
+		A[i] = DIST * a[i], B[i] = DIST * b[i], m[i] = A[i] + B[i], d[i] = B[i] - A[i];
+	cross3(m, d, n);
+	float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+	if (!(l > 0))
+		return;
+	float w = LINE_W * 0.5f * view_pixel() * DIST / l;
+	float p[4][3];
+	for (int i = 0; i < 3; i++)
+	{
+		p[0][i] = A[i] + n[i] * w;
+		p[1][i] = B[i] + n[i] * w;
+		p[2][i] = B[i] - n[i] * w;
+		p[3][i] = A[i] - n[i] * w;
+	}
+	gd_quad(p[0], p[1], p[2], p[3]);
+}
+
+static void draw_conic(const HudOrbit *o)
+{
+	float acc = 0; /* pixels along the dotted stretch */
+	for (int i = 0; i + 1 < o->n; i++)
+	{
+		const float *a = o->pt[i], *b = o->pt[i + 1];
+		if (isnan(a[0]) || isnan(b[0]))
+			continue;
+		if (!o->hid[i + 1])
+		{
+			acc = 0;
+			arc_line(a, b);
+			continue;
+		}
+		/* behind the planet: dots, DOT_PX lit, DOT_PX dark */
+		float len = dir_angle(a, b) / view_pixel(), done = 0;
+		while (done < len)
+		{
+			int cell = (int)(acc / DOT_PX);
+			float step = fminf((float)(cell + 1) * DOT_PX - acc, len - done);
+			if (!(cell & 1))
+			{
+				float p0[3], p1[3];
+				dir_towards(a, b, done / len, p0);
+				dir_towards(a, b, (done + step) / len, p1);
+				arc_line(p0, p1);
+			}
+			done += step;
+			acc += step;
+		}
+	}
+	/* From prograde round the planet to retrograde; nothing between them */
+	Spot p;
+	if (o->has_pe)
+	{
+		spot_at(&p, o->pe_dir);
+		spot_line(&p, -4, -4, 4, -4);
+		spot_line(&p, 4, -4, 4, 4);
+		spot_line(&p, 4, 4, -4, 4);
+		spot_line(&p, -4, 4, -4, -4);
+		spot_text(&p, 7, 4, (const unsigned char *)"Pe");
+	}
+	if (o->has_ap)
+	{
+		spot_at(&p, o->ap_dir);
+		spot_line(&p, -4, -4, 4, -4);
+		spot_line(&p, 4, -4, 4, 4);
+		spot_line(&p, 4, 4, -4, 4);
+		spot_line(&p, -4, 4, -4, -4);
+		spot_text(&p, 7, 4, (const unsigned char *)"Ap");
+	}
+}
+
 void hud_draw(const mat4 *dir_proj)
 {
 	if (!show.cross && !show.vel && !show.target && !show.nlabels && !show.orbit.on)
@@ -550,6 +786,11 @@ void hud_draw(const mat4 *dir_proj)
 	gd_set_cull(false);
 	gd_color3f(show.rgb[0], show.rgb[1], show.rgb[2]);
 	Spot p;
+	if (show.orbit.on && show.orbit.n > 1)
+	{
+		draw_conic(&show.orbit);
+		gd_color3f(show.rgb[0], show.rgb[1], show.rgb[2]);
+	}
 	if (show.cross)
 	{
 		const float ahead[3] = {0, 0, -1};
