@@ -87,6 +87,8 @@ void planet_native_object(uint32_t addr, const float pos[3], const float cols[3]
  * it has not been seen. */
 bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3], float centre[3], float *radius,
 						bool *ahead);
+/* Where the drawn native planet of this radius is (view space), if any */
+bool planet_native_centre(float radius, float centre[3]);
 int planet_native_count(void);
 uint32_t planet_native_object_addr(int i); /* its planet object */
 double planet_native_dist(int i);   /* as drawn (shrunk, native_frame_shrink) */

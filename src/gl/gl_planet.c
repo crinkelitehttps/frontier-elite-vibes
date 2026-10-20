@@ -471,6 +471,20 @@ bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3
 	return false;
 }
 
+bool planet_native_centre(float radius, float centre[3])
+{
+	if (native_mode() != 2)
+		return false;
+	for (int i = 0; i < drawn_planets->n; i++)
+		if (fabsf(drawn_planets->p[i].radius - radius) <= radius * 1e-3f)
+		{
+			for (int k = 0; k < 3; k++)
+				centre[k] = (float)drawn_planets->p[i].pos[k];
+			return true;
+		}
+	return false;
+}
+
 uint32_t planet_native_object_addr(int i)
 {
 	return drawn_planets->p[i].obj;

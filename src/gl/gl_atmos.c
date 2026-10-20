@@ -74,6 +74,7 @@
 #define PIVOT_MAX    3072.0f  /* furthest the game puts its pivot, view pixels */
 #define BANDS_MAX    256      /* a frame's, all passes */
 #define PLANETS_MAX  16
+#define HELD_FRAMES  120 /* publishes bands are kept for, as gl_planet.c's NATIVE_REMEMBER */
 
 
 /* This frame's bands in 3D (cockpit only). Not every pass the game draws
@@ -99,19 +100,20 @@ typedef struct
 typedef struct
 {
 	int n_bands, n_planets, arena_used;
+	bool held; /* the bands of an earlier frame: only while their planet is drawn */
 	AtmosBand bands[BANDS_MAX];
 	AtmosPlanet planets[PLANETS_MAX];
 	int16_t arena[ARENA_WORDS];
 } AtmosBuf;
 
 static AtmosBuf rec, pub, show;
-static int first_pending;
+static int first_pending, planet_puts;
 static float scale_so_far = 1.0f;
 
 void soft_nodes_reset(void)
 {
 	rec.arena_used = 0;
-	rec.n_bands = first_pending = rec.n_planets = 0;
+	rec.n_bands = first_pending = rec.n_planets = planet_puts = 0;
 	scale_so_far = 1.0f;
 }
 
@@ -120,6 +122,7 @@ static void copy_atmos(AtmosBuf *dst, const AtmosBuf *src)
 	dst->n_bands = src->n_bands;
 	dst->n_planets = src->n_planets;
 	dst->arena_used = src->arena_used;
+	dst->held = src->held;
 	memcpy(dst->bands, src->bands, sizeof(AtmosBand) * (size_t)src->n_bands);
 	memcpy(dst->planets, src->planets, sizeof(AtmosPlanet) * (size_t)src->n_planets);
 	memcpy(dst->arena, src->arena, sizeof(int16_t) * (size_t)src->arena_used);
@@ -127,6 +130,28 @@ static void copy_atmos(AtmosBuf *dst, const AtmosBuf *src)
 
 void atmos_publish(void)
 {
+	/* The game makes the haze only in a frame whose planet routine runs
+	 * with the planet's horizon in view; a capture pass towards it comes
+	 * every few frames, the others make no planet at all (the planet itself
+	 * stands in, gl_planet.c). Those keep the last frame's bands, which are
+	 * drawn round the planet's current place (draw_bands). A frame whose
+	 * planet routine ran without making any has none. */
+	static AtmosBuf held;
+	static int held_age = HELD_FRAMES;
+	if (rec.n_bands > 0)
+	{
+		copy_atmos(&held, &rec);
+		held_age = 0;
+	}
+	else if (planet_puts == 0 && held_age < HELD_FRAMES)
+	{
+		held_age++;
+		copy_atmos(&pub, &held);
+		pub.held = true;
+		return;
+	}
+	else
+		held_age = HELD_FRAMES;
 	copy_atmos(&pub, &rec);
 }
 
@@ -160,6 +185,7 @@ void Nu_AtmosBand(void)
 
 void atmos_place_bands(const float centre[3], float radius)
 {
+	planet_puts++;
 	if (first_pending < rec.n_bands && radius > 0.0f)
 	{
 		/* the same planet seen by an earlier pass has the same radius */
@@ -211,16 +237,22 @@ static void draw_bands(void)
 			continue;
 		const AtmosPlanet *p = &show.planets[b->planet];
 		double c[3] = {p->centre[0], p->centre[1], p->centre[2]};
+		float now[3];
+		if (planet_native_centre(p->radius, now))
+			c[0] = now[0], c[1] = now[1], c[2] = now[2];
+		else if (show.held)
+			continue;
 		double dist = sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
 		if (dist <= 0.0)
 			continue;
 		double a = asin(fmin((double)p->radius / dist, 1.0));
 		double s = sin(a), k = PIVOT_MAX / f * s * s;
+		float c_f[3] = {(float)c[0], (float)c[1], (float)c[2]};
 		double outer = a + (b->outer - 1.0) * k;
 		/* the first band reaches in to the planet's edge: no inner edge, the
 		 * planet is drawn over it */
 		double inner = b->inner > 1.0f ? a + (b->inner - 1.0) * k : 0.0;
-		planet_draw_shell(p->centre, outer >= GLM_PI ? -2.0f : (float)cos(outer),
+		planet_draw_shell(c_f, outer >= GLM_PI ? -2.0f : (float)cos(outer),
 						  inner > 0.0 ? (float)cos(inner) : 2.0f, b->rgb);
 	}
 }
