@@ -41493,6 +41493,7 @@ L6287c:
 * Sub-steps. Hook, same size. See Lpos_player at the end of the file.
 		jmp	Lpos_player
 		nop
+		nop
 
 L62886:
 		bsr.s	L6287c
