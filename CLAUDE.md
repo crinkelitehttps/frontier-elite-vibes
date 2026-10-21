@@ -49,7 +49,13 @@ Rules (the header of `fe2/fe2_modded.s` has the full version):
 - **Input/devices**: `input.c` (mouse/keys, laser pointer latch), `gamepad.c` (`gamepad.cfg` bindings; VR controllers act as a virtual Xbox pad), `headtrack.c` (OpenTrack UDP 4242), `vr.cpp` (OpenXR; Windows via D3D11 interop), `gl_laser.c`, `strafe.c`, `settings.c` (`glfrontier.cfg`).
 - **Other**: ImGui menu, cheats, mods registry (`src/mods.c`), galaxy atlas (`src/galaxy`, `tools/fe2GalaxyViewer`), ship builder (`tools/fe2ShipBuilder`), Android/web builds (`tools/androidBuild`, `tools/build-fe2-web.bat`).
 
+Read first for reverse-engineering questions: `fe2/NOTES.md` (known game variables) and `docs/original-game-fixes.md` (past fixes with symptom, cause and replaced instructions).
+
 Key RE facts: object loop `L44480`, `L390f2` projects one object (shrinks far objects by 2^e, so raw `|pos|` is not true distance), `L39426` draws game-data objects (hangar, galaxy map via `gamedata2`). Model id at obj+90 is a byte offset (index = /2; sky = model 88). Known game variables: `fe2/NOTES.md`.
+
+## Stale and absent docs
+
+`../readme.txt` (2006) and `../TODO.txt` (early GL-renderer notes) are old; don't treat them as current. There are no `.cursor`, Copilot, Codex or Gemini config files in this repo, so nothing to import.
 
 ## Shared folder (`~/projects/shared`)
 
