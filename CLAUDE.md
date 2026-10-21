@@ -30,6 +30,8 @@ Release packaging (play-folder scripts): `../build-windows.sh` / `../package-win
 2. Edit `fe2/fe2.s` (original) and/or `fe2/fe2_modded.s`.
 3. `python3 tools/build_fe2.py --variant all --as68k <path>` (set `TMPDIR` to a dir on the repo's filesystem) regenerates `fe2*.s.c`, `fe2*_bin.h`, `fe2*_labels.h`.
 
+Fixes to bugs in the original game are listed in `docs/original-game-fixes.md` (symptom, cause, replaced instructions, fix); add a new entry whenever you fix one.
+
 Rules (the header of `fe2/fe2_modded.s` has the full version):
 - Nothing in the middle of the file may change size — saves and host code hold addresses. Patch with same-size `jmp`/`jsr` hooks padded with `nop`, put new code/data at the **end** of the file. After assembling, `fe2*_labels.h` must only gain new `L*` lines; also diff local label addresses in `fe2*.s.c` against HEAD.
 - `bra.w` can't reach the end of the file; use `jmp`.
