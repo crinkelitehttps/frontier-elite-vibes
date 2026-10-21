@@ -477,6 +477,33 @@ static void draw_pans(void)
 static bool page_phone; /* the picture is the station's services': the phone icon on it */
 static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
 
+/* Over the caption (the buttons show the view): its rows are the stripes
+ * left of it, then a frame and the word, lit while the orbit is shown */
+static void draw_orbit_button(void)
+{
+	const unsigned int back = orbit_display ? 0xff006090 : 0xff302820, edge = 0xffa0a0a0, text = 0xffffffff; /* ABGR */
+	for (int y = ORBIT_BTN_Y0 - 1; y <= ORBIT_BTN_Y1 + 1; y++)
+		for (int x = ORBIT_BTN_X0 - 2; x <= 316; x++)
+			framebuf[y * SCR_W + x] = framebuf[y * SCR_W + ORBIT_BTN_X0 - 3];
+	for (int y = ORBIT_BTN_Y0; y <= ORBIT_BTN_Y1; y++)
+		for (int x = ORBIT_BTN_X0; x <= ORBIT_BTN_X1; x++)
+			framebuf[y * SCR_W + x] =
+				(x == ORBIT_BTN_X0 || x == ORBIT_BTN_X1 || y == ORBIT_BTN_Y0 || y == ORBIT_BTN_Y1) ? edge : back;
+	const char *word = "ORBIT";
+	int x = ORBIT_BTN_X0 + 7;
+	for (const char *c = word; *c; c++)
+	{
+		const unsigned char *g = screen_text_glyph(*c);
+		if (!g)
+			continue;
+		for (int row = 0; row < 7; row++)
+			for (int bit = 0; bit < 8; bit++)
+				if (g[row] & (0x80 >> bit))
+					framebuf[(ORBIT_BTN_Y0 + 1 + row) * SCR_W + x + bit] = text;
+		x += g[9];
+	}
+}
+
 void gl_screen_upload(void)
 {
 	const uint8_t *src = scr_show.screen;
@@ -505,6 +532,11 @@ void gl_screen_upload(void)
 						framebuf[(b[i].dy + y) * SCR_W + b[i].dx + x] = px;
 				}
 	}
+	/* the flight panel: the view's name gives way to the ORBIT button */
+	bool orbit_btn = scr_show.cockpit && !scr_show.sub;
+	hud_orbit_button_show(orbit_btn);
+	if (orbit_btn)
+		draw_orbit_button();
 	MapButton ph;
 	if (page_phone && mapscreen_phone(&ph))
 		for (int y = 0; y < ph.h; y++)

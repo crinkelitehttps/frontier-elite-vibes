@@ -58,6 +58,15 @@ extern bool own_hud;
 /* The orbit display: the conic and Ap / Pe / time to the next apsis (R3) */
 extern bool orbit_display;
 
+/* The flight panel's ORBIT button (screen pixels, where the view's name was):
+ * shown while the panel is, a press on it toggles orbit_display */
+#define ORBIT_BTN_X0 264
+#define ORBIT_BTN_Y0 178
+#define ORBIT_BTN_X1 314
+#define ORBIT_BTN_Y1 186
+void hud_orbit_button_show(bool on);
+bool hud_orbit_button_press(int x, int y); /* true: it was the button's */
+
 /* The orbit's conic round the ship's parent in the parent's frame (position
  * units, 2^32 to the game's altitude unit): points are
  * p / (1 + e cos nu) * (cos nu * pe + sin nu * q), the ship at nu0 */
