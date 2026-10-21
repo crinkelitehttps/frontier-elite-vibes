@@ -23,6 +23,21 @@
 bool own_hud = true;
 bool orbit_display = false;
 
+static volatile bool orbit_button_on;
+
+void hud_orbit_button_show(bool on)
+{
+	orbit_button_on = on;
+}
+
+bool hud_orbit_button_press(int x, int y)
+{
+	if (!orbit_button_on || x < ORBIT_BTN_X0 || x > ORBIT_BTN_X1 || y < ORBIT_BTN_Y0 || y > ORBIT_BTN_Y1)
+		return false;
+	orbit_display = !orbit_display;
+	return true;
+}
+
 #define HUD_COLOUR   0x3c   /* the game's colour for both (L63d4e, L63d76) */
 #define VEL_MIN      10     /* velocity units (about 0.095 m/s each): 1 m/s */
 #define DIST         1000.0f
@@ -474,6 +489,22 @@ static bool orbit_calc(unsigned int ship, HudOrbit *o)
 		double ticks = (o->to_pe ? 2 * GLM_PI - m : GLM_PI - m) / sqrt(mu / (a * a * a));
 		o->tap = (float)(ticks * (dt / TICK_DT) / 50.0);
 		o->has_tap = true;
+	}
+	else if (!o->bound && e > 1 && r[0] * u[0] + r[1] * u[1] + r[2] * u[2] < 0)
+	{
+		/* open orbit, still inbound: time to the periapsis from the hyperbolic mean anomaly */
+		double nu = -acos(fmax(-1.0, fmin(1.0, (ev[0] * r[0] + ev[1] * r[1] + ev[2] * r[2]) / (e * rr))));
+		double a = mu / (2 * energy); /* |semi-major axis| */
+		double th = sqrt((e - 1) / (e + 1)) * tan(nu / 2);
+		if (fabs(th) < 1)
+		{
+			double hh_ = 2 * atanh(th);
+			double m = e * sinh(hh_) - hh_; /* < 0 before the periapsis */
+			double ticks = -m / sqrt(mu / (a * a * a));
+			o->tap = (float)(ticks * (dt / TICK_DT) / 50.0);
+			o->to_pe = true;
+			o->has_tap = true;
+		}
 	}
 	conic_calc(ship, o, r, h, hh, ev, e, mu, rp, radius);
 	return true;
