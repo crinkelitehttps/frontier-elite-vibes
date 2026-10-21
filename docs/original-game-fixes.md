@@ -10,7 +10,8 @@ Addresses are routine labels from `fe2/fe2.s` (the original game code,
 disassembled), not file offsets. Object fields are offsets into the 3D object
 struct (`a0`/`a1`); `a6` is the game's global block. Every fix is a same-size
 `jsr`/`jmp` hook with the new code appended at the end of the code, so nothing
-in the middle moves. A binary patch needs room for that code (the game's code
+in the middle moves. `tools/atari_patch/patch_atari.py` applies the fixes to the Atari ST executable
+(the new code goes after the end of the text; no cave needed). A binary patch needs room for that code (the game's code
 ends at the end of `fe2.s`; the new routines are `Lgrav_norm`, `Lgrav_mass`,
 `Lcool_dec`, `Lprox_log`, `Lframe_cand`) or a code cave. All fixes are in both
 `fe2/fe2.s` and `fe2/fe2_modded.s`. The `hcall` in `Lprox_log` is a
