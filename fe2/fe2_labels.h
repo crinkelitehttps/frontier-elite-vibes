@@ -401,5 +401,6 @@
 #define FE2_Lgrav_mass                               0xa94be /* Lgrav_mass */
 #define FE2_Lcool_dec                                0xa94c8 /* Lcool_dec */
 #define FE2_Lprox_log                                0xa94de /* Lprox_log */
+#define FE2_Lframe_cand                              0xa9500 /* Lframe_cand */
 
 #endif /* FE2_LABELS_H */

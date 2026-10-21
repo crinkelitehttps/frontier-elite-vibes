@@ -12971,7 +12971,6 @@ extern void __F38834 ();
 extern void __F38838 ();
 extern void __F3883a ();
 extern void __F3883e ();
-extern void __F38844 ();
 extern void __F3884e ();
 extern void __F38856 ();
 extern void __F3885a ();
@@ -24911,6 +24910,14 @@ extern void __F835f4 ();
 extern void __F835fc ();
 extern void __F83608 ();
 extern void __F8360a ();
+extern void __F83612 ();
+extern void __F83618 ();
+extern void __F8361e ();
+extern void __F8362a ();
+extern void __F83632 ();
+extern void __F83636 ();
+extern void __F8363c ();
+extern void __F8363e ();
 #endif /* PART1 */
 #define __DL22_PlayEffect (0x22)
 #define __DL54_StopMusic (0x28)
@@ -28276,6 +28283,7 @@ extern void __F8360a ();
 #define __D3882c (0x3882c)
 #define __Dl44148 (0x3883c)
 #define __Dl4414a (0x3883e)
+#define __D38844 (0x38844)
 #define __D38852 (0x38852)
 #define __D38864 (0x38864)
 #define __Dl44188 (0x3887c)
@@ -34743,6 +34751,11 @@ extern void __F8360a ();
 #define __Dlcool_ok (0x835e4)
 #define __DLprox_log (0x835ea)
 #define __Dlprox_ok (0x83608)
+#define __DLframe_cand (0x8360c)
+#define __D83624 (0x83624)
+#define __Dlframe_cand_ret (0x83636)
+#define __Dlframe_cand_no2 (0x83638)
+#define __Dlframe_cand_no (0x8363c)
 #ifdef PART2
 void __F36 ()
 {
@@ -158084,16 +158097,10 @@ void __F3883e ()
 {
 	s32 val = 114;
 	Regs[0]._s32 = val;
+	nZ = val;
 	N = val < 0;
 	V = 0;
 	C = 0;
-}
-void __F38844 ()
-{
-	u8 src = 4;
-	u8 dest = rdbyte(Regs[12]._s32+((s16)Regs[0]._s32)+0);
-	src &= 7;
-	nZ = !(1 ^ ((dest >> src) & 1));
 }
 void __F3884e ()
 {
@@ -269631,6 +269638,84 @@ void __F8360a ()
 	N = (flgn != 0);
 	nZ = val;
 }
+void __F83612 ()
+{
+	u8 src = 4;
+	u8 dest = rdbyte(Regs[12]._s32+((s16)Regs[0]._s32)+0);
+	src &= 7;
+	nZ = !(1 ^ ((dest >> src) & 1));
+}
+void __F83618 ()
+{
+	nZ = rdbyte(Regs[12]._s32+((s16)Regs[0]._s32)+0);
+	N = nZ < 0;
+	V = 0;
+	C = 0;
+}
+void __F8361e ()
+{
+	s32 dest = (Regs[15]._s32-4);
+	wrlong (dest, Regs[9]._u32);
+	dest -= 4;
+	wrlong (dest, Regs[0]._u32);
+	dest -= 4;
+	Regs[15]._s32 -= 8;
+}
+void __F8362a ()
+{
+	s32 dest = rdbyte(Regs[9]._s32+94);
+
+	s32 src = 1;
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F83632 ()
+{
+	u8 src = 4;
+	u8 dest = rdbyte(Regs[9]._s32+280);
+	src &= 7;
+	nZ = !(1 ^ ((dest >> src) & 1));
+}
+void __F83636 ()
+{
+	s32 src = (Regs[15]._s32);
+	Regs[0]._s32 = rdlong (src);
+	src += 4;
+	Regs[9]._s32 = rdlong (src);
+	src += 4;
+	Regs[15]._s32 += 8;
+}
+void __F8363c ()
+{
+	s32 src = (Regs[15]._s32);
+	Regs[0]._s32 = rdlong (src);
+	src += 4;
+	Regs[9]._s32 = rdlong (src);
+	src += 4;
+	Regs[15]._s32 += 8;
+}
+void __F8363e ()
+{
+	s32 dest = Regs[0]._s8;
+
+	s32 src = Regs[0]._s8;
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
 #endif /* PART2 */
 #ifdef PART1
 void Init680x0 () {
@@ -365499,7 +365584,12 @@ __Nl4414a:
 	#ifdef M68K_DEBUG
 		line_no = 26184;
 	#endif
-	__F38844 ();
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D38844);
+	{
+		goto __NLframe_cand;
+	}
+	case (0x38844):
 	#ifdef M68K_DEBUG
 		line_no = 26185;
 	#endif
@@ -481677,6 +481767,100 @@ __Nlprox_ok:
 	__F8360a ();
 	#ifdef M68K_DEBUG
 		line_no = 67175;
+	#endif
+	jdest = rdlong (Regs[15]._u32);
+	Regs[15]._s32 += 4;
+	goto jumptable;
+__NLframe_cand:
+	case (0x8360c):
+	#ifdef M68K_DEBUG
+		line_no = 67183;
+	#endif
+	__F83612 ();
+	#ifdef M68K_DEBUG
+		line_no = 67184;
+	#endif
+	if (nZ)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlframe_cand_ret;
+		goto handle_exception;
+	} else {
+		goto __Nlframe_cand_ret;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67185;
+	#endif
+	__F83618 ();
+	#ifdef M68K_DEBUG
+		line_no = 67186;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlframe_cand_no;
+		goto handle_exception;
+	} else {
+		goto __Nlframe_cand_no;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67187;
+	#endif
+	__F8361e ();
+	#ifdef M68K_DEBUG
+		line_no = 67188;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D83624);
+	{
+		goto __NL44af8;
+	}
+	case (0x83624):
+	#ifdef M68K_DEBUG
+		line_no = 67189;
+	#endif
+	__F8362a ();
+	#ifdef M68K_DEBUG
+		line_no = 67190;
+	#endif
+	if (nZ)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlframe_cand_no2;
+		goto handle_exception;
+	} else {
+		goto __Nlframe_cand_no2;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67191;
+	#endif
+	__F83632 ();
+	#ifdef M68K_DEBUG
+		line_no = 67192;
+	#endif
+	__F83636 ();
+__Nlframe_cand_ret:
+	case (0x83636):
+	#ifdef M68K_DEBUG
+		line_no = 67193;
+	#endif
+	jdest = rdlong (Regs[15]._u32);
+	Regs[15]._s32 += 4;
+	goto jumptable;
+__Nlframe_cand_no2:
+	case (0x83638):
+	#ifdef M68K_DEBUG
+		line_no = 67194;
+	#endif
+	__F8363c ();
+__Nlframe_cand_no:
+	case (0x8363c):
+	#ifdef M68K_DEBUG
+		line_no = 67195;
+	#endif
+	__F8363e ();
+	#ifdef M68K_DEBUG
+		line_no = 67196;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;

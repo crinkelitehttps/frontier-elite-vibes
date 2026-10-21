@@ -353,6 +353,7 @@
 #define FE2_Lgrav_mass                               0x835ca /* Lgrav_mass */
 #define FE2_Lcool_dec                                0x835d4 /* Lcool_dec */
 #define FE2_Lprox_log                                0x835ea /* Lprox_log */
+#define FE2_Lframe_cand                              0x8360c /* Lframe_cand */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

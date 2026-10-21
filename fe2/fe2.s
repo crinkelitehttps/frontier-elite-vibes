@@ -26181,7 +26181,7 @@ L440fe:
 		cmp.w	(a7),d7
 		ble.s	l441ba
 	l44148:	moveq	#114,d0
-	l4414a:	btst	#$4,0(a4,d0.w)
+	l4414a:	jsr	Lframe_cand
 		dbne	d0,l4414a
 		beq.w	l441aa
 		move.w	d0,-(a7)
@@ -67172,4 +67172,25 @@ Lprox_log:
 		hcall	#Call_ProxLog
 		move.l	#$3fffffff,d0
 	lprox_ok:	cmp.l	d5,d0
+		rts
+
+
+* Frame candidate test of L440fe's loop (replaces its btst #4,0(a4,d0.w), same
+* size). Z clear = candidate. Besides objects flagged bit 4, a starport body
+* (type 1, bit 4 of 280) is one too: the comms action L76990 and saved games
+* leave a station flagged $4f, which kept the HUD relative to the planet.
+Lframe_cand:
+		btst	#$4,0(a4,d0.w)
+		bne.s	lframe_cand_ret
+		tst.b	0(a4,d0.w)
+		beq.s	lframe_cand_no
+		movem.l	d0/a1,-(a7)
+		jsr	L44af8
+		cmpi.b	#$1,94(a1)
+		bne.s	lframe_cand_no2
+		btst	#$4,280(a1)
+		movem.l	(a7)+,d0/a1
+	lframe_cand_ret:	rts
+	lframe_cand_no2:	movem.l	(a7)+,d0/a1
+	lframe_cand_no:	cmp.b	d0,d0
 		rts
