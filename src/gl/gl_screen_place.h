@@ -77,6 +77,27 @@ void screen_place_reset(void);
  * carried, keeping its height / width */
 void screen_place_corners(int screen, float c[4][3]);
 
+/* Screen widths (m) it can be sized to */
+#define PLACE_WIDTH_MIN 0.08f
+#define PLACE_WIDTH_MAX 2.0f
+
+/* A screen's pose in the cockpit's view space (m): centre, unit axes (x
+ * right, y up, z towards the eye), width, and height / width */
+typedef struct
+{
+	float o[3], x[3], y[3], z[3];
+	float w, aspect;
+} ScreenPose;
+
+/* Drawing thread: where screen `s` is shown now; false if it isn't */
+bool screen_place_shown(int s, ScreenPose *p);
+
+/* Drawing thread (the flat-mode editor, gl_screen_edit.h): puts screen `s`
+ * at `p`. Not final: only shown there (the setting isn't touched, so a
+ * drag doesn't rewrite glfrontier.cfg each frame); final: kept. NULL
+ * drops a preview. */
+void screen_place_edit(int s, const ScreenPose *p, bool final);
+
 /* Drawing thread, per headset frame: grabs, carries and lets go, and turns
  * the maps. `cockpit`: the cockpit is drawn per eye. Clears the squeeze /
  * trigger of controls the screens have taken; held[i]: hand i holds a

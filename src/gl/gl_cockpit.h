@@ -118,6 +118,9 @@ bool cockpit_game_frame(void);
  * and the pixel of its page (0..319, 0..199) a window pixel / a ray (the play
  * frame, as cockpit_ray_to_screen) is on; false if not on one or none is up */
 bool cockpit_window_to_side(int wx, int wy, int *group, int *px, int *py);
+/* The ray (view space: origin the eye, direction not unit) through window
+ * pixel (wx, wy), as last drawn; false when the cockpit isn't shown */
+bool cockpit_pixel_ray(int wx, int wy, float o[3], float d[3]);
 bool cockpit_ray_to_side(const float origin[3], const float dir[3], int *group, int *px, int *py, float *dist);
 bool cockpit_screen_frame(void);
 /* Whether the cockpit's screens are in use at all (the group a game

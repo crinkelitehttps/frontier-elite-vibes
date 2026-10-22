@@ -17,6 +17,7 @@
 #include "hostcall.h"
 #include "input.h"
 #include "gl/gl_mapscreen.h"
+#include "gl/gl_screen_edit.h"
 #include "keymap.h"
 #include "manual.h"
 #include "custom_ships.h"
@@ -246,6 +247,8 @@ void Main_EventHandler(void)
 		/* ImGui wants window units; everything below lays out in pixels */
 		Screen_MouseToPixels(&event);
 		if (clipboard_event(&event))
+			continue;
+		if (screen_edit_event(&event))
 			continue;
 		if (freecam_handle_event(&event))
 			continue;

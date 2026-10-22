@@ -26,6 +26,7 @@
 #include "gl_draw.h"
 #include "gl_fill2d.h"
 #include "gl_hands.h"
+#include "gl_screen_edit.h"
 #include "gl_screen_place.h"
 #include "gl_laser.h"
 #include "gl_scene.h"
@@ -587,6 +588,7 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 		eye[2] = pose.z / 100.0f;
 	}
 
+	screen_edit_update(cockpit, eye);
 	build_panel();
 	build_planes();
 	publish_view();
@@ -924,6 +926,8 @@ void cockpit_draw(void)
 	if (cam_on)
 		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
 	gd_pop();
+
+	screen_edit_queue(&cp, eye);
 
 	/* the clipboard (gl_clipboard.h), nearer than the panel */
 	clipboard_queue_cockpit(&cp, eye);
@@ -1481,6 +1485,21 @@ bool cockpit_window_to_screen(int wx, int wy, int *sx, int *sy)
 	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f}, d[3], dist;
 	eye_to_view_of(&sv.head_view, e, d);
 	return ray_to_screen(sv.eye, d, sv.cam_on, sx, sy, &dist);
+}
+
+bool cockpit_pixel_ray(int wx, int wy, float o[3], float d[3])
+{
+	SharedView sv;
+	get_shared(&sv);
+	if (!sv.active || screen_w <= 0 || screen_h <= 0)
+		return false;
+	float t = tanf((float)cockpit_fov * GLM_PI / 360.0f);
+	float nx = 2.0f * ((float)wx + 0.5f) / (float)screen_w - 1.0f;
+	float ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)screen_h;
+	float e[3] = {nx * sv.aspect * t, ny * t, -1.0f};
+	eye_to_view_of(&sv.head_view, e, d);
+	memcpy(o, sv.eye, sizeof sv.eye);
+	return true;
 }
 
 bool cockpit_window_to_side(int wx, int wy, int *group, int *px, int *py)

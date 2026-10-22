@@ -28,8 +28,8 @@ ScreenPlace screen_place[PLACE_COUNT];
 /* Mouse motion per metre the hand moves across the map's screen */
 #define ROTATE_GAIN 1000.0f
 /* Screen widths (m) the two hands can size it to */
-#define WIDTH_MIN 0.08f
-#define WIDTH_MAX 2.0f
+#define WIDTH_MIN PLACE_WIDTH_MIN
+#define WIDTH_MAX PLACE_WIDTH_MAX
 /* The trigger goes down above this, up below the lower (as gl_laser.c) */
 #define TRIGGER_DOWN 0.6f
 #define TRIGGER_UP   0.35f
@@ -189,6 +189,9 @@ float aspect[PLACE_COUNT] = {0.63f, 0.63f, 0.63f, 0.63f};
 int grip_owner[2] = {-1, -1}; /* the screen hand i's grip holds */
 bool grip_was[2];
 std::atomic<bool> reset_wanted{false};
+/* A screen being edited with the mouse (gl_screen_edit.cpp) */
+Pose preview[PLACE_COUNT];
+bool previewing[PLACE_COUNT];
 
 /* The map turning */
 bool trigger_was;
@@ -369,6 +372,8 @@ void screen_place_corners(int screen, float c[4][3])
 	{
 		for (Carry &k : carry)
 			k.by[0] = k.by[1] = false;
+		for (bool &b : previewing)
+			b = false;
 		grip_owner[0] = grip_owner[1] = -1;
 		for (ScreenPlace &s : screen_place)
 			s.on = 0;
@@ -376,8 +381,38 @@ void screen_place_corners(int screen, float c[4][3])
 	pose_of(c, &aspect[screen]);
 	if (holders(carry[screen]))
 		corners_of(carry[screen].cur, aspect[screen], c);
+	else if (previewing[screen])
+		corners_of(preview[screen], aspect[screen], c);
 	else if (screen_place[screen].on)
 		corners_of(pose_from_place(screen_place[screen]), aspect[screen], c);
+}
+
+bool screen_place_shown(int s, ScreenPose *p)
+{
+	float c[4][3];
+	if (!shown_corners(s, c))
+		return false;
+	const Pose q = pose_of(c, &p->aspect);
+	q.f.o.to(p->o);
+	q.f.x.to(p->x);
+	q.f.y.to(p->y);
+	q.f.z.to(p->z);
+	p->w = q.w;
+	return true;
+}
+
+void screen_place_edit(int s, const ScreenPose *p, bool final)
+{
+	previewing[s] = false;
+	if (!p)
+		return;
+	Pose q;
+	q.f = make_frame(Vec3::of(p->o), Vec3::of(p->x), Vec3::of(p->y));
+	q.w = std::min(std::max(p->w, WIDTH_MIN), WIDTH_MAX);
+	if (final)
+		screen_place[s] = place_from_pose(q);
+	else
+		preview[s] = q, previewing[s] = true;
 }
 
 void screen_place_hands(VrHand hands[2], bool cockpit, int held[2])

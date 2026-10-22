@@ -30,6 +30,7 @@ extern "C"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
+#include "gl/gl_screen_edit.h"
 #include "gl/gl_screen_place.h"
 #include "headtrack.h"
 #include "hostcall.h"
@@ -223,6 +224,9 @@ void page_settings()
 	wrapped_checkbox("Maps, station and ship screens on a screen in the cockpit", &cockpit_screen);
 	wrapped_checkbox("Map screen live in flight", &cockpit_map_live);
 	wrapped_checkbox("Ship screen live in flight", &cockpit_ship_live);
+	ImGui::TextWrapped("Move the cockpit's screens with the mouse: pick one by pointing at it; W move, E turn, R size, Delete puts it back, Esc leaves");
+	if (ui_button(screen_edit_on() ? "Stop editing screens (Ctrl-G)" : "Edit the cockpit screens (Ctrl-G)"))
+		screen_edit_toggle();
 	ImGui::TextWrapped("Field of view (vertical)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##fov", &cockpit_fov, 30, 120, "%d degrees");
