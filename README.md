@@ -122,7 +122,7 @@ On Linux / macOS: `python3 tools/androidBuild/build_android.py`, same options. P
 
 No Gradle: the script builds the APK with the SDK's own tools (CMake + NDK, javac + d8, aapt2, apksigner). It uses the JDK (17+) and Android SDK it finds (`JAVA_HOME`, `ANDROID_HOME`); anything missing is downloaded once into `%LOCALAPPDATA%\glfrontier-android` (`~/.cache/glfrontier-android` elsewhere, or `GLF_ANDROID_CACHE`), outside the repository. The repository only holds `tools/androidBuild/`: a manifest, an icon, a small activity (forces landscape) and the script.
 
-* `--variant original` builds the unmodded game (`GLFrontier-original.apk`).
+* The APK is the unmodded game, like the desktop releases. `--variant modded` builds the game with this fork's mods (`GLFrontier-modded.apk`); that one currently freezes when a new game starts.
 * `--abi arm64-v8a x86_64` picks the CPUs to include (default arm64-v8a, every current phone; add x86_64 for the emulator). Anything but the default gets the ABIs in its name, e.g. `GLFrontier-x86_64.apk`, so `GLFrontier.apk` is always the one for phones.
 * Game data is compiled into the library, so the APK is all there is; saves go to the app's internal storage.
 * The APK is signed with the debug key (`~/.android/debug.keystore`, or one made in the cache folder).

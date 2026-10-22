@@ -2,7 +2,7 @@
 """
 build_android.py - build GLFrontier as an Android APK, without Gradle.
 
-    python tools/androidBuild/build_android.py [--variant modded|original] [--abi arm64-v8a ...]
+    python tools/androidBuild/build_android.py [--variant original|modded] [--abi arm64-v8a ...]
                                     [--install] [--run] [--clean]
 
 Needs only Python 3 and an internet connection the first time. Everything the
@@ -356,7 +356,7 @@ def package(sdk, jdk, cache, libs, dex, work, apk):
 
 def main():
     ap = argparse.ArgumentParser(description="Build GLFrontier for Android (no Gradle)")
-    ap.add_argument("--variant", choices=["modded", "original"], default="modded")
+    ap.add_argument("--variant", choices=["modded", "original"], default="original")
     ap.add_argument("--abi", nargs="+", default=["arm64-v8a"],
                     choices=["arm64-v8a", "armeabi-v7a", "x86_64", "x86"],
                     help="ABIs to include (default arm64-v8a; add x86_64 for the emulator)")
@@ -391,7 +391,7 @@ def main():
     # GLFrontier.apk is always the phone build (arm64-v8a); any other ABI set
     # is named after its ABIs, e.g. GLFrontier-x86_64.apk for the emulator,
     # so an emulator build never replaces the one that goes on a phone
-    name = "GLFrontier" if modded else "GLFrontier-original"
+    name = "GLFrontier-modded" if modded else "GLFrontier"
     if args.abi != ["arm64-v8a"]:
         name += "-" + "-".join(args.abi)
     apk = OUT_DIR / f"{name}.apk"

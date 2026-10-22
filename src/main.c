@@ -453,6 +453,9 @@ static void sig_handler(int signum)
 	{
 		log_printf("Segfault! All is lost! Abandon ship!\n");
 		Call_DumpDebug();
+		/* returning would re-run the faulting instruction forever */
+		signal(SIGSEGV, SIG_DFL);
+		raise(SIGSEGV);
 	}
 }
 
