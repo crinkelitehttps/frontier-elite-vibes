@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The standalone headset build (build_android.py, quest option): runs in VR on a Meta
+     Quest. A different package from the phone build so both can be installed. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.glfrontier.extended.quest"
+    android:installLocation="auto">
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.type.pc" android:required="false" />
+    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- the OpenXR loader finds the headset's runtime through these -->
+    <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
+    <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+
+    <queries>
+        <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
+        <intent>
+            <action android:name="org.khronos.openxr.OpenXRRuntimeService" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="GLFrontier VR"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:extractNativeLibs="true"
+        android:hardwareAccelerated="true"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <meta-data android:name="com.oculus.supportedDevices" android:value="all" />
+
+        <activity
+            android:name="org.glfrontier.GLFrontierActivity"
+            android:label="GLFrontier VR"
+            android:screenOrientation="landscape"
+            android:alwaysRetainTaskState="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="false"
+            android:configChanges="density|layoutDirection|locale|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
+            android:preferMinimalPostProcessing="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="com.oculus.intent.category.VR" />
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

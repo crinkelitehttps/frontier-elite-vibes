@@ -17,6 +17,14 @@
 #include <dxgi.h>
 #define XR_USE_PLATFORM_WIN32
 #define XR_USE_GRAPHICS_API_D3D11
+#elif defined(ANDROID)
+/* Android (Quest): the runtime shares the EGL context SDL made, with
+ * OpenGL ES swapchains */
+#include <EGL/egl.h>
+#include <SDL.h>
+#include <jni.h>
+#define XR_USE_PLATFORM_ANDROID
+#define XR_USE_GRAPHICS_API_OPENGL_ES
 #else
 #include <X11/Xlib.h>
 #include <GL/glx.h>
@@ -87,6 +95,13 @@ template <class T> void com_release(T *&p)
 }
 #else
 constexpr int64_t kFormatSrgb = 0x8C43 /* GL_SRGB8_ALPHA8 */, kFormatRgba = 0x8058 /* GL_RGBA8 */;
+#ifdef ANDROID
+using SwapchainImage = XrSwapchainImageOpenGLESKHR;
+constexpr XrStructureType kSwapchainImageType = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR;
+#else
+using SwapchainImage = XrSwapchainImageOpenGLKHR;
+constexpr XrStructureType kSwapchainImageType = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
+#endif
 #endif
 
 /* Head positions farther than this from the seat are tracking failures */
@@ -368,7 +383,7 @@ bool Vr::make_swapchain(Swapchain &sc, int64_t format, int w, int h)
 		log_printf("openxr: swapchain framebuffer incomplete\n");
 	return ok;
 #else
-	std::vector<XrSwapchainImageOpenGLKHR> imgs(n, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR});
+	std::vector<SwapchainImage> imgs(n, {kSwapchainImageType});
 	if (!check(instance,
 			   xrEnumerateSwapchainImages(sc.handle, n, &n, reinterpret_cast<XrSwapchainImageBaseHeader *>(imgs.data())),
 			   "xrEnumerateSwapchainImages"))
@@ -734,6 +749,8 @@ bool Vr::init(float resolution_scale)
 {
 #ifdef _WIN32
 	const char *exts[] = {XR_KHR_D3D11_ENABLE_EXTENSION_NAME};
+#elif defined(ANDROID)
+	const char *exts[] = {XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME, XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME};
 #else
 	const char *exts[] = {XR_KHR_OPENGL_ENABLE_EXTENSION_NAME};
 #endif
@@ -744,6 +761,37 @@ bool Vr::init(float resolution_scale)
 	ici.applicationInfo.apiVersion = XR_API_VERSION_1_0;
 	ici.enabledExtensionCount = uint32_t(std::size(exts));
 	ici.enabledExtensionNames = exts;
+#ifdef ANDROID
+	/* The loader needs the VM and the activity before anything else */
+	JNIEnv *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
+	jobject local_activity = static_cast<jobject>(SDL_AndroidGetActivity());
+	JavaVM *jvm = nullptr;
+	if (!env || !local_activity || env->GetJavaVM(&jvm) != JNI_OK)
+	{
+		log_printf("openxr: no Java VM or activity\n");
+		snprintf(status, sizeof status, "No Java VM or activity");
+		return false;
+	}
+	jobject activity = env->NewGlobalRef(local_activity); /* (kept: the runtime may hold on to it) */
+	PFN_xrInitializeLoaderKHR init_loader = nullptr;
+	xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", reinterpret_cast<PFN_xrVoidFunction *>(&init_loader));
+	if (!init_loader)
+	{
+		log_printf("openxr: the loader has no xrInitializeLoaderKHR\n");
+		snprintf(status, sizeof status, "The OpenXR loader has no Android support");
+		return false;
+	}
+	XrLoaderInitInfoAndroidKHR loader_info{XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
+	loader_info.applicationVM = jvm;
+	loader_info.applicationContext = activity;
+	if (!check(nullptr, init_loader(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR *>(&loader_info)),
+			   "xrInitializeLoaderKHR"))
+		return false;
+	XrInstanceCreateInfoAndroidKHR android_info{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
+	android_info.applicationVM = jvm;
+	android_info.applicationActivity = activity;
+	ici.next = &android_info;
+#endif
 	if (!check(nullptr, xrCreateInstance(&ici, &instance), "xrCreateInstance (is an OpenXR runtime installed and active?)"))
 		return false;
 	XrSystemGetInfo sgi{XR_TYPE_SYSTEM_GET_INFO};
@@ -758,6 +806,36 @@ bool Vr::init(float resolution_scale)
 		return false;
 	XrGraphicsBindingD3D11KHR gb{XR_TYPE_GRAPHICS_BINDING_D3D11_KHR};
 	gb.device = device;
+#elif defined(ANDROID)
+	PFN_xrGetOpenGLESGraphicsRequirementsKHR get_reqs = nullptr;
+	xrGetInstanceProcAddr(instance, "xrGetOpenGLESGraphicsRequirementsKHR",
+						  reinterpret_cast<PFN_xrVoidFunction *>(&get_reqs));
+	XrGraphicsRequirementsOpenGLESKHR reqs{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR};
+	if (!get_reqs || !check(instance, get_reqs(instance, system, &reqs), "xrGetOpenGLESGraphicsRequirementsKHR"))
+		return false;
+	log_printf("openxr: OpenGL ES %d.%d to %d.%d wanted\n", XR_VERSION_MAJOR(reqs.minApiVersionSupported),
+			   XR_VERSION_MINOR(reqs.minApiVersionSupported), XR_VERSION_MAJOR(reqs.maxApiVersionSupported),
+			   XR_VERSION_MINOR(reqs.maxApiVersionSupported));
+
+	/* the runtime shares our EGL context */
+	XrGraphicsBindingOpenGLESAndroidKHR gb{XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR};
+	gb.display = eglGetCurrentDisplay();
+	gb.context = eglGetCurrentContext();
+	if (gb.display == EGL_NO_DISPLAY || gb.context == EGL_NO_CONTEXT)
+	{
+		log_printf("openxr: no current EGL context\n");
+		snprintf(status, sizeof status, "No current EGL context");
+		return false;
+	}
+	EGLint config_id = 0, nconfigs = 0;
+	eglQueryContext(gb.display, gb.context, EGL_CONFIG_ID, &config_id);
+	const EGLint config_attrs[] = {EGL_CONFIG_ID, config_id, EGL_NONE};
+	if (!eglChooseConfig(gb.display, config_attrs, &gb.config, 1, &nconfigs) || nconfigs < 1)
+	{
+		log_printf("openxr: cannot find the EGL config of the context\n");
+		snprintf(status, sizeof status, "No EGL config for the context");
+		return false;
+	}
 #else
 	PFN_xrGetOpenGLGraphicsRequirementsKHR get_reqs = nullptr;
 	xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR",

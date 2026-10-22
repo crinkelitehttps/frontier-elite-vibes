@@ -264,8 +264,8 @@ def find_cmake(sdk):
         return cmake / "bin" / f"cmake{EXE}"
     die("CMake 3.22+ not found")
 
-def build_native(sdk, abi, modded, jobs):
-    bdir = OUT_DIR / ("modded" if modded else "original") / abi
+def build_native(sdk, abi, modded, quest, jobs):
+    bdir = OUT_DIR / (("modded" if modded else "original") + ("-quest" if quest else "")) / abi
     ninja = sdk.ninja if sdk.ninja and sdk.ninja.exists() else shutil.which("ninja")
     cmake = find_cmake(sdk)
     log(f"native code: {abi} (NDK {sdk.ndk.name})")
@@ -278,7 +278,8 @@ def build_native(sdk, abi, modded, jobs):
              "-DANDROID_STL=c++_static",
              "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",  # 16 KB pages (Android 15+)
              "-DCMAKE_BUILD_TYPE=Release",
-             f"-DGLF_MODDED_FE2={'ON' if modded else 'OFF'}"])
+             f"-DGLF_MODDED_FE2={'ON' if modded else 'OFF'}",
+             f"-DGLF_QUEST={'ON' if quest else 'OFF'}"])
     run([cmake, "--build", bdir, "--parallel", str(jobs)])
     so = bdir / "libGLFrontier.so"
     if not so.exists():
@@ -324,14 +325,14 @@ def debug_keystore(jdk, cache):
              "-dname", "CN=Android Debug,O=Android,C=US"])
     return ks
 
-def package(sdk, jdk, cache, libs, dex, work, apk):
+def package(sdk, jdk, cache, libs, dex, work, apk, manifest):
     log("packaging the APK")
     aapt2 = sdk.tool("aapt2")
     res_zip = work / "res.zip"
     run([aapt2, "compile", "--dir", ANDROID_DIR / "res", "-o", res_zip])
     unsigned = work / "unsigned.apk"
     run([aapt2, "link", "-o", unsigned, "-I", sdk.platform,
-         "--manifest", ANDROID_DIR / "AndroidManifest.xml",
+         "--manifest", manifest,
          "--min-sdk-version", MIN_SDK, "--target-sdk-version", TARGET_SDK,
          "--version-code", APP_VERSION_CODE, "--version-name", APP_VERSION_NAME, res_zip])
 
@@ -360,6 +361,9 @@ def main():
     ap.add_argument("--abi", nargs="+", default=["arm64-v8a"],
                     choices=["arm64-v8a", "armeabi-v7a", "x86_64", "x86"],
                     help="ABIs to include (default arm64-v8a; add x86_64 for the emulator)")
+    ap.add_argument("--quest", action="store_true",
+                    help="the standalone headset (Meta Quest) build: starts in VR (OpenXR), its own package "
+                         "org.glfrontier.extended.quest, GLFrontier-quest.apk")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--install", action="store_true", help="adb install the APK")
     ap.add_argument("--run", action="store_true", help="install and start it")
@@ -381,21 +385,24 @@ def main():
     libs = {}
     sdl_src = None
     for abi in args.abi:
-        bdir, so = build_native(sdk, abi, modded, args.jobs)
+        bdir, so = build_native(sdk, abi, modded, args.quest, args.jobs)
         libs[abi] = so
         sdl_src = bdir / "_deps" / "sdl2-src"
 
-    work = OUT_DIR / args.variant / "apk"
+    work = OUT_DIR / (args.variant + ("-quest" if args.quest else "")) / "apk"
     work.mkdir(parents=True, exist_ok=True)
     dex = build_dex(sdk, jdk, sdl_src, work)
     # GLFrontier.apk is always the phone build (arm64-v8a); any other ABI set
     # is named after its ABIs, e.g. GLFrontier-x86_64.apk for the emulator,
     # so an emulator build never replaces the one that goes on a phone
     name = "GLFrontier-modded" if modded else "GLFrontier"
+    if args.quest:
+        name += "-quest"
     if args.abi != ["arm64-v8a"]:
         name += "-" + "-".join(args.abi)
     apk = OUT_DIR / f"{name}.apk"
-    package(sdk, jdk, cache, libs, dex, work, apk)
+    manifest = ANDROID_DIR / ("AndroidManifestQuest.xml" if args.quest else "AndroidManifest.xml")
+    package(sdk, jdk, cache, libs, dex, work, apk, manifest)
     log(f"built {apk} ({apk.stat().st_size / (1 << 20):.1f} MB)")
 
     if args.install:

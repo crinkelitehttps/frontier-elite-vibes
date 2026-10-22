@@ -168,7 +168,11 @@ static const struct
 
 static Settings saved;
 static bool loaded;
+#ifdef GLF_QUEST
+int settings_vr_arg = 1; /* the headset build starts in VR (--novr turns it off) */
+#else
 int settings_vr_arg = -1;
+#endif
 static int file_vr; /* the file's "vr", kept while --vr/--novr overrides it */
 
 #ifndef __EMSCRIPTEN__
