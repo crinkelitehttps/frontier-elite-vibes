@@ -53,6 +53,19 @@ void cheat_refuel(void);
 /* Full hull, full shields, nothing damaged */
 void cheat_repair(void);
 
+/* ---- location, within the current system ----
+ * The position is 64 bit and relative to the ship's frame parent (the body the
+ * HUD says "Relative to", normally the planet), in km here. Objects that share the
+ * ship's exact position (its parts) move with it. The game's own frame handling
+ * takes over from there, so a far jump can make it re-pick the frame. A landed or docked ship is
+ * set to manual control. */
+bool cheat_ship_position(double km[3]);
+void cheat_ship_set_position(const double km[3]);
+/* Moves the ship `km` further from (or, negative, nearer to) its frame parent */
+void cheat_ship_move_out(double km);
+/* Zero velocity relative to the frame parent */
+void cheat_ship_stop(void);
+
 /* Shipyard items, in the order of the game's equipment list */
 typedef enum
 {

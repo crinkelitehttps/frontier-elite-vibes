@@ -63,7 +63,7 @@ Reusable assets and feature specs shared with the user's other game ports and VR
 
 ## Save states for bug repro
 
-A commander file is a dump of the game's memory (big space + A6 globals), so any state can be saved, edited and reloaded. Ctrl-S writes `savs/SnapNN` live (`src/state_file.c`, works in flight); `tools/savetool` (`savefile.py` codec, `fe2save.py` info/diff/set/scenario) edits saves offline and builds them from scenario files over base states (`tools/savetool/scenarios/README.md`, `bases/`). Known fields, limits (no system or ship-type change yet) and the object layout are in the docstrings of `fe2save.py` and in that README. Load results with the title menu key 5 or the Preferences load icon.
+A commander file is a dump of the game's memory (big space + A6 globals), so any state can be saved, edited and reloaded. Ctrl-S writes `savs/SnapNN` live (`src/state_file.c`, works in flight); `tools/savetool` (`savefile.py` codec, `fe2save.py` info/diff/set/scenario) edits saves offline and builds them from scenario files over base states (`tools/savetool/scenarios/README.md`, `bases/`). Known fields, limits (no system or ship-type change yet) and the object layout are in the docstrings of `fe2save.py` and in that README. Load results with the title menu key 5 or the Preferences load icon. The cheat menu's ship page has a Location section (`cheat_ship_*` in `cheats.c`): move the ship out/in from the body it is relative to, or to typed km coordinates, within the current system; a landed or docked ship is set to manual control.
 
 ## Testing
 

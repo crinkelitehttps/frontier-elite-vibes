@@ -553,6 +553,59 @@ struct ItemList
 	}
 };
 
+/* Moves the ship within the system: out from or in towards the body it is relative to, or to typed
+ * coordinates (km from that body's centre) */
+void location_cheats()
+{
+	ui_heading("Location");
+	double km[3];
+	if (!cheat_ship_position(km))
+		return;
+	ImGui::TextWrapped("%.1f km from the centre of the body you are relative to", sqrt(km[0] * km[0] + km[1] * km[1] + km[2] * km[2]));
+
+	static const struct
+	{
+		const char *label;
+		double km;
+	} steps[] = {{"+10 km", 10}, {"+100 km", 100}, {"+1,000 km", 1000}, {"+10,000 km", 10000}};
+	float w = ui_row_width(2);
+	for (int i = 0; i < 4; i++)
+	{
+		if (ui_button(steps[i].label, w))
+			cheat_ship_move_out(steps[i].km);
+		if (i % 2 == 0)
+			ImGui::SameLine();
+	}
+	for (int i = 0; i < 4; i++)
+	{
+		char label[24];
+		snprintf(label, sizeof(label), "-%s", steps[i].label + 1);
+		if (ui_button(label, w))
+			cheat_ship_move_out(-steps[i].km);
+		if (i % 2 == 0)
+			ImGui::SameLine();
+	}
+	if (ui_button("Stop (zero velocity)"))
+		cheat_ship_stop();
+
+	/* typed coordinates: applied with the button, so half-typed values never move the ship */
+	static float typed[3];
+	static bool filled = false;
+	if (ui_button("Fill with current position") || !filled)
+	{
+		for (int a = 0; a < 3; a++)
+			typed[a] = (float)km[a];
+		filled = true;
+	}
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::InputFloat3("##kmpos", typed, "%.1f");
+	if (ui_button("Move to these x, y, z (km)"))
+	{
+		double to[3] = {typed[0], typed[1], typed[2]};
+		cheat_ship_set_position(to);
+	}
+}
+
 void ship_cheats()
 {
 	if (!cheat_have_ship())
@@ -569,6 +622,8 @@ void ship_cheats()
 		cheat_repair();
 	wrapped_checkbox("Ignore cargo space", &cheat_ignore_space);
 	ImGui::TextWrapped("%dt cargo space free", cheat_cargo_free());
+
+	location_cheats();
 
 	ui_heading("Drive");
 	static const ItemList drives(EQUIP_DRIVE, false);

@@ -4,6 +4,8 @@
  * Offsets are into the game's globals (A6, see game_state.h) or the player's
  * ship object; the fe2/fe2_modded.s code each one comes from is noted next to it.
  */
+#include <math.h>
+
 #include "cheats.h"
 #include "game_state.h"
 #include "host.h" /* rdbyte, wrbyte, ... */
@@ -290,6 +292,97 @@ static u32 ship(void)
 bool cheat_have_ship(void)
 {
 	return ship() != 0;
+}
+
+/* Object position: low longs at +44, high longs at +56 (mm, 2^32 mm per high
+ * unit), relative to the frame parent. Velocity: three longs at +98. */
+#define OBJ_POS_LO 44
+#define OBJ_POS_HI 56
+#define OBJ_VEL    98
+#define MM_PER_KM  1e6
+#define OBJECT_SLOTS 115
+
+typedef long long pos64;
+
+static pos64 obj_pos(u32 obj, int axis)
+{
+	return ((pos64)rdlong(obj + OBJ_POS_HI + 4 * axis) << 32) | (u32)rdlong(obj + OBJ_POS_LO + 4 * axis);
+}
+
+static void obj_set_pos(u32 obj, int axis, pos64 v)
+{
+	wrlong(obj + OBJ_POS_LO + 4 * axis, (int)(u32)(v & 0xffffffff));
+	wrlong(obj + OBJ_POS_HI + 4 * axis, (int)(v >> 32));
+}
+
+/* Object slot i: the flag bytes are the first 115 bytes of the big space, slot 0 is 96 bytes
+ * at $74 and the others 286 bytes from $d4 (L44b02) */
+static u32 slot_object(int i)
+{
+	return FE2_big_space + (i == 0 ? 0x74 : 0xd4 + 286 * (i - 1));
+}
+
+/* Applies `fn` to the position of the ship and of every object at the same spot */
+static void move_ship(const pos64 to[3])
+{
+	u32 me = ship();
+	/* a ship that is landed or docked stays so until told otherwise: hand it back to manual control */
+	FlightStatus fs = game_flight_status();
+	if (fs == FLIGHT_LANDED || fs == FLIGHT_LANDED_ROUGH || fs == FLIGHT_DOCKED)
+		wrbyte(a6(A6_FLIGHT_STATE), 0);
+	pos64 old[3] = {obj_pos(me, 0), obj_pos(me, 1), obj_pos(me, 2)};
+	for (int i = 0; i < OBJECT_SLOTS; i++)
+	{
+		u32 o = slot_object(i);
+		if (o != me && (!rdbyte(FE2_big_space + i) || obj_pos(o, 0) != old[0] || obj_pos(o, 1) != old[1] ||
+						obj_pos(o, 2) != old[2]))
+			continue;
+		for (int a = 0; a < 3; a++)
+			obj_set_pos(o, a, to[a]);
+	}
+}
+
+bool cheat_ship_position(double km[3])
+{
+	if (!ship())
+		return false;
+	for (int a = 0; a < 3; a++)
+		km[a] = (double)obj_pos(ship(), a) / MM_PER_KM;
+	return true;
+}
+
+void cheat_ship_set_position(const double km[3])
+{
+	if (!ship())
+		return;
+	pos64 to[3];
+	for (int a = 0; a < 3; a++)
+		to[a] = (pos64)(km[a] * MM_PER_KM);
+	move_ship(to);
+}
+
+void cheat_ship_move_out(double km)
+{
+	double p[3];
+	if (!cheat_ship_position(p))
+		return;
+	double r = sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+	if (r < 1.0)
+		return;
+	double scale = (r + km) / r;
+	if (scale < 0.0)
+		scale = 0.0;
+	for (int a = 0; a < 3; a++)
+		p[a] *= scale;
+	cheat_ship_set_position(p);
+}
+
+void cheat_ship_stop(void)
+{
+	if (!ship())
+		return;
+	for (int a = 0; a < 3; a++)
+		wrlong(ship() + OBJ_VEL + 4 * a, 0);
 }
 
 /* The ship part of the player's ship model */
