@@ -3,7 +3,8 @@
  *   Ctrl-F11 fullscreen, Ctrl-M mouse grab, Ctrl-Q quit,
  *   Ctrl-D debug dump, Ctrl-E cycle renderer, Ctrl-K cockpit view on / off,
  *   Ctrl-O orbit display (conic, Ap, Pe) on / off,
- *   Ctrl-C recentre head tracking (and the VR headset).
+ *   Ctrl-C recentre head tracking (and the VR headset),
+ *   Ctrl-S write the game state as savs/SnapNN (loadable, see state_file.h).
  */
 #include <SDL.h>
 
@@ -13,6 +14,7 @@
 #include "hostcall.h"
 #include "renderer.h"
 #include "shortcut.h"
+#include "state_file.h"
 #include "vr.h"
 
 SHORTCUT_KEY ShortCutKey;
@@ -55,6 +57,12 @@ void ShortCut_CheckKeys(void)
 		headtrack_recenter();
 		vr_recenter();
 		break;
+	case SDLK_s:
+	{
+		char name[32];
+		state_file_snapshot(name, sizeof(name));
+		break;
+	}
 	default:
 		break;
 	}

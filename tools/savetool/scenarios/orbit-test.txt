@@ -1,0 +1,6 @@
+# 100 km above Merlin, rich, named so it is easy to spot in the load list
+base ../bases/merlin-flying
+out ../../../../savs/Up100
+name Up100
+cash 5000000
+ship_up 100
