@@ -66,6 +66,20 @@ void cheat_ship_move_out(double km);
 /* Zero velocity relative to the frame parent */
 void cheat_ship_stop(void);
 
+/* The system's named bodies: planets, moons, stars and stations. `radius_km` is the planet's
+ * (0.0 for a station, whose field means something else) */
+typedef struct
+{
+	int slot;
+	char name[32];
+	bool planet; /* planet, moon or star, else a station or city */
+	double radius_km;
+} CheatBody;
+int cheat_bodies(CheatBody *out, int max);
+/* Puts the ship `distance_km` above a planet's surface, or that far from a station, on the side it
+ * is now (planet) or away from the planet the station is on (station); stops it. NULL or a reason. */
+const char *cheat_goto_body(int slot, double distance_km);
+
 /* Shipyard items, in the order of the game's equipment list */
 typedef enum
 {

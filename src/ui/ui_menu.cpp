@@ -588,6 +588,41 @@ void location_cheats()
 	if (ui_button("Stop (zero velocity)"))
 		cheat_ship_stop();
 
+	/* go to a body of this system */
+	ImGui::TextWrapped("Go to");
+	static CheatBody bodies[64];
+	static int goto_slot = 0;
+	static float goto_km = 100.0f;
+	int count = cheat_bodies(bodies, 64), sel = -1;
+	for (int i = 0; i < count; i++)
+		if (bodies[i].slot == goto_slot)
+			sel = i;
+	char shown[64];
+	snprintf(shown, sizeof(shown), "%s", sel < 0 ? "(choose a body)" : bodies[sel].name);
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	if (ImGui::BeginCombo("##goto", shown))
+	{
+		for (int i = 0; i < count; i++)
+		{
+			snprintf(shown, sizeof(shown), "%s%s", bodies[i].name, bodies[i].planet ? "" : "  (station)");
+			if (ImGui::Selectable(shown, i == sel))
+			{
+				goto_slot = bodies[i].slot;
+				goto_km = bodies[i].planet ? 100.0f : 3.0f;
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (sel >= 0)
+	{
+		ImGui::TextWrapped(bodies[sel].planet ? "km above the surface (radius %.0f km)" : "km from the station",
+						   bodies[sel].radius_km);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::InputFloat("##gotokm", &goto_km, 0.0f, 0.0f, "%.1f");
+		if (ui_button("Go there"))
+			report(cheat_goto_body(goto_slot, goto_km < 0 ? 0 : goto_km));
+	}
+
 	/* typed coordinates: applied with the button, so half-typed values never move the ship */
 	static float typed[3];
 	static bool filled = false;

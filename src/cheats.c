@@ -298,7 +298,13 @@ bool cheat_have_ship(void)
  * unit), relative to the frame parent. Velocity: three longs at +98. */
 #define OBJ_POS_LO 44
 #define OBJ_POS_HI 56
-#define OBJ_VEL    98
+#define OBJ_VEL    98  /* three longs, the whole part */
+#define OBJ_VEL_FRAC 192 /* three words, the fraction */
+#define OBJ_PARENT 68  /* byte, the frame parent's slot, 0 for none */
+#define OBJ_TYPE   94  /* byte, 1 for a body (planet, star, station) */
+#define OBJ_NAME   246 /* the body's name */
+#define OBJ_RADIUS_LO 266 /* long, fraction of a position unit */
+#define OBJ_RADIUS_HI 270 /* word, whole position units */
 #define MM_PER_KM  1e6
 #define OBJECT_SLOTS 115
 
@@ -315,15 +321,16 @@ static void obj_set_pos(u32 obj, int axis, pos64 v)
 	wrlong(obj + OBJ_POS_HI + 4 * axis, (int)(v >> 32));
 }
 
-/* Object slot i: the flag bytes are the first 115 bytes of the big space, slot 0 is 96 bytes
- * at $74 and the others 286 bytes from $d4 (L44b02) */
+/* Object slot i: the flag bytes are the first 115 bytes of the big space, the objects follow
+ * at the offsets of the table L44b02 */
 static u32 slot_object(int i)
 {
-	return FE2_big_space + (i == 0 ? 0x74 : 0xd4 + 286 * (i - 1));
+	return FE2_big_space + (u16)rdword(FE2_obj_offsets + 2 * (u32)i);
 }
 
 /* Applies `fn` to the position of the ship and of every object at the same spot */
-static void move_ship(const pos64 to[3])
+/* new_parent: the slot the ship (and what moves with it) becomes relative to, -1 to keep the parent */
+static void move_ship(const pos64 to[3], int new_parent)
 {
 	u32 me = ship();
 	/* a ship that is landed or docked stays so until told otherwise: hand it back to manual control */
@@ -339,6 +346,8 @@ static void move_ship(const pos64 to[3])
 			continue;
 		for (int a = 0; a < 3; a++)
 			obj_set_pos(o, a, to[a]);
+		if (new_parent >= 0)
+			wrbyte(o + OBJ_PARENT, new_parent);
 	}
 }
 
@@ -358,7 +367,7 @@ void cheat_ship_set_position(const double km[3])
 	pos64 to[3];
 	for (int a = 0; a < 3; a++)
 		to[a] = (pos64)(km[a] * MM_PER_KM);
-	move_ship(to);
+	move_ship(to, -1);
 }
 
 void cheat_ship_move_out(double km)
@@ -382,7 +391,100 @@ void cheat_ship_stop(void)
 	if (!ship())
 		return;
 	for (int a = 0; a < 3; a++)
+	{
 		wrlong(ship() + OBJ_VEL + 4 * a, 0);
+		wrword(ship() + OBJ_VEL_FRAC + 2 * a, 0);
+	}
+}
+
+/* ---- bodies ---- */
+
+/* Position in mm in the root frame: the object's own plus its parents' */
+static void abs_pos(int slot, pos64 out[3])
+{
+	out[0] = out[1] = out[2] = 0;
+	for (int depth = 0; slot > 0 && slot < OBJECT_SLOTS && depth < 8; depth++)
+	{
+		u32 o = slot_object(slot);
+		for (int a = 0; a < 3; a++)
+			out[a] += obj_pos(o, a);
+		slot = (u8)rdbyte(o + OBJ_PARENT);
+	}
+}
+
+/* Models 61-86 and 193-194 hold the planet command: planets, moons and stars */
+static bool is_planet_model(u32 obj)
+{
+	int model = (u16)rdword(obj + 90) / 2;
+	return (model >= 61 && model <= 86) || model == 193 || model == 194;
+}
+
+int cheat_bodies(CheatBody *out, int max)
+{
+	int n = 0;
+	for (int i = 1; i < OBJECT_SLOTS && n < max; i++)
+	{
+		u32 o = slot_object(i);
+		if (!rdbyte(FE2_big_space + i) || (u8)rdbyte(o + OBJ_TYPE) != 1 || !rdbyte(o + OBJ_NAME))
+			continue;
+		CheatBody *b = &out[n++];
+		b->slot = i;
+		b->planet = is_planet_model(o);
+		int k = 0;
+		for (; k < (int)sizeof(b->name) - 1 && rdbyte(o + OBJ_NAME + k); k++)
+			b->name[k] = (char)rdbyte(o + OBJ_NAME + k);
+		b->name[k] = 0;
+		b->radius_km = b->planet ? ((double)(u16)rdword(o + OBJ_RADIUS_HI) +
+									(double)(u32)rdlong(o + OBJ_RADIUS_LO) / 4294967296.0) * 4294.967296
+								 : 0.0;
+	}
+	return n;
+}
+
+const char *cheat_goto_body(int slot, double distance_km)
+{
+	if (!ship())
+		return "No ship yet.";
+	if (slot < 1 || slot >= OBJECT_SLOTS || !rdbyte(FE2_big_space + slot))
+		return "That body is gone.";
+	u32 target = slot_object(slot);
+	int ship_parent = (u8)rdbyte(ship() + OBJ_PARENT);
+	pos64 t[3], p[3], me[3];
+	abs_pos(slot, t);
+	abs_pos(ship_parent, p);
+	for (int a = 0; a < 3; a++)
+		me[a] = p[a] + obj_pos(ship(), a);
+
+	bool planet = is_planet_model(target);
+	double dir[3];
+	if (planet)
+		for (int a = 0; a < 3; a++)
+			dir[a] = (double)(me[a] - t[a]);
+	else
+	{
+		pos64 tp[3];
+		abs_pos((u8)rdbyte(target + OBJ_PARENT), tp);
+		for (int a = 0; a < 3; a++)
+			dir[a] = (double)(t[a] - tp[a]);
+	}
+	double len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+	if (len < 1.0)
+	{
+		dir[0] = dir[1] = 0.0;
+		dir[2] = len = 1.0;
+	}
+	double reach = distance_km * MM_PER_KM;
+	if (planet)
+		reach += ((double)(u16)rdword(target + OBJ_RADIUS_HI) + (double)(u32)rdlong(target + OBJ_RADIUS_LO) / 4294967296.0) *
+				 4294967296.0;
+	pos64 to[3];
+	for (int a = 0; a < 3; a++)
+		to[a] = (pos64)(dir[a] / len * reach) + (planet ? 0 : t[a] - p[a]);
+	/* a planet becomes the ship's frame, so it is at rest relative to it; near a station the ship
+	 * stays in whatever frame it is in (the game picks the station's when it gets close) */
+	move_ship(to, planet ? slot : -1);
+	cheat_ship_stop();
+	return NULL;
 }
 
 /* The ship part of the player's ship model */
