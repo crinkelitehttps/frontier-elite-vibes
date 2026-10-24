@@ -24,6 +24,7 @@ enum
 	A6_galmap_flags = 934,	   /* bit 7: L8444a draws the stars too */
 	A6_galmap_ref_pos = 936,   /* 3 longs: where distances are measured from */
 	A6_galmap_sel_pos = 948,   /* 3 longs: the selected star, L849a2's input */
+	A6_game_data = 14470,	   /* long: the game's models and tables */
 	A6_body_list = 17348,	   /* the system's bodies, 64 bytes each (l84f02, l84cde) */
 	A6_main_palette1 = 15876, /* 16 words $0RGB */
 	BODY_SIZE = 64,
@@ -599,6 +600,8 @@ const Details &Galaxy::details(uint32_t id)
 		b.surface = b.kind == BODY_SURFACE_PORT;
 		b.port = is_port(b.kind);
 		b.name = plain_text(read_string(e + 34, 30));
+		for (int i = 0; i < 64; i++)
+			b.raw[i] = fe2vm_rd8(e + i);
 		d.bodies.push_back(b);
 	}
 	for (auto &b : d.bodies)
@@ -608,6 +611,7 @@ const Details &Galaxy::details(uint32_t id)
 			continue;
 		b.details = capture(G_ScreenBody, 0x80 + b.index, "body screen (l84cde)", d); /* keys $80.. */
 		read_orbit(b);
+		read_stats(b);
 	}
 	return d;
 }
@@ -671,6 +675,34 @@ static const TextRun *value_of(const Screen &s, const char *label)
 			return best;
 		}
 	return nullptr;
+}
+
+/* Mass and temperature as the panel prints them; the radius the way L448b6
+   gives an object one: the model (entry word 12) holds a mantissa (word 22
+   of its game data record) and exponents (words 10 and 12), and the object
+   gets (mantissa << 48) >> (0x38 - exponents) as a 16.32 fixed point number
+   of position units (2^32 mm, 4294.967 km) */
+void Galaxy::read_stats(Body &b)
+{
+	b.model = (uint16_t)((b.raw[12] << 8) | b.raw[13]) / 2;
+	if (const TextRun *m = value_of(b.details, "Mass"))
+		b.mass_earth = atof(m->text.c_str());
+	for (auto &l : b.details)
+		if (l.text.compare(0, 19, "Surface temperature") == 0)
+		{
+			size_t at = l.text.find_first_of("-0123456789", 19);
+			if (at != std::string::npos)
+				b.temperature_c = atoi(l.text.c_str() + at);
+		}
+	if (b.port)
+		return;
+	uint32_t data = fe2vm_rd32(fe2vm_a6() + A6_game_data);
+	uint32_t rec = data + fe2vm_rd16(data + 2 * b.model);
+	int mantissa = (int16_t)fe2vm_rd16(rec + 22);
+	int shift = 0x37 - (int16_t)(fe2vm_rd16(rec + 10) + fe2vm_rd16(rec + 12));
+	if (shift < 0 || shift > 62)
+		return;
+	b.radius_km = mantissa * 65536.0 / (double)(1ULL << (shift + 1)) * 4294.967296;
 }
 
 void Galaxy::read_orbit(Body &b)

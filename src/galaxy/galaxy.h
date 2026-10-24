@@ -86,6 +86,12 @@ struct Body
 	std::string name;
 	std::string kind_name; /* the game's words for the kind ("Orbital trading post"...), L84700 $ec + kind */
 	Screen details;		   /* the game's body panel (l84cde); none for surface starports */
+	uint8_t raw[64] = {};  /* the game's list entry (A6_body_list), for the catalog */
+	/* from the panel and the list entry; mass and temperature are not-a-number / -9999 when the panel has none */
+	int model = 0;			  /* the model index the game gives its object (entry word 12, / 2) */
+	double mass_earth = -1;	  /* "334670.16 Earth masses" */
+	int temperature_c = -9999; /* "Surface temperature 5800°C" */
+	double radius_km = -1;	  /* from the model, as L448b6 sets the object's radius; -1 for starports */
 	/* the orbit, read from the numbers details shows; au < 0 when it has none */
 	double au = -1, eccentricity = 0, inclination = 0, period_days = 0;
 };
@@ -230,6 +236,7 @@ class Galaxy
 	std::string kind_name(int kind);
 	void read_picture(Picture &p);
 	void read_orbit(Body &b);
+	void read_stats(Body &b);
 	std::unordered_map<int, std::string> kind_names_;
 };
 

@@ -6,6 +6,7 @@
  *   FE2GalaxyViewer --dump X Y [N]   sector X,Y (Sol = 0,0) and system N's screens
  *   FE2GalaxyViewer --selftest       speed and sanity checks over the whole galaxy
  *   FE2GalaxyViewer --smoke          a scripted tour of the window
+ *   FE2GalaxyViewer --catalog OUT X0 Y0 X1 Y1 [STEP [SECONDS]]   every explored system as JSON lines
  */
 #include <glad/glad.h>
 
@@ -31,6 +32,7 @@ extern "C"
 #include "atlas.h"
 #include "fe2vm.h"
 #include "galaxy.h"
+#include "galaxy_labels.h"
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
@@ -253,9 +255,33 @@ static int cmd_dump(int argc, char **argv)
 						fclose(f);
 					}
 			}
+			if (getenv("FE2GALAXY_ARRIVE"))
+			{
+				uint32_t mod = fe2vm_rd32(fe2vm_a6() + 92);
+				fe2vm_regs r{};
+				int res = fe2vm_call(mod + 32, &r);
+				printf("arrival at %08x: result %d %s\n", mod + 32, res, fe2vm_error());
+				for (int i = 0; i < 115; i++)
+				{
+					uint32_t o = FE2_big_space + (uint16_t)fe2vm_rd16(FE2_obj_offsets + 2 * i);
+					if (getenv("FE2GALAXY_ARRIVE")[0] == '2' && i < 12)
+						printf("  [%d] flag %d off %x type %d\n", i, fe2vm_rd8(FE2_big_space + i), o, fe2vm_rd8(o + 94));
+					if (fe2vm_rd8(o + 94) != 1)
+						continue;
+					printf("  slot %d model %d par %d\n", i, fe2vm_rd16(o + 90) / 2, fe2vm_rd8(o + 68));
+				}
+			}
 			for (auto &b : d.bodies)
 			{
 				printf("  body %d parent %d kind %d %s\n", b.index, b.parent, b.kind, b.name.c_str());
+				printf("     model %d mass %.4f temp %d radius %.1f km\n", b.model, b.mass_earth, b.temperature_c, b.radius_km);
+				if (getenv("FE2GALAXY_RAW"))
+				{
+					printf("     raw");
+					for (int i = 0; i < 34; i++)
+						printf("%s%02x", i % 2 ? "" : " ", b.raw[i]);
+					printf("\n");
+				}
 				print_screen("body", b.details);
 			}
 		}
@@ -480,6 +506,106 @@ static int cmd_selftest()
 	return fails ? 1 : 0;
 }
 
+
+/* -- --catalog ---------------------------------------------------------------------- */
+
+static void json_str(FILE *f, const std::string &s)
+{
+	fputc('"', f);
+	for (unsigned char c : s)
+	{
+		if (c == '"' || c == '\\')
+			fprintf(f, "\\%c", c);
+		else if (c < 0x20)
+			fprintf(f, "\\u%04x", c);
+		else
+			fputc(c, f); /* UTF-8 passes through */
+	}
+	fputc('"', f);
+}
+
+/* FE2Galaxy --catalog OUT X0 Y0 X1 Y1 [STEP [SECONDS]]: one JSON line per
+ * explored system in the sectors X0..X1, Y0..Y1 (Sol = 0,0), every STEP-th
+ * sector on each axis, stopping after SECONDS. Each line has the system's
+ * star and every body the game's generator makes, with the numbers the body
+ * panel shows and the radius of its model (tools/catalog.py reads them) */
+static int cmd_catalog(int argc, char **argv)
+{
+	if (argc < 7)
+	{
+		fprintf(stderr, "usage: --catalog OUT X0 Y0 X1 Y1 [STEP [SECONDS]]\n");
+		return 1;
+	}
+	Galaxy g;
+	std::string err;
+	if (!g.init(err))
+	{
+		fprintf(stderr, "%s\n", err.c_str());
+		return 1;
+	}
+	FILE *f = fopen(argv[2], "w");
+	if (!f)
+		return 1;
+	int x0 = atoi(argv[3]), y0 = atoi(argv[4]), x1 = atoi(argv[5]), y1 = atoi(argv[6]);
+	int step = argc > 7 ? std::max(1, atoi(argv[7])) : 1;
+	double budget = argc > 8 ? atof(argv[8]) : 1e9;
+	auto t0 = std::chrono::steady_clock::now();
+	auto secs = [&]() { return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count(); };
+	long sectors = 0, systems = 0, bad = 0;
+	for (int sy = y0; sy <= y1 && secs() < budget; sy += step)
+		for (int sx = x0; sx <= x1 && secs() < budget; sx += step)
+		{
+			sectors++;
+			std::vector<uint32_t> ids;
+			for (auto &st : g.sector(SOL_X + sx, SOL_Y + sy).stars)
+				if (st.explored)
+					ids.push_back(st.id);
+			for (uint32_t id : ids)
+			{
+				const Star &st = *g.star(id);
+				const Details &d = g.details(id);
+				if (!d.ok || d.hangs || d.crashes)
+				{
+					bad++;
+					continue;
+				}
+				systems++;
+				fprintf(f, "{\"id\":%u,\"sx\":%d,\"sy\":%d,\"n\":%d,\"name\":", id, sx, sy, id_n(id));
+				json_str(f, st.name);
+				fprintf(f, ",\"star\":");
+				json_str(f, st.description);
+				fprintf(f, ",\"type\":%d,\"multiple\":%d,\"allegiance\":%d,\"info\":%d,\"bodies\":[", st.type,
+						st.multiple, st.allegiance, st.info);
+				for (size_t i = 0; i < d.bodies.size(); i++)
+				{
+					const Body &b = d.bodies[i];
+					fprintf(f, "%s{\"i\":%d,\"p\":%d,\"k\":%d,\"kn\":", i ? "," : "", b.index, b.parent, b.kind);
+					json_str(f, b.kind_name);
+					fprintf(f, ",\"name\":");
+					json_str(f, b.name);
+					fprintf(f, ",\"port\":%d,\"surf\":%d", b.port, b.surface);
+					if (b.model)
+						fprintf(f, ",\"model\":%d", b.model);
+					if (b.mass_earth >= 0)
+						fprintf(f, ",\"mass\":%.4f", b.mass_earth);
+					if (b.temperature_c != -9999)
+						fprintf(f, ",\"temp\":%d", b.temperature_c);
+					if (b.radius_km >= 0)
+						fprintf(f, ",\"radius\":%.1f", b.radius_km);
+					if (b.au >= 0)
+						fprintf(f, ",\"au\":%.4f,\"period\":%.3f", b.au, b.period_days);
+					fputc('}', f);
+				}
+				fprintf(f, "]}\n");
+			}
+			if (sectors % 50 == 0)
+				fprintf(stderr, "\r%ld sectors, %ld systems, %ld failed, %.0f s", sectors, systems, bad, secs());
+		}
+	fprintf(stderr, "\n%ld sectors, %ld systems, %ld failed, %.0f s\n", sectors, systems, bad, secs());
+	fclose(f);
+	return 0;
+}
+
 /* -- main -------------------------------------------------------------------------- */
 
 static int imgui_asserts;
@@ -538,7 +664,8 @@ int main(int argc, char **argv)
 	bool dump = argc > 1 && std::string(argv[1]) == "--dump";
 	bool selftest = argc > 1 && std::string(argv[1]) == "--selftest";
 	bool smoke = argc > 1 && std::string(argv[1]) == "--smoke";
-	if (dump || selftest || smoke)
+	bool catalog = argc > 1 && std::string(argv[1]) == "--catalog";
+	if (dump || selftest || smoke || catalog)
 	{
 #ifdef _WIN32
 		/* a windows program has no console: print to the one it was started
@@ -551,7 +678,7 @@ int main(int argc, char **argv)
 		}
 #endif
 		if (!smoke)
-			return dump ? cmd_dump(argc, argv) : cmd_selftest();
+			return catalog ? cmd_catalog(argc, argv) : dump ? cmd_dump(argc, argv) : cmd_selftest();
 	}
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
 		return 1;

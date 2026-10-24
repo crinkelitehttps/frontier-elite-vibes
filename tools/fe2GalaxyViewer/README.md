@@ -53,6 +53,13 @@ The code is shared with the game, in `src/galaxy`:
   `atlas.cpp` is the search, the survey and the panels. Here `app.cpp` is the
   window and the command line; in the game it is `src/ui/ui_galaxy.cpp`.
 
+## Scanning the galaxy
+
+`FE2GalaxyViewer --catalog OUT X0 Y0 X1 Y1 [STEP [SECONDS]]` writes one JSON
+line per explored system in those sectors (Sol = 0,0): its star and every body
+the game's generator makes, with mass, temperature, orbit and the radius of the
+body's model. `tools/galaxy_catalog` picks a small covering set from scans.
+
 ## The newer parts
 
 * **Game view** (Planets tab): the screen host calls `l84f02` makes (blits,
