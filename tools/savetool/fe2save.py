@@ -122,6 +122,22 @@ def setfield(s, spec):
         put(s, sh + 184, struct.pack(">H", int(v, 0)))
     elif k == "fuel":
         put(s, sh + 242, struct.pack(">I", int(float(v) * 0x20000000)))
+    elif k == "vel":
+        # vel=SLOT,x,y,z (raw velocity longs, +98); the fraction words at +192 are cleared
+        n, *v = [int(x, 0) for x in v.split(",")]
+        off = slot_off(n)
+        s.big[off + 98:off + 110] = struct.pack(">3i", *v)
+        s.big[off + 192:off + 198] = bytes(6)
+    elif k == "objup":
+        # objup=SLOT,km: move that object further from its parent, keeping direction
+        n, d = v.split(",")
+        off = slot_off(int(n))
+        pos = obj_pos(s, off)
+        r = sum(c * c for c in pos) ** 0.5
+        set_obj_pos(s, off, [round(c * (r + float(d) * 1e6) / r) for c in pos])
+    elif k == "objhull":
+        n, h = [int(x, 0) for x in v.split(",")]
+        s.big[slot_off(n) + 184:slot_off(n) + 186] = struct.pack(">H", h)
     elif k == "ship_pos":
         km = [float(x) for x in v.split(",")]
         move_ship(s, lambda old: [round(c * 1e6) for c in km])

@@ -116,7 +116,8 @@ void Call_ExactStep(void)
    a cap (Lsmoke_vel in fe2.s; a0 = the ship, a1 = the puff), and low-speed
    combat stays as it was. A velocity unit is about 0.095 m/s. */
 bool smoke_inherit = false;
-#define SMOKE_CAP 5300 /* about 500 m/s */
+int smoke_cap_ms = 500; /* the speed smoke keeps from the ship, m/s */
+#define SMOKE_UNITS_PER_MS 10.6 /* 5300 units = 500 m/s */
 
 void Call_SmokeVel(void)
 {
@@ -131,9 +132,10 @@ void Call_SmokeVel(void)
 		v[i] = (double)(int32_t)rdlong(ship + 98 + 4 * i);
 		len2 += v[i] * v[i];
 	}
-	if (len2 <= (double)SMOKE_CAP * SMOKE_CAP)
+	double cap = smoke_cap_ms * SMOKE_UNITS_PER_MS;
+	if (len2 <= cap * cap)
 		return;
-	double keep = 1.0 - SMOKE_CAP / sqrt(len2);
+	double keep = 1.0 - cap / sqrt(len2);
 	for (int i = 0; i < 3; i++)
 	{
 		wrlong(puff + 98 + 4 * i, (int)(v[i] * keep));

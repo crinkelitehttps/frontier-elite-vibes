@@ -64,6 +64,7 @@ typedef struct
 	int orbit_assist;
 	int exact_step;
 	int smoke_inherit;
+	int smoke_cap;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -103,6 +104,7 @@ static const struct
 	{"orbit_assist", offsetof(Settings, orbit_assist)},
 	{"exact_step", offsetof(Settings, exact_step)},
 	{"smoke_inherit", offsetof(Settings, smoke_inherit)},
+	{"smoke_cap", offsetof(Settings, smoke_cap)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -208,6 +210,7 @@ static Settings current(void)
 	s.orbit_assist = orbit_assist;
 	s.exact_step = exact_step;
 	s.smoke_inherit = smoke_inherit;
+	s.smoke_cap = smoke_cap_ms;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -260,6 +263,8 @@ static void apply(const Settings *s)
 	orbit_assist = s->orbit_assist != 0;
 	exact_step = s->exact_step != 0;
 	smoke_inherit = s->smoke_inherit != 0;
+	if (s->smoke_cap >= 10 && s->smoke_cap <= 2000)
+		smoke_cap_ms = s->smoke_cap;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */

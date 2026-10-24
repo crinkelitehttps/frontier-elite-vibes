@@ -104,6 +104,25 @@ bhi.s` (18 bytes).
 and uses a limit of 2,000,000 m when the nearest body is a star or gas giant
 (model `$92`-`$ae`, bit 0 of `893(a6)`), 60 km otherwise. Both variants.
 
+## 5. Smoke of a fast damaged ship is left behind (`L4600a`) - option
+
+**Symptom:** a damaged ship at high speed leaves a trail of smoke puffs that
+hang at rest where they were made, so the trail stretches hundreds of km
+behind the ship. (Original-game bug report 4.)
+
+**Cause:** `L4600a` (puff spawner, called by damaged ships each frame, by hits
+and by debris) makes every puff with zero velocity.
+
+**Original code:** `move.b #$b,94(a1)` in `L4600a`.
+
+**Fix:** `jsr Lsmoke_vel` (same size). `Lsmoke_vel` calls the host
+(`Call_SmokeVel`), which gives the puff the part of the ship's velocity
+(`98(a0)`) over a limit. Below the limit nothing changes, so slow combat is as
+before. It is an option, off by default: `smoke_inherit` in `glfrontier.cfg`,
+and `smoke_cap` is the limit in m/s (10-2000, default 500; one velocity unit is
+about 0.095 m/s). In the cog menu under Flight. Both variants. Tested with
+`tools/savetool/scenarios/smoke-fast-*.txt` (ships at 1.5 and 5 km/s).
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

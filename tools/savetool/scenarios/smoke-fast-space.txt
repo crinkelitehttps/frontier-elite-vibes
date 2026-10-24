@@ -1,0 +1,8 @@
+# Issue 4 smoke test in space: as smoke-fast-combat but 3000 km higher and ~10x the NPC's speed (~5 km/s)
+base ../bases/combat-smoking
+out ../../../../savs/SmokeSpace
+name SmokeSpace
+objup 107,3000
+objup 105,3000
+vel 107,-14800,28300,-41300
+vel 105,-14800,28300,-41300

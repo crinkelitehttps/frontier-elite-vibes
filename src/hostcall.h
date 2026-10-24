@@ -19,6 +19,7 @@ extern bool orbit_assist;
 extern bool exact_step;
 void Call_ExactStep(void);
 extern bool smoke_inherit;
+extern int smoke_cap_ms;
 void Call_SmokeVel(void);
 void Call_SubSteps(void);
 void Call_SubSkip(void);

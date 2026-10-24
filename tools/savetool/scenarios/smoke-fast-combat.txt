@@ -1,0 +1,8 @@
+# Issue 4 smoke test. Base: Snap09 (copy in bases/), player ~300 m from the damaged, smoking pad ship
+# (slot 105, model 54, hull 330/480). Both get the same velocity, about 3x the 500 m/s smoke cap
+# (NPC's own speed was ~5200 raw units; 1 unit ~ 0.095 m/s).
+base ../bases/combat-smoking
+out ../../../../savs/SmokeFast
+name SmokeFast
+vel 107,-4440,8500,-12400
+vel 105,-4440,8500,-12400

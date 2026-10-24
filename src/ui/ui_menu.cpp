@@ -220,7 +220,12 @@ void page_settings()
 	ui_heading("Flight");
 	wrapped_checkbox("Ship turns belly-down to a planet below 40 km", &orbit_assist);
 	wrapped_checkbox("Exact motion at every time acceleration step (orbits stay put)", &exact_step);
-	wrapped_checkbox("Smoke trails of fast damaged ships stay near them (smoke takes the speed over 500 m/s)", &smoke_inherit);
+	wrapped_checkbox("Smoke trails of fast damaged ships stay near them (smoke takes the ship's speed over the limit below)", &smoke_inherit);
+	if (smoke_inherit)
+	{
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::SliderInt("##smokecap", &smoke_cap_ms, 10, 2000, "smoke keeps speed over %d m/s", ImGuiSliderFlags_Logarithmic);
+	}
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);
