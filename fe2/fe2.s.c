@@ -25017,28 +25017,42 @@ extern void __F838a4 ();
 extern void __F838ac ();
 extern void __F838b2 ();
 extern void __F838b8 ();
-extern void __F838bc ();
-extern void __F838c8 ();
-extern void __F838d0 ();
-extern void __F838d8 ();
+extern void __F838be ();
+extern void __F838c2 ();
+extern void __F838ce ();
+extern void __F838d6 ();
 extern void __F838de ();
-extern void __F838e2 ();
-extern void __F838e6 ();
-extern void __F838f4 ();
-extern void __F83900 ();
+extern void __F838e4 ();
+extern void __F838e8 ();
+extern void __F838ec ();
+extern void __F838fa ();
 extern void __F83906 ();
-extern void __F8390c ();
+extern void __F8390e ();
 extern void __F83914 ();
-extern void __F83918 ();
-extern void __F8391a ();
-extern void __F83922 ();
-extern void __F83928 ();
+extern void __F8391c ();
+extern void __F8391e ();
+extern void __F83926 ();
 extern void __F8392a ();
-extern void __F83934 ();
+extern void __F8392e ();
 extern void __F83938 ();
-extern void __F83940 ();
-extern void __F83944 ();
+extern void __F8393a ();
+extern void __F8393c ();
+extern void __F83942 ();
 extern void __F83948 ();
+extern void __F83950 ();
+extern void __F83956 ();
+extern void __F8395a ();
+extern void __F83962 ();
+extern void __F8396a ();
+extern void __F83972 ();
+extern void __F8397a ();
+extern void __F83980 ();
+extern void __F83984 ();
+extern void __F8398c ();
+extern void __F83992 ();
+extern void __F8399e ();
+extern void __F839a2 ();
+extern void __F839a6 ();
 #endif /* PART1 */
 #define __DL22_PlayEffect (0x22)
 #define __DL54_StopMusic (0x28)
@@ -34928,15 +34942,21 @@ extern void __F83948 ();
 #define __DLmine_phys (0x83882)
 #define __D83886 (0x83886)
 #define __Dlmine_next (0x8389e)
-#define __D838c2 (0x838c2)
-#define __D838d6 (0x838d6)
-#define __Dlmine_skip (0x838ec)
-#define __Dlmine_off (0x838f0)
-#define __DLmine_boom (0x838fa)
-#define __D83920 (0x83920)
-#define __D8393c (0x8393c)
-#define __Dlmine_boom_pop (0x8393c)
-#define __Dlmine_boom_done (0x83940)
+#define __D838c8 (0x838c8)
+#define __D838dc (0x838dc)
+#define __Dlmine_skip (0x838f2)
+#define __Dlmine_off (0x838f6)
+#define __DLmine_boom (0x83900)
+#define __Dlmine_boom_reload (0x8392e)
+#define __Dlmine_boom_next (0x83940)
+#define __D83960 (0x83960)
+#define __D83978 (0x83978)
+#define __D83988 (0x83988)
+#define __Dlmine_boom_skip (0x8398a)
+#define __Dlmine_boom_reload_next (0x83990)
+#define __Dlmine_boom_end (0x83996)
+#define __Dlmine_boom_pop (0x8399a)
+#define __Dlmine_boom_done (0x8399e)
 #ifdef PART2
 void __F36 ()
 {
@@ -270845,7 +270865,22 @@ void __F838b8 ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __F838bc ()
+void __F838be ()
+{
+	s32 dest = Regs[7]._s8;
+
+	s32 src = rdbyte(Regs[14]._s32+670);
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F838c2 ()
 {
 	s32 val = Regs[7]._s16;
 	Regs[0]._s16 = val;
@@ -270854,7 +270889,7 @@ void __F838bc ()
 	V = 0;
 	C = 0;
 }
-void __F838c8 ()
+void __F838ce ()
 {
 	s32 dest = rdword(Regs[9]._s32+90);
 
@@ -270869,7 +270904,7 @@ void __F838c8 ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __F838d0 ()
+void __F838d6 ()
 {
 	s32 dest = rdbyte(Regs[9]._s32+94);
 
@@ -270884,7 +270919,7 @@ void __F838d0 ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __F838d8 ()
+void __F838de ()
 {
 	s32 dest = Regs[5]._s32;
 
@@ -270899,7 +270934,7 @@ void __F838d8 ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __F838de ()
+void __F838e4 ()
 {
 	s32 val = Regs[9]._s32;
 	wrlong(Regs[15]._s32+32, val);
@@ -270908,7 +270943,7 @@ void __F838de ()
 	V = 0;
 	C = 0;
 }
-void __F838e2 ()
+void __F838e8 ()
 {
 	s32 src = (Regs[15]._s32);
 	Regs[0]._s32 = rdlong (src);
@@ -270937,7 +270972,7 @@ void __F838e2 ()
 	src += 4;
 	Regs[15]._s32 += 48;
 }
-void __F838e6 ()
+void __F838ec ()
 {
 	s32 src = (Regs[15]._s32);
 	Regs[2]._s32 = rdlong (src);
@@ -270946,7 +270981,7 @@ void __F838e6 ()
 	src += 4;
 	Regs[15]._s32 += 8;
 }
-void __F838f4 ()
+void __F838fa ()
 {
 	s32 src = (Regs[15]._s32);
 	Regs[0]._s32 = rdlong (src);
@@ -270975,7 +271010,7 @@ void __F838f4 ()
 	src += 4;
 	Regs[15]._s32 += 48;
 }
-void __F83900 ()
+void __F83906 ()
 {
 	s32 dest = rdbyte(Regs[8]._s32+211);
 
@@ -270990,7 +271025,7 @@ void __F83900 ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __F83906 ()
+void __F8390e ()
 {
 	s32 dest = (Regs[15]._s32-4);
 	wrlong (dest, Regs[12]._u32);
@@ -271019,67 +271054,19 @@ void __F83906 ()
 	dest -= 4;
 	Regs[15]._s32 -= 48;
 }
-void __F8390c ()
-{
-	s32 dest = Regs[10]._s32;
-
-	s32 src = Regs[9]._s32;
-
-	s32 val = (s32)dest - (s32)src;
-	s32 flgs = ((s32)src) < 0;
-	s32 flgo = ((s32)dest) < 0;
-	s32 flgn = ((s32)val) < 0;
-	nZ = val;
-	V = ((flgs != flgo) && (flgn != flgo));
-	C = ((u32)src) > ((u32)dest);
-	N = (flgn != 0);
-}
 void __F83914 ()
 {
-	s32 val = Regs[0]._s32;
-	Regs[4]._s32 = val;
-	nZ = val;
-	N = val < 0;
+	nZ = Regs[0]._s32;
+	N = nZ < 0;
 	V = 0;
 	C = 0;
 }
-void __F83918 ()
-{
-	s32 val = Regs[4]._s32;
-	Regs[3]._s32 = val;
-}
-void __F8391a ()
-{
-	s16 src = Regs[4]._s16;
-	s32 dest = (s16)Regs[3]._s16;
-	dest *= (s32)src;
-	nZ = dest;
-	N = ((s32)dest) < 0;
-	C = 0;
-	V = 0;
-	Regs[3]._s32 = dest;
-}
-void __F83922 ()
-{
-	s32 dest = Regs[5]._s32;
-
-	s32 src = Regs[3]._s32;
-
-	s32 val = (s32)dest - (s32)src;
-	s32 flgs = ((s32)src) < 0;
-	s32 flgo = ((s32)dest) < 0;
-	s32 flgn = ((s32)val) < 0;
-	V = ((flgs != flgo) && (flgn != flgo));
-	C = ((u32)src) > ((u32)dest);
-	N = (flgn != 0);
-	nZ = val;
-}
-void __F83928 ()
+void __F8391c ()
 {
 	s32 val = rdword(Regs[8]._s32+90);
 	Regs[0]._s16 = val;
 }
-void __F8392a ()
+void __F8391e ()
 {
 	s32 dest = Regs[0]._s16;
 
@@ -271096,12 +271083,161 @@ void __F8392a ()
 	N = (flgn != 0);
 	Regs[0]._s16 = newv;
 }
-void __F83934 ()
+void __F83926 ()
+{
+	s32 val = Regs[9]._s32;
+	wrlong(Regs[15]._s32-4, val);
+	Regs[15]._s32 -= 4;
+}
+void __F8392a ()
 {
 	s32 val = rdword(Regs[11]._s32+((s16)Regs[0]._s32)+0);
-	Regs[0]._s16 = val;
+	wrword(Regs[15]._s32-2, val);
+	Regs[15]._s32 -= 2;
+}
+void __F8392e ()
+{
+	s32 val = 114;
+	wrword(Regs[15]._s32-2, val);
+	Regs[15]._s32 -= 2;
+	nZ = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
 }
 void __F83938 ()
+{
+	s32 val = Regs[0]._s32;
+	Regs[4]._s32 = val;
+}
+void __F8393a ()
+{
+	s32 val = Regs[4]._s32;
+	Regs[3]._s32 = val;
+}
+void __F8393c ()
+{
+	s16 src = Regs[4]._s16;
+	s32 dest = (s16)Regs[3]._s16;
+	dest *= (s32)src;
+	nZ = dest;
+	N = ((s32)dest) < 0;
+	C = 0;
+	V = 0;
+	Regs[3]._s32 = dest;
+}
+void __F83942 ()
+{
+	s32 val = rdword(Regs[15]._s32);
+	Regs[7]._s16 = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
+}
+void __F83948 ()
+{
+	u8 src = 2;
+	u8 dest = rdbyte(Regs[12]._s32+((s16)Regs[7]._s32)+0);
+	src &= 7;
+	nZ = !(1 ^ ((dest >> src) & 1));
+}
+void __F83950 ()
+{
+	u8 src = 4;
+	u8 dest = rdbyte(Regs[12]._s32+((s16)Regs[7]._s32)+0);
+	src &= 7;
+	nZ = !(1 ^ ((dest >> src) & 1));
+}
+void __F83956 ()
+{
+	s32 dest = Regs[7]._s8;
+
+	s32 src = rdbyte(Regs[8]._s32+93);
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F8395a ()
+{
+	s32 val = Regs[7]._s16;
+	Regs[0]._s16 = val;
+	nZ = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
+}
+void __F83962 ()
+{
+	s32 dest = Regs[10]._s32;
+
+	s32 src = Regs[9]._s32;
+
+	s32 val = (s32)dest - (s32)src;
+	s32 flgs = ((s32)src) < 0;
+	s32 flgo = ((s32)dest) < 0;
+	s32 flgn = ((s32)val) < 0;
+	nZ = val;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u32)src) > ((u32)dest);
+	N = (flgn != 0);
+}
+void __F8396a ()
+{
+	s32 dest = rdword(Regs[9]._s32+90);
+
+	s32 src = 16;
+
+	s32 val = (s16)dest - (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u16)src) > ((u16)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F83972 ()
+{
+	s32 dest = rdbyte(Regs[9]._s32+94);
+
+	s32 src = 1;
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F8397a ()
+{
+	s32 dest = Regs[5]._s32;
+
+	s32 src = Regs[3]._s32;
+
+	s32 val = (s32)dest - (s32)src;
+	s32 flgs = ((s32)src) < 0;
+	s32 flgo = ((s32)dest) < 0;
+	s32 flgn = ((s32)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u32)src) > ((u32)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __F83980 ()
+{
+	s32 val = rdword(Regs[15]._s32+2);
+	Regs[0]._s16 = val;
+}
+void __F83984 ()
 {
 	s32 val = rdbyte(Regs[8]._s32+212);
 	Regs[7]._s8 = val;
@@ -271110,7 +271246,41 @@ void __F83938 ()
 	V = 0;
 	C = 0;
 }
-void __F83940 ()
+void __F8398c ()
+{
+	s32 dest = rdword(Regs[15]._s32);
+
+	s32 src = 1;
+
+	u32 newv = (s16)dest - (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)newv) < 0;
+	nZ = newv;
+	V = (flgs ^ flgo) & (flgn ^ flgo);
+	X = ((u16)src) > ((u16)dest);
+	C = X;
+	N = (flgn != 0);
+	wrword(Regs[15]._s32, newv);
+}
+void __F83992 ()
+{
+	s32 dest = rdword(Regs[15]._s32);
+
+	s32 src = 1;
+
+	u32 newv = (s16)dest - (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)newv) < 0;
+	nZ = newv;
+	V = (flgs ^ flgo) & (flgn ^ flgo);
+	X = ((u16)src) > ((u16)dest);
+	C = X;
+	N = (flgn != 0);
+	wrword(Regs[15]._s32, newv);
+}
+void __F8399e ()
 {
 	s32 src = (Regs[15]._s32);
 	Regs[0]._s32 = rdlong (src);
@@ -271139,12 +271309,12 @@ void __F83940 ()
 	src += 4;
 	Regs[15]._s32 += 48;
 }
-void __F83944 ()
+void __F839a2 ()
 {
 	s32 val = rdbyte(Regs[9]._s32+93);
 	Regs[0]._s8 = val;
 }
-void __F83948 ()
+void __F839a6 ()
 {
 	s32 dest = Regs[0]._s8;
 
@@ -484136,15 +484306,15 @@ __NLpol_next:
 __NLmine_dist:
 	case (0x83828):
 	#ifdef M68K_DEBUG
-		line_no = 67484;
+		line_no = 67486;
 	#endif
 	__F8382c ();
 	#ifdef M68K_DEBUG
-		line_no = 67485;
+		line_no = 67487;
 	#endif
 	__F83830 ();
 	#ifdef M68K_DEBUG
-		line_no = 67486;
+		line_no = 67488;
 	#endif
 	if (nZ)
 	{
@@ -484154,17 +484324,17 @@ __NLmine_dist:
 	} else {
 		goto __Nlmine_dist_far;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 67487;
-	#endif
-	__F83836 ();
-	#ifdef M68K_DEBUG
-		line_no = 67488;
-	#endif
-	__F8383a ();
 	#ifdef M68K_DEBUG
 		line_no = 67489;
 	#endif
+	__F83836 ();
+	#ifdef M68K_DEBUG
+		line_no = 67490;
+	#endif
+	__F8383a ();
+	#ifdef M68K_DEBUG
+		line_no = 67491;
+	#endif
 	if (nZ)
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
@@ -484174,53 +484344,53 @@ __NLmine_dist:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67490;
+		line_no = 67492;
 	#endif
 	__F8383e ();
 	#ifdef M68K_DEBUG
-		line_no = 67491;
+		line_no = 67493;
 	#endif
 	__F83840 ();
 __Nlmine_dist_axis:
 	case (0x83840):
 	#ifdef M68K_DEBUG
-		line_no = 67493;
+		line_no = 67495;
 	#endif
 	__F83844 ();
 	#ifdef M68K_DEBUG
-		line_no = 67494;
+		line_no = 67496;
 	#endif
 	__F83848 ();
 	#ifdef M68K_DEBUG
-		line_no = 67495;
+		line_no = 67497;
 	#endif
 	__F8384c ();
 	#ifdef M68K_DEBUG
-		line_no = 67496;
+		line_no = 67498;
 	#endif
 	__F83850 ();
 	#ifdef M68K_DEBUG
-		line_no = 67497;
+		line_no = 67499;
 	#endif
 	__F83852 ();
 	#ifdef M68K_DEBUG
-		line_no = 67498;
+		line_no = 67500;
 	#endif
 	__F83854 ();
 	#ifdef M68K_DEBUG
-		line_no = 67499;
+		line_no = 67501;
 	#endif
 	__F83856 ();
 	#ifdef M68K_DEBUG
-		line_no = 67500;
+		line_no = 67502;
 	#endif
 	__F83858 ();
 	#ifdef M68K_DEBUG
-		line_no = 67501;
+		line_no = 67503;
 	#endif
 	__F8385a ();
 	#ifdef M68K_DEBUG
-		line_no = 67502;
+		line_no = 67504;
 	#endif
 	if (nZ)
 	{
@@ -484231,19 +484401,19 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67503;
+		line_no = 67505;
 	#endif
 	__F8385e ();
 	#ifdef M68K_DEBUG
-		line_no = 67504;
+		line_no = 67506;
 	#endif
 	__F83860 ();
 	#ifdef M68K_DEBUG
-		line_no = 67505;
+		line_no = 67507;
 	#endif
 	__F83862 ();
 	#ifdef M68K_DEBUG
-		line_no = 67506;
+		line_no = 67508;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -484254,19 +484424,19 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67507;
+		line_no = 67509;
 	#endif
 	__F83866 ();
 	#ifdef M68K_DEBUG
-		line_no = 67508;
+		line_no = 67510;
 	#endif
 	__F83868 ();
 	#ifdef M68K_DEBUG
-		line_no = 67509;
+		line_no = 67511;
 	#endif
 	__F8386a ();
 	#ifdef M68K_DEBUG
-		line_no = 67510;
+		line_no = 67512;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -484277,23 +484447,23 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67511;
+		line_no = 67513;
 	#endif
 	__F8386e ();
 	#ifdef M68K_DEBUG
-		line_no = 67512;
+		line_no = 67514;
 	#endif
 	__F83870 ();
 	#ifdef M68K_DEBUG
-		line_no = 67513;
+		line_no = 67515;
 	#endif
 	__F83872 ();
 	#ifdef M68K_DEBUG
-		line_no = 67514;
+		line_no = 67516;
 	#endif
 	__F83876 ();
 	#ifdef M68K_DEBUG
-		line_no = 67515;
+		line_no = 67517;
 	#endif
 	if (nZ)
 	{
@@ -484304,7 +484474,7 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_axis;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67516;
+		line_no = 67518;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484312,11 +484482,11 @@ __Nlmine_dist_axis:
 __Nlmine_dist_far:
 	case (0x8387a):
 	#ifdef M68K_DEBUG
-		line_no = 67518;
+		line_no = 67520;
 	#endif
 	__F83880 ();
 	#ifdef M68K_DEBUG
-		line_no = 67519;
+		line_no = 67521;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484324,7 +484494,7 @@ __Nlmine_dist_far:
 __NLmine_phys:
 	case (0x83882):
 	#ifdef M68K_DEBUG
-		line_no = 67522;
+		line_no = 67524;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83886);
@@ -484334,19 +484504,19 @@ __NLmine_phys:
 	}
 	case (0x83886):
 	#ifdef M68K_DEBUG
-		line_no = 67523;
+		line_no = 67525;
 	#endif
 	__F8388a ();
 	#ifdef M68K_DEBUG
-		line_no = 67524;
+		line_no = 67526;
 	#endif
 	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67525;
+		line_no = 67527;
 	#endif
 	__F83890 ();
 	#ifdef M68K_DEBUG
-		line_no = 67526;
+		line_no = 67528;
 	#endif
 	if ((!nZ))
 	{
@@ -484357,46 +484527,31 @@ __NLmine_phys:
 		goto __Nlmine_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67527;
+		line_no = 67529;
 	#endif
 	__F83896 ();
 	#ifdef M68K_DEBUG
-		line_no = 67528;
+		line_no = 67530;
 	#endif
 	__F83898 ();
 	#ifdef M68K_DEBUG
-		line_no = 67529;
+		line_no = 67531;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 67530;
+		line_no = 67532;
 	#endif
 	__F8389e ();
 __Nlmine_next:
 	case (0x8389e):
 	#ifdef M68K_DEBUG
-		line_no = 67532;
+		line_no = 67534;
 	#endif
 	__F838a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67533;
-	#endif
-	if ((!nZ))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlmine_skip;
-		goto handle_exception;
-	} else {
-		goto __Nlmine_skip;
-	}}
-	#ifdef M68K_DEBUG
-		line_no = 67534;
-	#endif
-	__F838ac ();
-	#ifdef M68K_DEBUG
 		line_no = 67535;
 	#endif
-	if (nZ)
+	if ((!nZ))
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
 		rdest = __Dlmine_skip;
@@ -484407,11 +484562,11 @@ __Nlmine_next:
 	#ifdef M68K_DEBUG
 		line_no = 67536;
 	#endif
-	__F838b2 ();
+	__F838ac ();
 	#ifdef M68K_DEBUG
 		line_no = 67537;
 	#endif
-	if ((!nZ))
+	if (nZ)
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
 		rdest = __Dlmine_skip;
@@ -484422,7 +484577,7 @@ __Nlmine_next:
 	#ifdef M68K_DEBUG
 		line_no = 67538;
 	#endif
-	__F838b8 ();
+	__F838b2 ();
 	#ifdef M68K_DEBUG
 		line_no = 67539;
 	#endif
@@ -484437,24 +484592,26 @@ __Nlmine_next:
 	#ifdef M68K_DEBUG
 		line_no = 67540;
 	#endif
-	__F838bc ();
+	__F838b8 ();
 	#ifdef M68K_DEBUG
 		line_no = 67541;
 	#endif
-	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __D838c2);
+	if ((!nZ))
 	{
-		goto __NL44af8;
-	}
-	case (0x838c2):
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_skip;
+	}}
 	#ifdef M68K_DEBUG
 		line_no = 67542;
 	#endif
-	__F838c8 ();
+	__F838be ();
 	#ifdef M68K_DEBUG
 		line_no = 67543;
 	#endif
-	if ((C || (!nZ)))
+	if ((!nZ))
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
 		rdest = __Dlmine_skip;
@@ -484465,9 +484622,37 @@ __Nlmine_next:
 	#ifdef M68K_DEBUG
 		line_no = 67544;
 	#endif
-	__F838d0 ();
+	__F838c2 ();
 	#ifdef M68K_DEBUG
 		line_no = 67545;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D838c8);
+	{
+		goto __NL44af8;
+	}
+	case (0x838c8):
+	#ifdef M68K_DEBUG
+		line_no = 67546;
+	#endif
+	__F838ce ();
+	#ifdef M68K_DEBUG
+		line_no = 67547;
+	#endif
+	if ((C || (!nZ)))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67548;
+	#endif
+	__F838d6 ();
+	#ifdef M68K_DEBUG
+		line_no = 67549;
 	#endif
 	if ((!nZ))
 	{
@@ -484478,20 +484663,20 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67546;
+		line_no = 67550;
 	#endif
 	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __D838d6);
+	wrlong (Regs[15]._s32, __D838dc);
 	{
 		goto __NLmine_dist;
 	}
-	case (0x838d6):
+	case (0x838dc):
 	#ifdef M68K_DEBUG
-		line_no = 67547;
+		line_no = 67551;
 	#endif
-	__F838d8 ();
+	__F838de ();
 	#ifdef M68K_DEBUG
-		line_no = 67548;
+		line_no = 67552;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -484502,49 +484687,49 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67549;
+		line_no = 67553;
 	#endif
-	__F838de ();
+	__F838e4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67550;
+		line_no = 67554;
 	#endif
-	__F838e2 ();
+	__F838e8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67551;
+		line_no = 67555;
 	#endif
-	__F838e6 ();
+	__F838ec ();
 	#ifdef M68K_DEBUG
-		line_no = 67552;
+		line_no = 67556;
 	#endif
 	{
 		goto __Nl75824;
 	}
 __Nlmine_skip:
-	case (0x838ec):
+	case (0x838f2):
 	#ifdef M68K_DEBUG
-		line_no = 67554;
+		line_no = 67558;
 	#endif
 	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlmine_next;
 __Nlmine_off:
-	case (0x838f0):
+	case (0x838f6):
 	#ifdef M68K_DEBUG
-		line_no = 67556;
+		line_no = 67560;
 	#endif
-	__F838f4 ();
+	__F838fa ();
 	#ifdef M68K_DEBUG
-		line_no = 67557;
+		line_no = 67561;
 	#endif
 	{
 		goto __Nl74f04;
 	}
 __NLmine_boom:
-	case (0x838fa):
+	case (0x83900):
 	#ifdef M68K_DEBUG
-		line_no = 67560;
+		line_no = 67564;
 	#endif
-	__F83900 ();
+	__F83906 ();
 	#ifdef M68K_DEBUG
-		line_no = 67561;
+		line_no = 67565;
 	#endif
 	if (nZ)
 	{
@@ -484555,38 +484740,19 @@ __NLmine_boom:
 		goto __Nlmine_boom_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67562;
-	#endif
-	__F83906 ();
-	#ifdef M68K_DEBUG
-		line_no = 67563;
-	#endif
-	Regs[10]._s32 = rdlong(Regs[14]._s32+674);
-	#ifdef M68K_DEBUG
-		line_no = 67564;
-	#endif
-	__F8390c ();
-	#ifdef M68K_DEBUG
-		line_no = 67565;
-	#endif
-	if ((!nZ))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlmine_boom_pop;
-		goto handle_exception;
-	} else {
-		goto __Nlmine_boom_pop;
-	}}
-	#ifdef M68K_DEBUG
 		line_no = 67566;
 	#endif
-	(* hcalls[151]) ();
+	__F8390e ();
 	#ifdef M68K_DEBUG
 		line_no = 67567;
 	#endif
-	__F83914 ();
+	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
 		line_no = 67568;
+	#endif
+	__F83914 ();
+	#ifdef M68K_DEBUG
+		line_no = 67569;
 	#endif
 	if ((!nZ))
 	{
@@ -484597,57 +484763,39 @@ __NLmine_boom:
 		goto __Nlmine_boom_pop;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67569;
-	#endif
-	__F83918 ();
-	#ifdef M68K_DEBUG
 		line_no = 67570;
 	#endif
-	__F8391a ();
+	__F8391c ();
 	#ifdef M68K_DEBUG
 		line_no = 67571;
 	#endif
-	Regs[9]._s32 = Regs[10]._s32;
+	__F8391e ();
 	#ifdef M68K_DEBUG
 		line_no = 67572;
 	#endif
-	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __D83920);
-	{
-		goto __NLmine_dist;
-	}
-	case (0x83920):
+	Regs[11]._u32 = (__DL75818);
 	#ifdef M68K_DEBUG
 		line_no = 67573;
 	#endif
-	__F83922 ();
+	__F83926 ();
 	#ifdef M68K_DEBUG
 		line_no = 67574;
 	#endif
-	if (((!C) && nZ))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlmine_boom_pop;
-		goto handle_exception;
-	} else {
-		goto __Nlmine_boom_pop;
-	}}
+	__F8392a ();
 	#ifdef M68K_DEBUG
 		line_no = 67575;
 	#endif
-	__F83928 ();
-	#ifdef M68K_DEBUG
-		line_no = 67576;
-	#endif
-	__F8392a ();
+	__F8392e ();
+__Nlmine_boom_reload:
+	case (0x8392e):
 	#ifdef M68K_DEBUG
 		line_no = 67577;
 	#endif
-	Regs[11]._u32 = (__DL75818);
+	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
 		line_no = 67578;
 	#endif
-	__F83934 ();
+	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
 		line_no = 67579;
 	#endif
@@ -484655,30 +484803,242 @@ __NLmine_boom:
 	#ifdef M68K_DEBUG
 		line_no = 67580;
 	#endif
-	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __D8393c);
-	{
-		jdest = (Regs[13]._s32+486);
-		goto jumptable;
-	}
-__Nlmine_boom_pop:
-	case (0x8393c):
+	__F8393a ();
+	#ifdef M68K_DEBUG
+		line_no = 67581;
+	#endif
+	__F8393c ();
 	#ifdef M68K_DEBUG
 		line_no = 67582;
 	#endif
-	__F83940 ();
-__Nlmine_boom_done:
+	Regs[10]._s32 = rdlong(Regs[15]._s32+4);
+__Nlmine_boom_next:
 	case (0x83940):
 	#ifdef M68K_DEBUG
 		line_no = 67584;
 	#endif
-	__F83944 ();
+	__F83942 ();
 	#ifdef M68K_DEBUG
 		line_no = 67585;
 	#endif
 	__F83948 ();
 	#ifdef M68K_DEBUG
 		line_no = 67586;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67587;
+	#endif
+	__F83950 ();
+	#ifdef M68K_DEBUG
+		line_no = 67588;
+	#endif
+	if (nZ)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67589;
+	#endif
+	__F83956 ();
+	#ifdef M68K_DEBUG
+		line_no = 67590;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67591;
+	#endif
+	__F8395a ();
+	#ifdef M68K_DEBUG
+		line_no = 67592;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D83960);
+	{
+		goto __NL44af8;
+	}
+	case (0x83960):
+	#ifdef M68K_DEBUG
+		line_no = 67593;
+	#endif
+	__F83962 ();
+	#ifdef M68K_DEBUG
+		line_no = 67594;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67595;
+	#endif
+	__F8396a ();
+	#ifdef M68K_DEBUG
+		line_no = 67596;
+	#endif
+	if ((C || (!nZ)))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67597;
+	#endif
+	__F83972 ();
+	#ifdef M68K_DEBUG
+		line_no = 67598;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67599;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D83978);
+	{
+		goto __NLmine_dist;
+	}
+	case (0x83978):
+	#ifdef M68K_DEBUG
+		line_no = 67600;
+	#endif
+	__F8397a ();
+	#ifdef M68K_DEBUG
+		line_no = 67601;
+	#endif
+	if (((!C) && nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_skip;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_skip;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67602;
+	#endif
+	__F83980 ();
+	#ifdef M68K_DEBUG
+		line_no = 67603;
+	#endif
+	__F83984 ();
+	#ifdef M68K_DEBUG
+		line_no = 67604;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D83988);
+	{
+		jdest = (Regs[13]._s32+486);
+		goto jumptable;
+	}
+	case (0x83988):
+	#ifdef M68K_DEBUG
+		line_no = 67605;
+	#endif
+	{
+		goto __Nlmine_boom_reload_next;
+	}
+__Nlmine_boom_skip:
+	case (0x8398a):
+	#ifdef M68K_DEBUG
+		line_no = 67607;
+	#endif
+	__F8398c ();
+	#ifdef M68K_DEBUG
+		line_no = 67608;
+	#endif
+	if ((!N))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_next;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_next;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67609;
+	#endif
+	{
+		goto __Nlmine_boom_end;
+	}
+__Nlmine_boom_reload_next:
+	case (0x83990):
+	#ifdef M68K_DEBUG
+		line_no = 67611;
+	#endif
+	__F83992 ();
+	#ifdef M68K_DEBUG
+		line_no = 67612;
+	#endif
+	if (N)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlmine_boom_end;
+		goto handle_exception;
+	} else {
+		goto __Nlmine_boom_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 67613;
+	#endif
+	{
+		goto __Nlmine_boom_reload;
+	}
+__Nlmine_boom_end:
+	case (0x83996):
+	#ifdef M68K_DEBUG
+		line_no = 67615;
+	#endif
+	Regs[15]._u32 = (Regs[15]._s32+8);
+__Nlmine_boom_pop:
+	case (0x8399a):
+	#ifdef M68K_DEBUG
+		line_no = 67617;
+	#endif
+	__F8399e ();
+__Nlmine_boom_done:
+	case (0x8399e):
+	#ifdef M68K_DEBUG
+		line_no = 67619;
+	#endif
+	__F839a2 ();
+	#ifdef M68K_DEBUG
+		line_no = 67620;
+	#endif
+	__F839a6 ();
+	#ifdef M68K_DEBUG
+		line_no = 67621;
 	#endif
 	{
 		goto __Nl7582c;

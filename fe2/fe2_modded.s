@@ -68275,10 +68275,12 @@ Lpol_next:
 * (Call_MineRadius, 250 m by default; units of 1024 mm, 0 = as before), by the
 * game's own hit path l75824 with a1 = that ship. Replaces jsr 750(a5) /
 * bra.s l74f04 in L74eda.
+* The player does not set the mine off (nor does its owner); every other ship does.
 * Lmine_boom, at the start of l75824 (replaces move.b 93(a1),d0 / cmp.b
-* 212(a0),d0), also hurts the player, owner or not, with the mine's damage if
-* the player is within the radius when a mine goes off (by the fuse or by
-* touching a ship) and is not the ship already hit.
+* 212(a0),d0), makes the blast: when a mine goes off (by the fuse or by
+* touching a ship) every ship within the radius, the player and the owner
+* too, takes the mine's damage, besides the ship that was hit (a1), which
+* gets it from the game's own code.
 ******************************************************************************
 * squared distance (units of 1024 mm) of a0 and a1 in d5, or $7fffffff when
 * they are in different frames or further than d4 on an axis
@@ -68339,6 +68341,8 @@ Lmine_phys:
 		beq.s	lmine_skip
 		cmp.b	212(a0),d7
 		beq.s	lmine_skip
+		cmp.b	670(a6),d7
+		beq.s	lmine_skip
 		move.w	d7,d0
 		jsr	L44af8
 		cmpi.w	#$10,90(a1)
@@ -68360,26 +68364,57 @@ Lmine_phys:
 
 Lmine_boom:
 		cmpi.b	#$48,211(a0)
-		bne.s	lmine_boom_done
+		bne.w	lmine_boom_done
 		movem.l	d0-7/a1-4,-(a7)
-		movea.l	674(a6),a2
-		cmpa.l	a1,a2
-		beq.s	lmine_boom_pop
 		hcall	#Call_MineRadius
-		move.l	d0,d4
-		beq.s	lmine_boom_pop
-		move.l	d4,d3
-		muls	d4,d3
-		movea.l	a2,a1
-		bsr.w	Lmine_dist
-		cmp.l	d3,d5
-		bhi.s	lmine_boom_pop
+		tst.l	d0
+		beq.w	lmine_boom_pop
 		move.w	90(a0),d0
 		subq.w	#6,d0
 		lea	L75818,a3
-		move.w	0(a3,d0.w),d0
+		move.l	a1,-(a7)
+		move.w	0(a3,d0.w),-(a7)
+		move.w	#$72,-(a7)
+	lmine_boom_reload:
+		movea.l	A6_big_space(a6),a4
+		hcall	#Call_MineRadius
+		move.l	d0,d4
+		move.l	d4,d3
+		muls	d4,d3
+		movea.l	4(a7),a2
+	lmine_boom_next:
+		move.w	(a7),d7
+		btst	#$2,0(a4,d7.w)
+		beq.s	lmine_boom_skip
+		btst	#$4,0(a4,d7.w)
+		bne.s	lmine_boom_skip
+		cmp.b	93(a0),d7
+		beq.s	lmine_boom_skip
+		move.w	d7,d0
+		jsr	L44af8
+		cmpa.l	a1,a2
+		beq.s	lmine_boom_skip
+		cmpi.w	#$10,90(a1)
+		bls.s	lmine_boom_skip
+		cmpi.b	#$1,94(a1)
+		beq.s	lmine_boom_skip
+		bsr.w	Lmine_dist
+		cmp.l	d3,d5
+		bhi.s	lmine_boom_skip
+		move.w	2(a7),d0
 		move.b	212(a0),d7
 		jsr	486(a5)
+		bra.s	lmine_boom_reload_next
+	lmine_boom_skip:
+		subq.w	#1,(a7)
+		bpl.s	lmine_boom_next
+		bra.s	lmine_boom_end
+	lmine_boom_reload_next:
+		subq.w	#1,(a7)
+		bmi.s	lmine_boom_end
+		bra.s	lmine_boom_reload
+	lmine_boom_end:
+		lea	8(a7),a7
 	lmine_boom_pop:
 		movem.l	(a7)+,d0-7/a1-4
 	lmine_boom_done:

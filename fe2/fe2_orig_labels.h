@@ -373,7 +373,7 @@
 #define FE2_Lpol_next                                0x83824 /* Lpol_next */
 #define FE2_Lmine_dist                               0x83828 /* Lmine_dist */
 #define FE2_Lmine_phys                               0x83882 /* Lmine_phys */
-#define FE2_Lmine_boom                               0x838fa /* Lmine_boom */
+#define FE2_Lmine_boom                               0x83900 /* Lmine_boom */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */
