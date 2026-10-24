@@ -68275,7 +68275,8 @@ Lpol_next:
 * (Call_MineRadius, 250 m by default; units of 1024 mm, 0 = as before), by the
 * game's own hit path l75824 with a1 = that ship. Replaces jsr 750(a5) /
 * bra.s l74f04 in L74eda.
-* The player does not set the mine off (nor does its owner); every other ship does.
+* Only the mine's owner does not set it off; every other ship does, the player
+* too (an enemy's mine).
 * Lmine_boom, at the start of l75824 (replaces move.b 93(a1),d0 / cmp.b
 * 212(a0),d0), makes the blast: when a mine goes off (by the fuse or by
 * touching a ship) every ship within the radius, the player and the owner
@@ -68340,8 +68341,6 @@ Lmine_phys:
 		cmp.b	93(a0),d7
 		beq.s	lmine_skip
 		cmp.b	212(a0),d7
-		beq.s	lmine_skip
-		cmp.b	670(a6),d7
 		beq.s	lmine_skip
 		move.w	d7,d0
 		jsr	L44af8

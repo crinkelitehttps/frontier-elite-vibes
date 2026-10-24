@@ -198,7 +198,7 @@ ship's hull, worked out in the other ship's frame. There is no proximity fuse at
 **Fix:** `jmp Lmine_phys` (same size). Every tick the mine looks at all objects in its frame that are ships
 (model above `$10`, not a body) and, when one is within the radius, goes off by the game's own hit path
 (`l75824`, a1 = that ship): the normal damage for the mine's model (100 for the XB74), the explosion, the
-owner's credit. The player does not set it off, nor does its owner; every other ship does. The radius is an
+owner's credit. Only its owner does not set it off; every other ship does, the player too when it is an enemy's mine. The radius is an
 option (menu, Flight: a checkbox and a slider, 10-2000 m; `mine_prox` and `mine_radius` in `glfrontier.cfg`;
 default on, 250 m); off is the game's own behaviour. The host gives it to the 68k code with `Call_MineRadius`
 (`$97`). A hook at the start of `l75824` (`Lmine_boom`, replaces `move.b 93(a1),d0` / `cmp.b 212(a0),d0`)

@@ -415,6 +415,6 @@
 #define FE2_Lpol_next                                0xa96e4 /* Lpol_next */
 #define FE2_Lmine_dist                               0xa96e8 /* Lmine_dist */
 #define FE2_Lmine_phys                               0xa9742 /* Lmine_phys */
-#define FE2_Lmine_boom                               0xa97c0 /* Lmine_boom */
+#define FE2_Lmine_boom                               0xa97ba /* Lmine_boom */
 
 #endif /* FE2_LABELS_H */
