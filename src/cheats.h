@@ -73,12 +73,18 @@ typedef struct
 	int slot;
 	char name[32];
 	bool planet; /* planet, moon or star, else a station or city */
+	bool star;   /* a star (also `planet`) */
 	double radius_km;
 } CheatBody;
 int cheat_bodies(CheatBody *out, int max);
 /* Puts the ship `distance_km` above a planet's surface, or that far from a station, on the side it
  * is now (planet) or away from the planet the station is on (station); stops it. NULL or a reason. */
 const char *cheat_goto_body(int slot, double distance_km);
+
+/* Makes the game generate the system with this id (the game's 32 bit code, galaxy.h make_id) and
+ * makes it the current one, as the start of a jump does. No tunnel, fuel or time; the ship keeps its
+ * old position, which means nothing in the new system: follow with cheat_goto_body. NULL or a reason. */
+const char *cheat_enter_system(unsigned id);
 
 /* Shipyard items, in the order of the game's equipment list */
 typedef enum

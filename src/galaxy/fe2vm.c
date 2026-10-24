@@ -280,6 +280,7 @@ void fe2vm_game_hcalls(int on)
    lot, 1.1MB, is simpler and surer than a list, and costs well under a
    millisecond a frame. */
 static u8 *saved_ram;
+static int keep_ram; /* fe2vm_end_keep: leave what the calls wrote */
 
 
 static u32 stack_top(void)
@@ -328,7 +329,9 @@ void fe2vm_end(void)
 	fe2vm_depth = 0;
 	if (swapped)
 		memcpy(hcalls, saved_hcalls, hcalls_count * sizeof(HOSTCALL));
-	memcpy(m68kram, saved_ram, MEM_SIZE);
+	if (!keep_ram)
+		memcpy(m68kram, saved_ram, MEM_SIZE);
+	keep_ram = 0;
 
 	memcpy(Regs, saved_regs, sizeof(saved_regs));
 	N = saved_flags[0], nZ = saved_flags[1], V = saved_flags[2], C = saved_flags[3], X = saved_flags[4];
@@ -341,6 +344,12 @@ void fe2vm_end(void)
 	   to half of each second, so half its vblanks. */
 	EXCEPTIONS_PENDING_OR(saved_pending | EXCEPTIONS_DEFERRED_SWAP(0));
 	memcpy(exception_handlers, saved_handlers, sizeof(saved_handlers));
+}
+
+void fe2vm_end_keep(void)
+{
+	keep_ram = batch == 1;
+	fe2vm_end();
 }
 
 /* -- API ------------------------------------------------------------------ */

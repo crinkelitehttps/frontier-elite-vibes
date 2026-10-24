@@ -5,10 +5,12 @@
  * ship object; the fe2/fe2_modded.s code each one comes from is noted next to it.
  */
 #include <math.h>
+#include <string.h>
 
 #include "cheats.h"
 #include "game_state.h"
 #include "host.h" /* rdbyte, wrbyte, ... */
+#include "galaxy/fe2vm.h"
 
 bool cheat_ignore_space;
 
@@ -412,11 +414,18 @@ static void abs_pos(int slot, pos64 out[3])
 	}
 }
 
-/* Models 61-86 and 193-194 hold the planet command: planets, moons and stars */
+/* Models 61-87 and 193-194 hold the planet command: planets, moons and stars (the catalog,
+ * tools/galaxy_catalog, has the model of each body kind: 77-87 are the stars, 87 a white dwarf) */
 static bool is_planet_model(u32 obj)
 {
 	int model = (u16)rdword(obj + 90) / 2;
-	return (model >= 61 && model <= 86) || model == 193 || model == 194;
+	return (model >= 61 && model <= 87) || model == 193 || model == 194;
+}
+
+static bool is_star_model(u32 obj)
+{
+	int model = (u16)rdword(obj + 90) / 2;
+	return model >= 77 && model <= 87;
 }
 
 int cheat_bodies(CheatBody *out, int max)
@@ -430,6 +439,7 @@ int cheat_bodies(CheatBody *out, int max)
 		CheatBody *b = &out[n++];
 		b->slot = i;
 		b->planet = is_planet_model(o);
+		b->star = is_star_model(o);
 		int k = 0;
 		for (; k < (int)sizeof(b->name) - 1 && rdbyte(o + OBJ_NAME + k); k++)
 			b->name[k] = (char)rdbyte(o + OBJ_NAME + k);
@@ -484,6 +494,86 @@ const char *cheat_goto_body(int slot, double distance_km)
 	 * stays in whatever frame it is in (the game picks the station's when it gets close) */
 	move_ship(to, planet ? slot : -1);
 	cheat_ship_stop();
+	return NULL;
+}
+
+/* ---- changing system ---- */
+
+/* The A5 table entries the game's jump start uses (L814dc, module 140(a6)) */
+#define A5_BROADCAST 450 /* L458b4: d0 = event for the modules */
+#define A5_CLEAR_OBJECTS 510 /* L44be8: a4 = object table, frees every slot */
+#define A5_SET_OBJECT_FLAG 528 /* L4484e: a0 = object, d0 = flag byte */
+#define A6_GALMAP_REF_POS 936 /* 3 longs: where the galaxy map measures distances from */
+#define A6_GALMAP_SEL_POS 948 /* 3 longs: the selected star */
+
+static int game_call(u32 addr, fe2vm_regs *r)
+{
+	return fe2vm_call(addr, r);
+}
+
+/* What the game does when a hyperspace jump starts (L814dc, after its fuel
+ * and range checks) and the destination is generated: free the objects but
+ * the player's, tell the modules, make the system (L8145e), tell them again.
+ * It is not a jump (no tunnel, no fuel, no time passes); the ship is left
+ * where it was, which means nowhere in the new system. */
+const char *cheat_enter_system(unsigned id)
+{
+	if (!ship())
+		return "No ship yet.";
+	u32 player = ship();
+	fe2vm_regs r;
+	fe2vm_begin();
+	memset(&r, 0, sizeof(r));
+	r.a[4] = (u32)rdlong(a6(14466));
+	game_call(FE2_a5_jumptab + A5_CLEAR_OBJECTS, &r);
+	wrword(a6(596), 0);
+	memset(&r, 0, sizeof(r));
+	r.a[0] = player;
+	r.d[0] = 79;
+	game_call(FE2_a5_jumptab + A5_SET_OBJECT_FLAG, &r);
+	wrbyte(player + OBJ_PARENT, 0);
+	wrbyte(player + 69, 0);
+	wrbyte(player + 281, 0);
+	wrbyte(a6(708), 0);
+	wrbyte(a6(732), 0);
+	wrbyte(a6(A6_FLIGHT_STATE), 0);
+	/* select the system as the galaxy map does when it is clicked (galaxy.cpp Galaxy::select):
+	 * L8145e takes the new system from the map's selection */
+	memset(&r, 0, sizeof(r));
+	r.d[0] = 2; /* L83b46 mode 2: the star's position, type and number */
+	r.d[1] = id;
+	if (game_call(FE2_L83b46, &r) || (int)r.d[0] == -1)
+	{
+		fe2vm_end();
+		return "No such system.";
+	}
+	for (int i = 0; i < 3; i++)
+	{
+		wrlong(a6(A6_GALMAP_SEL_POS) + 4 * i, (int)r.d[1 + i]);
+		wrlong(a6(A6_GALMAP_REF_POS) + 4 * i, (int)r.d[1 + i]);
+	}
+	u32 number = r.d[7], type = r.d[6];
+	memset(&r, 0, sizeof(r));
+	r.d[5] = number;
+	r.d[6] = type;
+	game_call(FE2_L849a2, &r);
+	memset(&r, 0, sizeof(r));
+	r.d[0] = 19;
+	game_call(FE2_a5_jumptab + A5_BROADCAST, &r);
+	memset(&r, 0, sizeof(r));
+	r.d[0] = 0;
+	r.d[6] = id;
+	r.a[0] = player;
+	int bad = game_call((u32)rdlong(a6(140)) + 32, &r); /* module fn 32, d0 = 0: L8145e */
+	memset(&r, 0, sizeof(r));
+	r.d[0] = 2;
+	game_call(FE2_a5_jumptab + A5_BROADCAST, &r);
+	if (bad)
+	{
+		fe2vm_end();
+		return "The game's system generator failed; nothing changed.";
+	}
+	fe2vm_end_keep();
 	return NULL;
 }
 
