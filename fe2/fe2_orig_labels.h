@@ -363,6 +363,14 @@
 #define FE2_Lalt_hud                                 0x83674 /* Lalt_hud */
 #define FE2_Lsmoke_vel                               0x836cc /* Lsmoke_vel */
 #define FE2_Lpax_late                                0x836d8 /* Lpax_late */
+#define FE2_Lpol_slot                                0x83702 /* Lpol_slot */
+#define FE2_Lpol_spawn                               0x83716 /* Lpol_spawn */
+#define FE2_Lpol_release                             0x83742 /* Lpol_release */
+#define FE2_Lpol_phys                                0x83784 /* Lpol_phys */
+#define FE2_Lpol_grace                               0x837be /* Lpol_grace */
+#define FE2_Lpol_dmg1                                0x83804 /* Lpol_dmg1 */
+#define FE2_Lpol_dmg2                                0x83814 /* Lpol_dmg2 */
+#define FE2_Lpol_next                                0x83824 /* Lpol_next */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

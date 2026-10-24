@@ -405,5 +405,13 @@
 #define FE2_Lalt_hud                                 0xa9534 /* Lalt_hud */
 #define FE2_Lsmoke_vel                               0xa958c /* Lsmoke_vel */
 #define FE2_Lpax_late                                0xa9598 /* Lpax_late */
+#define FE2_Lpol_slot                                0xa95c2 /* Lpol_slot */
+#define FE2_Lpol_spawn                               0xa95d6 /* Lpol_spawn */
+#define FE2_Lpol_release                             0xa9602 /* Lpol_release */
+#define FE2_Lpol_phys                                0xa9644 /* Lpol_phys */
+#define FE2_Lpol_grace                               0xa967e /* Lpol_grace */
+#define FE2_Lpol_dmg1                                0xa96c4 /* Lpol_dmg1 */
+#define FE2_Lpol_dmg2                                0xa96d4 /* Lpol_dmg2 */
+#define FE2_Lpol_next                                0xa96e4 /* Lpol_next */
 
 #endif /* FE2_LABELS_H */

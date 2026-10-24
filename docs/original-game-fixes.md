@@ -147,6 +147,43 @@ at the next landing wherever it is. Named clients and parcels keep the
 destination test. Both variants. Tested by writing an expired entry into the
 list (`poke`) with a different destination: it leaves and `744(a6)` drops.
 
+## 7. Police Vipers explode on launch (`L80f5c`, `L80ebc`, `L755d0`, `L750c0`)
+
+**Symptom:** after a crime near a station the police Vipers launch and are
+destroyed in or at the bay, some without ever leaving it. (Original-game bug
+report 9.)
+
+**Cause:** several things at once. (1) A burst is four ships made on the same
+frame at four bay slots (fn 9 of the module at `68(a6)`: x = +-25 m, z = +120 m
+for slots 0 and 1, z = -30 m for 2 and 3, in the station's frame). The z = -30 m
+slots are inside the station: a ship put there hits it every tick (the bounce
+of `l3f9d6` takes its velocity to zero in a few ticks), stays in the bay in
+close combat and blows up. (2) The ships are held in mode `$7c` (`L755d0`, no
+physics) until the offender flag `159(a1)` clears, so a later burst is put on
+top of ships still held in the same slots; all of them leave on the same frame
+and hit each other. (3) Even from a good slot a ship collides with the station
+for a tick or two on its way out (the collision damage routine at `l3f9b4` /
+`l3f9c6` kills it), and in mode 4 close to the player it goes into close
+combat (mode 8) inside the bay.
+
+**Original code** (all replaced by same-size hooks): `moveq #9,d1` / `movea.l
+68(a6),a0` / `jsr 32(a0)` in `L80f5c`, `move.b d0,211(a1)` / `btst #5,280(a0)`
+there, `moveq #3,d7` at `l80ef6`, `move.b #4,211(a0)` at `l755e6`, `moveq #0,d7`
+/ `move.b 211(a0),d7` in `L750c0`, and the two `jsr 486(a5)` damage calls in the
+collision routine.
+
+**Fix** (`Lpol_slot`, `Lpol_spawn`, `Lpol_release`, `Lpol_phys`, `Lpol_grace`,
+`Lpol_dmg1/2`): at a station (not a ground base, which keeps its own pads and
+four ships) a burst is two ships and only slots 0 and 1 are used. A held
+ship is given a release time (kept in the unused `262(a0)`) by the once-a-second
+AI step; release times are 0.75 s apart across all bursts. From its release time
+the physics runs as mode 4 but the ship stays in hold mode (no steering, no
+combat) for 3 s, so it coasts straight out on its launch velocity, then goes to
+mode 4. While held or coasting, and for 2 s after, a police Viper takes no
+collision damage. Both variants. Tested on Lave Station with a save outside it
+at a steep angle to the bay: three bursts (six ships) all left the bay and
+attacked; before the fix the rear-slot ships exploded or jammed in the bay.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

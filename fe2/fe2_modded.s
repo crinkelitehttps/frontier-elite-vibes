@@ -19916,13 +19916,11 @@ L3f8fe:
 	l3f9b4:	add.w	d0,d0
 		move.w	d0,-(a7)
 		move.b	93(a0),d7
-		jsr	486(a5)
-		move.w	(a7)+,d0
-		move.b	93(a1),d7
+		jmp	Lpol_dmg1
+	lpol_dmg1_back:	move.b	93(a1),d7
 	l3f9c6:	move.l	a1,-(a7)
 		movea.l	a0,a1
-		jsr	486(a5)
-		movea.l	(a7)+,a1
+		jmp	Lpol_dmg2
 	l3f9d0:	move.b	16014(a6),d0
 		rts
 
@@ -51106,8 +51104,7 @@ L750c0_mod11_fn24_OtherShipPhysics:
 		movem.l	d2-3,126(a0)
 		sub.l	d0,d2
 		subx.l	d1,d3
-		moveq	#0,d7
-		move.b	211(a0),d7
+		jsr	Lpol_phys
 		move.w	L750f2(pc,d7.w),d7
 		jmp	L750f0(pc,d7.w)
 
@@ -51579,7 +51576,7 @@ L755d0:
 		beq.s	l755e6
 		tst.b	159(a1)
 		bne.s	l755ce
-	l755e6:	move.b	#$4,211(a0)
+	l755e6:	jmp	Lpol_release
 		rts
 L755ee:
 		jsr	A5_2RandInts(a5)
@@ -60175,16 +60172,16 @@ L80ebc:
 L80f5c:
 		movem.l	a1/d7/d0,-(a7)
 		move.l	A6_big_space(a6),14462(a6)
-		moveq	#9,d1
-		movea.l	68(a6),a0
+		jsr	Lpol_slot
 		jsr	32(a0)
 		moveq	#5,d7
 		movea.l	100(a6),a0
 		jsr	32(a0)
 		beq.w	l81038
 		movem.l	(a7),d0/d7/a0
-		move.b	d0,211(a1)
-		btst	#$5,280(a0)
+		jsr	Lpol_spawn
+		nop
+		nop
 		beq.s	l80fd0
 		movem.l	44(a1),d0-5
 		add.l	44(a0),d0
@@ -68121,3 +68118,147 @@ Lpax_late:
 		jmp	l7edb4
 	lpax_late_next:
 		jmp	l7ee7e
+
+******************************************************************************
+* Police (L80ebc, ships made by L80f5c) are put at a bay slot (fn 9 of the
+* module at 68(a6), slot d7 = 0-3 at x = +-25 m and z = +120 m (slots 0, 1) or
+* z = -30 m (slots 2, 3) in the station's frame, table L5f3ec). From the two
+* z = -30 m slots they hit the station at once: the velocity went to nothing
+* in a few ticks (the bounce of l3f9d6) and the ships sat there in the bay
+* fighting, then blew up. Four police were also made at once and a
+* later wave reused the slots of ships still held (mode $7c, L755d0, no
+* physics until the offender flag clears), so ships sat on top of each other,
+* left their hold on the same frame and hit each other. Now:
+*  - Lpol_slot (replaces moveq #9,d1 / movea.l 68(a6),a0 in L80f5c) uses only
+*    slots 0 and 1 (d7 and 1); the saved d7 is not touched. A burst is two
+*    ships, one for each of those slots: Lpol_spawn lowers the burst's loop
+*    counter (the saved d7, low word at 10(a7) there) to 1. Both only for a station (bit 6
+*    of 280(a1) clear); a ground base keeps its own pads and four ships.
+*  - a held ship is scheduled by Lpol_release (the once-a-second AI step,
+*    replaces move.b #4,211(a0) at l755e6): its release time (time of day, bit
+*    0 set as the flag) goes in 262(a0), unused, and ships are given release
+*    times 0.75 s (37275 units, 49710 a second) apart across all waves
+*    (Lpol_next). Lpol_phys (every tick, replaces moveq #0,d7 / move.b
+*    211(a0),d7 in L750c0) runs the ship's physics as mode 4 from its time on
+*    but leaves it in hold mode (no steering, no combat) for 3 s ($2468a), so it
+*    coasts straight out of the bay on its launch velocity; only then is it
+*    mode 4.
+*  - the ship still hits the station for a tick or two as it leaves the bay
+*    (every slot, even on the bay axis), which killed it, so while it is held
+*    or coasting (mode $7c) and for 2 s ($1845c) after its release a police
+*    Viper (model $2e) takes no collision damage (Lpol_grace, in the two
+*    damage calls of the collision routine at l3f9b4 / l3f9c6).
+* Lpol_spawn replaces move.b d0,211(a1) / btst #5,280(a0) in L80f5c and
+* clears 262(a1).
+******************************************************************************
+Lpol_slot:
+		moveq	#9,d1
+		movea.l	68(a6),a0
+		btst	#$6,280(a1)
+		bne.s	lpol_slot_done
+		andi.w	#$1,d7
+	lpol_slot_done:
+		rts
+
+Lpol_spawn:
+		move.b	d0,211(a1)
+		cmpi.b	#$7c,d0
+		bne.s	lpol_spawn_done
+		clr.l	262(a1)
+		btst	#$6,280(a0)
+		bne.s	lpol_spawn_done
+		cmpi.w	#$1,10(a7)
+		bls.s	lpol_spawn_done
+		move.w	#$1,10(a7)
+	lpol_spawn_done:
+		btst	#$5,280(a0)
+		rts
+
+Lpol_release:
+		btst	#$0,265(a0)
+		bne.s	lpol_release_done
+		movem.l	d0-1,-(a7)
+		move.l	524(a6),d0
+		move.l	Lpol_next,d1
+		sub.l	d0,d1
+		cmpi.l	#$79e4c,d1
+		bhi.s	lpol_release_now
+		add.l	d0,d1
+		bra.s	lpol_release_set
+	lpol_release_now:
+		move.l	d0,d1
+	lpol_release_set:
+		move.l	d1,d0
+		addi.l	#37275,d0
+		move.l	d0,Lpol_next
+		bset	#$0,d1
+		move.l	d1,262(a0)
+		movem.l	(a7)+,d0-1
+	lpol_release_done:
+		rts
+
+Lpol_phys:
+		cmpi.b	#$7c,211(a0)
+		bne.s	lpol_phys_done
+		btst	#$0,265(a0)
+		beq.s	lpol_phys_done
+		move.l	d0,-(a7)
+		move.l	524(a6),d0
+		sub.l	262(a0),d0
+		bmi.s	lpol_phys_wait
+		cmpi.l	#149130,d0
+		bhi.s	lpol_phys_attack
+		move.l	(a7)+,d0
+		moveq	#4,d7
+		rts
+	lpol_phys_attack:
+		move.b	#$4,211(a0)
+	lpol_phys_wait:
+		move.l	(a7)+,d0
+	lpol_phys_done:
+		moveq	#0,d7
+		move.b	211(a0),d7
+		rts
+
+* carry set if the victim (a1) is a police Viper in its first 2 s after release
+Lpol_grace:
+		cmpi.w	#$2e,90(a1)
+		bne.s	lpol_grace_no
+		cmpi.b	#$7c,211(a1)
+		beq.s	lpol_grace_held
+		btst	#$0,265(a1)
+		beq.s	lpol_grace_no
+		movem.l	d1,-(a7)
+		move.l	524(a6),d1
+		sub.l	262(a1),d1
+		cmpi.l	#$1845c,d1
+		movem.l	(a7)+,d1
+		rts
+	lpol_grace_held:
+		movem.l	d1,-(a7)
+		moveq	#0,d1
+		cmpi.l	#$1,d1
+		movem.l	(a7)+,d1
+		rts
+	lpol_grace_no:
+		cmp.w	d7,d7
+		rts
+
+Lpol_dmg1:
+		bsr.s	Lpol_grace
+		bcs.s	lpol_dmg1_skip
+		jsr	486(a5)
+	lpol_dmg1_skip:
+		move.w	(a7)+,d0
+		jmp	lpol_dmg1_back
+
+Lpol_dmg2:
+		bsr.s	Lpol_grace
+		bcs.s	lpol_dmg2_skip
+		jsr	486(a5)
+	lpol_dmg2_skip:
+		movea.l	(a7)+,a1
+		jmp	l3f9d0
+
+Lpol_next:
+		dc.l	0
