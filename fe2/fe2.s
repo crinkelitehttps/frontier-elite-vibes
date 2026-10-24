@@ -42379,11 +42379,14 @@ L63574_mod3_fn20_DrawPlayerHUD:
 	l6366c:	move.w	#$8620,d0
 		move.l	692(a6),d3
 		bmi.s	l6368c
-		divu	#$3e8,d3
-		bvs.s	l6368c
-		andi.l	#$ffff,d3
-		cmp.w	#$ea60,d3
+* Altitude readout range. Hook, same size. See Lalt_hud at the end of the file.
+		jsr	Lalt_hud
 		bhi.s	l6368c
+		nop
+		nop
+		nop
+		nop
+		nop
 		move.w	#$8622,d0
 	l6368c:	btst	#$0,705(a6)
 		bne.s	l6369c
@@ -67193,4 +67196,43 @@ Lframe_cand:
 	lframe_cand_ret:	rts
 	lframe_cand_no2:	movem.l	(a7)+,d0/a1
 	lframe_cand_no:	cmp.b	d0,d0
+		rts
+
+
+* HUD altitude readout (the "Alt. ... m" of the flight display, L6366c's
+* neighbourhood). The original shows it only up to 60 km (a 16 bit number of
+* metres), the rest of the time the distance-only line. Over a star or a gas
+* giant (model $92-$ae, the bodies the fuel scoop works at, bit 0 of 893(a6)
+* = the body has an atmosphere shell) the readout shows from 2000 km: the
+* altitude variable 692(a6) is exact there (it does not fit in 32 bits of mm
+* past 2147 km), and a ship orbiting a star is much too fast to see 60 km
+* coming. In: d3 = altitude in mm (not negative). Out: d3 = altitude in
+* metres (32 bit, the format prints a long), flags of the range check, higher
+* = do not show.
+Lalt_hud:
+		movem.l	d4-5/a1,-(a7)
+		move.l	d3,d4
+		swap	d4
+		andi.l	#$ffff,d4
+		divu	#$3e8,d4
+		move.w	d4,-(a7)
+		move.w	d3,d4
+		divu	#$3e8,d4
+		andi.l	#$ffff,d4
+		moveq	#0,d3
+		move.w	(a7)+,d3
+		swap	d3
+		add.l	d4,d3
+		move.l	#$ea60,d5
+		btst	#$0,893(a6)
+		beq.s	lalt_hud_cmp
+		movea.l	16024(a6),a1
+		move.w	90(a1),d4
+		cmpi.w	#$92,d4
+		bcs.s	lalt_hud_cmp
+		cmpi.w	#$ae,d4
+		bhi.s	lalt_hud_cmp
+		move.l	#$1e8480,d5
+	lalt_hud_cmp:	cmp.l	d5,d3
+		movem.l	(a7)+,d4-5/a1
 		rts

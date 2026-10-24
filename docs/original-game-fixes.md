@@ -87,6 +87,23 @@ additionally treats an occupied slot whose object is a starport body (type
 `94(a1) == 1` and bit 4 of `280(a1)`) as a candidate. Z flag out as for `btst`.
 The flag writes themselves are left alone.
 
+## 4. Altitude readout appears too late over stars and gas giants (`L6366c`)
+
+**Symptom:** scooping from a star is nearly impossible: the "Alt." readout only
+shows below 60 km, and a ship in orbit round a star is too fast to react.
+Above that the HUD gives no altitude. (Original-game bug report 8.)
+
+**Cause:** the HUD (`l6366c` in the flight display code) shows the altitude
+`692(a6)` (mm) only when `mm / 1000` fits a 16 bit number and is at most
+`$ea60` = 60000 m. The altitude itself is exact out to 2147 km.
+
+**Original code:** `divu #$3e8,d3 / bvs.s / andi.l #$ffff,d3 / cmp.w #$ea60,d3 /
+bhi.s` (18 bytes).
+
+**Fix:** `jsr Lalt_hud / bhi.s / 5 nop`. `Lalt_hud` divides to metres in 32 bit
+and uses a limit of 2,000,000 m when the nearest body is a star or gas giant
+(model `$92`-`$ae`, bit 0 of `893(a6)`), 60 km otherwise. Both variants.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

@@ -402,5 +402,6 @@
 #define FE2_Lcool_dec                                0xa94c8 /* Lcool_dec */
 #define FE2_Lprox_log                                0xa94de /* Lprox_log */
 #define FE2_Lframe_cand                              0xa9500 /* Lframe_cand */
+#define FE2_Lalt_hud                                 0xa9534 /* Lalt_hud */
 
 #endif /* FE2_LABELS_H */
