@@ -27,6 +27,7 @@
 #include "renderer.h"
 #include "screen_text.h"
 #include "shortcut.h"
+#include "script.h"
 #include "station_resume.h"
 #include "strafe.h"
 
@@ -73,6 +74,7 @@ static void Call_HostUpdate(void)
 	Main_EventHandler();
 	freecam_update();
 	station_resume_poll();
+	script_poll();
 }
 
 /* The game waiting for its next 20 ms tick: sleep rather than spin (a

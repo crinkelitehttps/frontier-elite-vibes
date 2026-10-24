@@ -623,6 +623,30 @@ void location_cheats()
 			report(cheat_goto_body(goto_slot, goto_km < 0 ? 0 : goto_km));
 	}
 
+	/* another system, by the game's system id (hex), then to its first planet */
+	static char system_id[16] = "a925c600";
+	ImGui::TextWrapped("Enter system (hex id)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::InputText("##sysid", system_id, sizeof(system_id), ImGuiInputTextFlags_CharsHexadecimal);
+	if (ui_button("Enter system"))
+	{
+		const char *why = cheat_enter_system((unsigned)strtoul(system_id, nullptr, 16));
+		if (!why)
+		{
+			count = cheat_bodies(bodies, 64);
+			for (int i = 0; i < count && !why; i++)
+				if (bodies[i].planet && !bodies[i].star)
+				{
+					why = cheat_goto_body(bodies[i].slot, bodies[i].radius_km);
+					if (!why)
+						why = "";
+				}
+			if (!why)
+				why = "";
+		}
+		report(why && *why ? why : nullptr);
+	}
+
 	/* typed coordinates: applied with the button, so half-typed values never move the ship */
 	static float typed[3];
 	static bool filled = false;

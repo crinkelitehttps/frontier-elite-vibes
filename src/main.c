@@ -22,6 +22,7 @@
 #include "manual.h"
 #include "custom_ships.h"
 #include "renderer.h"
+#include "script.h"
 #include "touch_input.h"
 #include "ui/ui.h"
 #include "vr.h"
@@ -349,6 +350,9 @@ static void read_parameters(int argc, char *argv[])
 				   "  --size w h            Start at specified window size.\n"
 				   "  --vr                  Use a VR headset (OpenXR).\n"
 				   "  --novr                Don't, even if glfrontier.cfg says vr=1.\n"
+				   "  --script FILE         Run the commands in FILE (see src/script.c).\n"
+				   "  --do \"CMD; CMD\"     Run these commands.\n"
+				   "  --control FIFO        Run commands written to this named pipe.\n"
 				   "  --manual FILE         The game manual (PDF) for the clipboard (F11);\n"
 				   "                        else the first *.pdf in this folder.\n");
 			exit(0);
@@ -368,6 +372,18 @@ static void read_parameters(int argc, char *argv[])
 		else if (!strcmp(argv[i], "--manual") && i + 1 < argc)
 		{
 			manual_arg = argv[++i];
+		}
+		else if (!strcmp(argv[i], "--script") && i + 1 < argc)
+		{
+			script_add_file(argv[++i]);
+		}
+		else if (!strcmp(argv[i], "--do") && i + 1 < argc)
+		{
+			script_add_text(argv[++i]);
+		}
+		else if (!strcmp(argv[i], "--control") && i + 1 < argc)
+		{
+			script_set_control(argv[++i]);
 		}
 		else if (!strcmp(argv[i], "--nosound"))
 		{
