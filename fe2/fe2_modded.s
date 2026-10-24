@@ -50926,8 +50926,7 @@ L74ed8:
 L74eda:
 		movem.l	d2-3,-(a7)
 		move.l	d2,d7
-		jsr	750(a5)
-		bra.s	l74f04
+		jmp	Lmine_phys
 
 L74ee6:
 		movem.l	d2-3,-(a7)
@@ -68262,3 +68261,75 @@ Lpol_dmg2:
 
 Lpol_next:
 		dc.l	0
+
+******************************************************************************
+* A proximity mine (mode $48, no AI, physics L74eda) only went off through
+* the ordinary collision test (786(a5)), which needs its model to touch the
+* hull of the other ship, so a ship had to fly into it (and the fine test
+* works in the ship's own frame, which is why it seemed to need the target to
+* point at the mine). Now every tick the mine looks at all ships in its frame
+* (not bodies, not missiles / mines / debris, model > $10; not its owner,
+* 212(a0)) and goes off when one is within about 500 m (the squared distance
+* in units of 1024 mm, 250000), by the game's own hit path l75824 with a1 =
+* that ship. Replaces jsr 750(a5) / bra.s l74f04 in L74eda.
+******************************************************************************
+Lmine_phys:
+		jsr	750(a5)
+		movem.l	d0-7/a1-4,-(a7)
+		movea.l	A6_big_space(a6),a4
+		moveq	#$72,d7
+	lmine_next:
+		btst	#$2,0(a4,d7.w)
+		beq.w	lmine_skip
+		btst	#$4,0(a4,d7.w)
+		bne.w	lmine_skip
+		cmp.b	93(a0),d7
+		beq.w	lmine_skip
+		cmp.b	212(a0),d7
+		beq.w	lmine_skip
+		move.w	d7,d0
+		jsr	L44af8
+		cmpi.w	#$10,90(a1)
+		bls.w	lmine_skip
+		cmpi.b	#$1,94(a1)
+		beq.w	lmine_skip
+		move.b	68(a1),d0
+		cmp.b	68(a0),d0
+		bne.w	lmine_skip
+		move.b	69(a1),d0
+		cmp.b	69(a0),d0
+		bne.w	lmine_skip
+		moveq	#0,d5
+		moveq	#0,d6
+	lmine_axis:
+		move.l	44(a1,d6.w),d0
+		move.l	56(a1,d6.w),d1
+		sub.l	44(a0,d6.w),d0
+		move.l	56(a0,d6.w),d2
+		subx.l	d2,d1
+		smi	d2
+		ext.w	d2
+		ext.l	d2
+		cmp.l	d2,d1
+		bne.w	lmine_skip
+		asr.l	#8,d0
+		asr.l	#2,d0
+		cmpi.l	#1000,d0
+		bgt.w	lmine_skip
+		cmpi.l	#-1000,d0
+		blt.w	lmine_skip
+		muls	d0,d0
+		add.l	d0,d5
+		addq.w	#4,d6
+		cmpi.w	#12,d6
+		bne.w	lmine_axis
+		cmpi.l	#250000,d5
+		bhi.w	lmine_skip
+		move.l	a1,32(a7)
+		movem.l	(a7)+,d0-7/a1-4
+		movem.l	(a7)+,d2-3
+		jmp	l75824
+	lmine_skip:
+		dbra	d7,lmine_next
+		movem.l	(a7)+,d0-7/a1-4
+		jmp	l74f04

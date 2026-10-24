@@ -1,0 +1,7 @@
+# Issue 5 proximity mine test. Base combat-smoking: the NPC (slot 105) is ~300 m from the player; both
+# at rest relative to each other. Two XB74 proximity mines (pylon byte $c1) on the pylons.
+base ../bases/combat-smoking
+out ../../../../savs/MineTest
+name MineTest
+ship[172] c1
+ship[173] c1

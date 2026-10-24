@@ -184,6 +184,24 @@ collision damage. Both variants. Tested on Lave Station with a save outside it
 at a steep angle to the bay: three bursts (six ships) all left the bay and
 attacked; before the fix the rear-slot ships exploded or jammed in the bay.
 
+## 8. Proximity mines only go off if they touch a ship (`L74eda`, `Lmine_phys`)
+
+**Symptom:** a proximity mine does not explode when a ship passes near it; it seems to go off only when the
+target points at it from about 1 km. (Original-game bug report 5.)
+
+**Cause:** a mine (AI mode `$48`) has no AI step (`L757de` is an `rts`) and its physics (`L74eda`) only runs
+the ordinary collision test (`786(a5)`, `L3f460`), which reports a hit when the mine's model touches the other
+ship's hull, worked out in the other ship's frame. There is no proximity fuse at all.
+
+**Original code:** `jsr 750(a5)` / `bra.s l74f04` in `L74eda` (6 bytes).
+
+**Fix:** `jmp Lmine_phys` (same size). Every tick the mine looks at all objects in its frame that are ships
+(model above `$10`, not a body, not its owner at `212(a0)`) and, when one is within about 500 m (squared
+distance in units of 1024 mm below 250000), goes off by the game's own hit path (`l75824`, a1 = that ship):
+the normal damage for the mine's model (100 for the XB74), the explosion, the owner's credit. Both variants.
+Tested with `tools/savetool/scenarios/mine-test.txt`: a pad ship 380 m away is untouched by the mine in the
+old build and takes the 100 damage in the new one. The radius is the constant `250000` in `Lmine_phys`.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

@@ -413,5 +413,6 @@
 #define FE2_Lpol_dmg1                                0xa96c4 /* Lpol_dmg1 */
 #define FE2_Lpol_dmg2                                0xa96d4 /* Lpol_dmg2 */
 #define FE2_Lpol_next                                0xa96e4 /* Lpol_next */
+#define FE2_Lmine_phys                               0xa96e8 /* Lmine_phys */
 
 #endif /* FE2_LABELS_H */
