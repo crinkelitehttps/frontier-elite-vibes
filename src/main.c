@@ -23,6 +23,7 @@
 #include "custom_ships.h"
 #include "renderer.h"
 #include "script.h"
+#include "netplay.h"
 #include "touch_input.h"
 #include "ui/ui.h"
 #include "vr.h"
@@ -350,6 +351,8 @@ static void read_parameters(int argc, char *argv[])
 				   "  --size w h            Start at specified window size.\n"
 				   "  --vr                  Use a VR headset (OpenXR).\n"
 				   "  --novr                Don't, even if glfrontier.cfg says vr=1.\n"
+				   "  --mp-listen PORT      Two-player race: wait for the other player (UDP).\n"
+				   "  --mp-connect HOST:PORT  Two-player race: join the one listening.\n"
 				   "  --script FILE         Run the commands in FILE (see src/script.c).\n"
 				   "  --do \"CMD; CMD\"     Run these commands.\n"
 				   "  --control FIFO        Run commands written to this named pipe.\n"
@@ -372,6 +375,16 @@ static void read_parameters(int argc, char *argv[])
 		else if (!strcmp(argv[i], "--manual") && i + 1 < argc)
 		{
 			manual_arg = argv[++i];
+		}
+		else if (!strcmp(argv[i], "--mp-listen") && i + 1 < argc)
+		{
+			if (!netplay_listen(atoi(argv[++i])))
+				fprintf(stderr, "--mp-listen: can't use that port\n");
+		}
+		else if (!strcmp(argv[i], "--mp-connect") && i + 1 < argc)
+		{
+			if (!netplay_connect(argv[++i]))
+				fprintf(stderr, "--mp-connect: expects HOST:PORT\n");
 		}
 		else if (!strcmp(argv[i], "--script") && i + 1 < argc)
 		{

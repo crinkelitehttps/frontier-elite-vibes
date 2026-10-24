@@ -150,6 +150,8 @@
 #define FE2_FmtStr                                   0x32fd4 /* L3e7aa_FmtStr */
 #define FE2_BabyStringTable                          0x330a2 /* L3e878_BabyStringTable */
 #define FE2_L3e894                                   0x330d6 /* L3e894 */
+#define FE2_Lnet_collide_begin                       0x34140 /* Lnet_collide_begin */
+#define FE2_Lnet_collide_end                         0x34218 /* Lnet_collide_end */
 #define FE2_SetMainPalette                           0x36258 /* L41a16_SetMainPalette */
 #define FE2_SetDefaultPalette                        0x3627c /* L41a3a_SetDefaultPalette */
 #define FE2_WaitVBlankWaits                          0x362ac /* L41a66_WaitVBlankWaits */
@@ -194,8 +196,10 @@
 #define FE2_DrawBGStars                              0x388f4 /* L44200_DrawBGStars */
 #define FE2_star_light_tint_tables                   0x38b14 /* L44420_star_light_tint_tables */
 #define FE2_DoPhysics                                0x38eb0 /* L447bc_DoPhysics */
+#define FE2_Lnet_physics_cont                        0x38eb8 /* Lnet_physics_cont */
 #define FE2_Copy3DObj_a0_a1                          0x38faa /* L448b6_Copy3DObj_a0_a1 */
 #define FE2_AddObject                                0x3916c /* L44a78_AddObject */
+#define FE2_Lnet_damage_cont                         0x39390 /* Lnet_damage_cont */
 #define FE2_a5_jumptab                               0x39a26 /* L45332_a5_jumptab */
 #define FE2_SetupA6Jumptab                           0x39d8c /* L4569c_SetupA6Jumptab */
 #define FE2_CallHUDModfuncs                          0x39f44 /* L45854_CallHUDModfuncs */
@@ -354,7 +358,9 @@
 #define FE2_Lcool_dec                                0x835d4 /* Lcool_dec */
 #define FE2_Lprox_log                                0x835ea /* Lprox_log */
 #define FE2_Lframe_cand                              0x8360c /* Lframe_cand */
-#define FE2_Lalt_hud                                 0x83640 /* Lalt_hud */
+#define FE2_Lnet_damage                              0x83640 /* Lnet_damage */
+#define FE2_Lnet_physics                             0x83650 /* Lnet_physics */
+#define FE2_Lalt_hud                                 0x83674 /* Lalt_hud */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

@@ -24,6 +24,7 @@
 #include "keymap.h"
 #include "main.h"
 #include "mods.h"
+#include "netplay.h"
 #include "renderer.h"
 #include "screen_text.h"
 #include "shortcut.h"
@@ -458,5 +459,7 @@ HOSTCALL hcalls[] = {
 	[0x91] = Call_SubSteps,
 	[0x92] = Call_SubSkip,
 	[0x93] = Call_ProxLog,
+	[0x94] = Call_NetDamage,
+	[0x95] = Call_NetPending,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

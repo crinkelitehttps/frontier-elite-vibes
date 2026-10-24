@@ -41,6 +41,7 @@
 #include "input.h"
 #include "main.h"
 #include "m68000.h"
+#include "netplay.h"
 #include "renderer.h"
 #include "screen_text.h"
 #include "touch_input.h"
@@ -1497,3 +1498,5 @@ void Nu_DrawScreen(void)
 	context_to_main();
 	draw_picture(true);
 }
+	netplay_tick(); /* game thread: the other player's ghost ship */
+
