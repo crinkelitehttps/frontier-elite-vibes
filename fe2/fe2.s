@@ -50213,9 +50213,10 @@ L7490c:
 		moveq	#4,d0
 		jsr	A5_RandInt(a5)
 		tst.w	d0
+* Rolls 1 and 2 make the group of three (issue 6), as First Encounters' roll does.
 		beq.s	l74922
-		subq.w	#1,d0
-		beq.w	l7494a
+		subq.w	#3,d0
+		bne.w	l7494a
 		rts
 
 	l74922:	move.l	a0,-(a7)

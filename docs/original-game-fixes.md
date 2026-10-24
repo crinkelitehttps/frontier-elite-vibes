@@ -208,6 +208,22 @@ with `tools/savetool/scenarios/mine-test.txt` (a pad ship 380 m away, the player
 the pad ship loses 100 hull and so does the player; at the default 250 m nothing goes off; in the old build the
 mine just sat there. A third ship in range was not tested.
 
+## 9. Pirate groups are rare (`L7490c`)
+
+**Symptom:** interceptions are mostly a single pirate; after it is dead, accelerating time brings the next one
+at once (issue 6). Frontier: First Encounters has groups.
+
+**Cause:** the pirate roll (`L7490c`, run from `L74732` on entering a system and on the periodic event) is
+`RandInt(4)`: 0 a lone pirate (class 6), 1 a group of three (class 7), 2 and 3 nothing. First Encounters' roll
+(`F698` in JJFFE's `srctools/cagent.txt`) is the same except that 2 is a group too (of random ship types), and
+its groups are 2-4 ships. Singles stay a quarter of the rolls there as well.
+
+**Original code:** `subq.w #1,d0` / `beq.w l7494a` (6 bytes).
+
+**Fix:** `subq.w #3,d0` / `bne.w l7494a` (same size): rolls 1 and 2 make the group of three. Groups come twice as
+often (half the rolls, ships per roll 1.0 -> 1.75 on average); singles and the group itself are unchanged. Both
+variants. Not done: First Encounters' mixed-type groups and its 2-4 group size. Not tested in game yet.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics
