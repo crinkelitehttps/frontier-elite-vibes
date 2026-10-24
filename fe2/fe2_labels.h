@@ -403,5 +403,6 @@
 #define FE2_Lprox_log                                0xa94de /* Lprox_log */
 #define FE2_Lframe_cand                              0xa9500 /* Lframe_cand */
 #define FE2_Lalt_hud                                 0xa9534 /* Lalt_hud */
+#define FE2_Lsmoke_vel                               0xa958c /* Lsmoke_vel */
 
 #endif /* FE2_LABELS_H */

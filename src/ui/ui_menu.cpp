@@ -220,6 +220,7 @@ void page_settings()
 	ui_heading("Flight");
 	wrapped_checkbox("Ship turns belly-down to a planet below 40 km", &orbit_assist);
 	wrapped_checkbox("Exact motion at every time acceleration step (orbits stay put)", &exact_step);
+	wrapped_checkbox("Smoke trails of fast damaged ships stay near them (smoke takes the speed over 500 m/s)", &smoke_inherit);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

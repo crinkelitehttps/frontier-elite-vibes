@@ -18,6 +18,8 @@ void Call_KillLog(void);
 extern bool orbit_assist;
 extern bool exact_step;
 void Call_ExactStep(void);
+extern bool smoke_inherit;
+void Call_SmokeVel(void);
 void Call_SubSteps(void);
 void Call_SubSkip(void);
 int substep_shift(unsigned int dt);

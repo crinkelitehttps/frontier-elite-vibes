@@ -361,6 +361,7 @@
 #define FE2_Lnet_damage                              0x83640 /* Lnet_damage */
 #define FE2_Lnet_physics                             0x83650 /* Lnet_physics */
 #define FE2_Lalt_hud                                 0x83674 /* Lalt_hud */
+#define FE2_Lsmoke_vel                               0x836cc /* Lsmoke_vel */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

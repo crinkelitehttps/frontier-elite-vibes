@@ -175,6 +175,8 @@ Call_OrbitAssist	equ	$8d
 * Flight debugging: the player's physics frame and the landing zeroing of
 * the velocity are logged by the host (hostcall.c, Call_FlightLog / Call_KillLog).
 Call_ExactStep	equ	$90
+* Smoke puffs take the speed over a cap from their ship (glfrontier.cfg smoke_inherit).
+Call_SmokeVel	equ	$96
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -28825,7 +28827,9 @@ L4600a:
 		beq.s	l46074
 		movem.l	(a7)+,d0-5
 		movem.l	d0-5,44(a1)
-		move.b	#$b,94(a1)
+* Smoke inherits the speed above a cap. Hook, same size (move.b + jsr). See
+* Lsmoke_vel at the end of the file.
+		jsr	Lsmoke_vel
 		move.b	#$5c,211(a1)
 		move.w	#$ffff,122(a1)
 		jsr	A5_2RandInts(a5)
@@ -68080,4 +68084,15 @@ Lalt_hud:
 		move.l	#$1e8480,d5
 	lalt_hud_cmp:	cmp.l	d5,d3
 		movem.l	(a7)+,d4-5/a1
+		rts
+
+******************************************************************************
+* A puff of smoke (L4600a) is made at rest in the frame, so a fast ship
+* leaves it behind hundreds of km apart. With the option on the host gives it
+* the part of the ship's velocity (a0) over a cap (Call_SmokeVel, a1 = the
+* puff). Replaces move.b #$b,94(a1), which is done here.
+******************************************************************************
+Lsmoke_vel:
+		move.b	#$b,94(a1)
+		hcall	#Call_SmokeVel
 		rts

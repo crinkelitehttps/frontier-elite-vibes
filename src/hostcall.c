@@ -111,6 +111,36 @@ void Call_ExactStep(void)
 	SetReg(REG_D0, exact_step);
 }
 
+/* A puff of smoke is made at rest in the frame, so a fast damaged ship leaves
+   it hundreds of km apart. On, it takes the part of the ship's velocity over
+   a cap (Lsmoke_vel in fe2.s; a0 = the ship, a1 = the puff), and low-speed
+   combat stays as it was. A velocity unit is about 0.095 m/s. */
+bool smoke_inherit = false;
+#define SMOKE_CAP 5300 /* about 500 m/s */
+
+void Call_SmokeVel(void)
+{
+	if (!smoke_inherit)
+		return;
+	uint32_t ship = (uint32_t)GetReg(REG_A0), puff = (uint32_t)GetReg(REG_A1);
+	if (!ship || !puff)
+		return;
+	double v[3], len2 = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		v[i] = (double)(int32_t)rdlong(ship + 98 + 4 * i);
+		len2 += v[i] * v[i];
+	}
+	if (len2 <= (double)SMOKE_CAP * SMOKE_CAP)
+		return;
+	double keep = 1.0 - SMOKE_CAP / sqrt(len2);
+	for (int i = 0; i < 3; i++)
+	{
+		wrlong(puff + 98 + 4 * i, (int)(v[i] * keep));
+		wrword(puff + 192 + 2 * i, 0);
+	}
+}
+
 /* A time step longer than this (10x) is cut in 2^s: the game's single
    gravity + move step a frame is too coarse for an orbit at 100x and more */
 #define SUBSTEP_MAX 10000
@@ -461,5 +491,6 @@ HOSTCALL hcalls[] = {
 	[0x93] = Call_ProxLog,
 	[0x94] = Call_NetDamage,
 	[0x95] = Call_NetPending,
+	[0x96] = Call_SmokeVel,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
