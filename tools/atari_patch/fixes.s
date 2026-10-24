@@ -5,8 +5,12 @@
 *
 * Assembled on its own, so it starts at 0 and must be position independent:
 * the only absolute reference is the original routine below, patched in as
-* a relocated address by patch_atari.py.
+* a relocated address by patch_atari.py (the equates are text offsets, the
+* address in fe2.s.c minus the 28 byte header).
 L44af8		equ	$391d0
+l7edb4		equ	$73458
+l7ee06		equ	$734aa
+l7ee7e		equ	$73522
 
 Lgrav_norm:
 		addq.w	#1,d7
@@ -55,3 +59,18 @@ L44af8_call:	jsr	L44af8
 	lframe_cand_no2:	movem.l	(a7)+,d0/a1
 	lframe_cand_no:	cmp.b	d0,d0
 		rts
+
+Lpax_late:
+		tst.l	12(a0)
+		bne.s	lpax_late_dest
+		cmpi.b	#$1c,3(a0)
+		beq.s	lpax_late_dest
+		jmp	l7ee06
+	lpax_late_dest:
+		cmp.l	4(a0),d2
+		beq.s	lpax_late_here
+		dbra	d7,lpax_late_next
+	lpax_late_here:
+		jmp	l7edb4
+	lpax_late_next:
+		jmp	l7ee7e

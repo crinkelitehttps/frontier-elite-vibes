@@ -34,23 +34,30 @@ import tempfile
 HEADER = 0x1C
 
 # Code of fixes.s (assembled on its own, starting at 0): Lgrav_norm 0x00,
-# Lgrav_mass 0x0e, Lcool_dec 0x18, Lprox_log 0x2e, Lframe_cand 0x4c.
+# Lgrav_mass 0x0e, Lcool_dec 0x18, Lprox_log 0x2e, Lframe_cand 0x4c, Lpax_late 0x80.
 CAVE = bytes.fromhex(
     "5247e2484443d647444353434e754ca90060007adc434e75"
     "e28fbebc000001f163062e3c000001f19f6801164e75d081"
     "d082b0bc40000000650ebabc3fffffff6406203c3fffffff"
     "b0854e7508340004000066224a340000672248e780404eb9"
     "000391d00c290001005e660c0829000401184cdf02014e75"
-    "4cdf0201b0004e75"
+    "4cdf0201b0004e754aa8000c660e0c28001c000367064ef9"
+    "000734aab4a80004670451cf00084ef9000734584ef90007"
+    "3522"
 )
-L_GRAV_NORM, L_GRAV_MASS, L_COOL_DEC, L_PROX_LOG, L_FRAME_CAND = 0x00, 0x0E, 0x18, 0x2E, 0x4C
-CAVE_RELOCS = [0x60]  # the jsr to the original L44af8 inside Lframe_cand
+L_GRAV_NORM, L_GRAV_MASS, L_COOL_DEC, L_PROX_LOG, L_FRAME_CAND, L_PAX_LATE = 0x00, 0x0E, 0x18, 0x2E, 0x4C, 0x80
+# the jsr to the original L44af8 inside Lframe_cand, the three jmps of Lpax_late
+CAVE_RELOCS = [0x60, 0x90, 0xa0, 0xa6]
 
 # Each hook: name, original bytes, context before / after (bytes that must be
 # there too), new bytes as a function of (hook text offset, cave text base)
 # returning (bytes, [offsets of absolute longs in them]).
 def jsr(target_off):
     return lambda at, base: (b"\x4e\xb9" + struct.pack(">L", base + target_off), [2])
+
+def jmp_nop(target_off):
+    # a jmp and a nop over an 8 byte instruction pair
+    return lambda at, base: (b"\x4e\xf9" + struct.pack(">L", base + target_off) + b"\x4e\x71", [2])
 
 def jmp_after_bra(target_off):
     # bra.s over a jmp: the jmp is the trampoline a later bsr.s goes through
@@ -76,6 +83,8 @@ HOOKS = [
      bytes.fromhex("e28f9f680116"), 0x33CBC, jsr(L_COOL_DEC)),
     ("relative to: frame candidates (L440fe)",
      bytes.fromhex("083400040000"), 0x38822, jsr(L_FRAME_CAND)),
+    ("passengers: late group leaves (l7edac)",
+     bytes.fromhex("b4a8000457cf00cc"), 0x73450, jmp_nop(L_PAX_LATE)),
 ]
 
 
