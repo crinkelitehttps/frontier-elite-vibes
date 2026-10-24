@@ -30,6 +30,18 @@ void ui_render(void);
  * the free camera's help) */
 bool ui_visible(void);
 
+/* A VR headset shows the menu on a screen in the cockpit (gl_screen_place.h,
+ * PLACE_MENU): the menu is open, and not the galaxy atlas over it */
+bool ui_menu_open(void);
+/* Draws the menu alone into the bound framebuffer, w x h pixels, laid out
+ * as the window's game area would be (renderer.h's Screen_GetGame*), the
+ * pointer being the hands' (cockpit_menu_pointer_get). */
+void ui_render_vr(int w, int h);
+/* The menu is on that screen: ui_render leaves it out of the window */
+void ui_set_vr_menu(bool shown);
+/* Drawing it there now (the menu leaves out what is no use in VR) */
+bool ui_in_vr_menu(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -185,7 +185,7 @@ struct Carry
 };
 
 Carry carry[PLACE_COUNT];
-float aspect[PLACE_COUNT] = {0.63f, 0.63f, 0.63f, 0.63f};
+float aspect[PLACE_COUNT] = {0.63f, 0.63f, 0.63f, 0.63f, 0.6f};
 int grip_owner[2] = {-1, -1}; /* the screen hand i's grip holds */
 bool grip_was[2];
 std::atomic<bool> reset_wanted{false};

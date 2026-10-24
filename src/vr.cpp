@@ -27,6 +27,9 @@
 #include <openxr/openxr_platform.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -90,6 +93,51 @@ constexpr int64_t kFormatSrgb = 0x8C43 /* GL_SRGB8_ALPHA8 */, kFormatRgba = 0x80
 constexpr float kMaxHeadOffsetM = 1.0f;
 
 char status[320] = "Off";
+
+/* Which OpenXR call the game thread is in, and a watchdog that says so when
+ * it stays there: a call that never returns freezes the picture in the
+ * headset with no other trace. */
+std::atomic<const char *> stage{"idle"};
+std::atomic<unsigned> stage_seq{0};
+std::atomic<bool> watchdog_started{false};
+
+void watchdog()
+{
+	unsigned seen = ~0u;
+	int quiet_ms = 0;
+	const char *where = "";
+	bool reported = false;
+	for (;;)
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds(250));
+		unsigned s = stage_seq.load();
+		if (s != seen)
+		{
+			if (reported)
+				log_printf("openxr: left %s after %d ms\n", where, quiet_ms);
+			seen = s;
+			where = stage.load();
+			quiet_ms = 0;
+			reported = false;
+			continue;
+		}
+		quiet_ms += 250;
+		/* "idle" is the game drawing, between frames: only a long pause is odd */
+		if (!reported ? quiet_ms >= 2000 : quiet_ms % 5000 == 0)
+		{
+			log_printf("openxr: still in %s after %d ms\n", where, quiet_ms);
+			reported = true;
+		}
+	}
+}
+
+void set_stage(const char *what)
+{
+	stage.store(what);
+	stage_seq++;
+	if (!watchdog_started.exchange(true))
+		std::thread(watchdog).detach();
+}
 
 bool check(XrInstance inst, XrResult r, const char *what)
 {
@@ -602,10 +650,13 @@ GLuint Vr::acquire(Swapchain &sc)
 	return sc.render_fbo;
 #else
 	XrSwapchainImageAcquireInfo ai{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+	set_stage("xrAcquireSwapchainImage");
 	check(instance, xrAcquireSwapchainImage(sc.handle, &ai, &sc.index), "xrAcquireSwapchainImage");
 	XrSwapchainImageWaitInfo wi{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
 	wi.timeout = XR_INFINITE_DURATION;
+	set_stage("xrWaitSwapchainImage");
 	check(instance, xrWaitSwapchainImage(sc.handle, &wi), "xrWaitSwapchainImage");
+	set_stage("drawing into the swapchain image");
 	return sc.fbos[sc.index];
 #endif
 }
@@ -632,7 +683,9 @@ void Vr::release(Swapchain &sc)
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #endif
 	XrSwapchainImageReleaseInfo ri{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
+	set_stage("xrReleaseSwapchainImage");
 	xrReleaseSwapchainImage(sc.handle, &ri);
+	set_stage("idle");
 }
 
 Vr::~Vr()
@@ -867,9 +920,11 @@ bool Vr::begin_frame()
 {
 	frame = {XR_TYPE_FRAME_STATE};
 	XrFrameWaitInfo wi{XR_TYPE_FRAME_WAIT_INFO};
+	set_stage("xrWaitFrame");
 	if (!check(instance, xrWaitFrame(session, &wi, &frame), "xrWaitFrame"))
 		return false;
 	XrFrameBeginInfo bi{XR_TYPE_FRAME_BEGIN_INFO};
+	set_stage("xrBeginFrame");
 	if (!check(instance, xrBeginFrame(session, &bi), "xrBeginFrame"))
 		return false;
 	in_frame = true;
@@ -884,6 +939,7 @@ bool Vr::begin_frame()
 	li.space = play_space;
 	XrViewState vs{XR_TYPE_VIEW_STATE};
 	uint32_t n = 0;
+	set_stage("xrLocateViews");
 	views_valid = XR_SUCCEEDED(xrLocateViews(session, &li, &vs, 2, &n, views)) && n == 2 &&
 				  (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT);
 	/* A failing positional tracker can report the head kilometres away. In
@@ -941,6 +997,7 @@ bool Vr::begin_frame()
 						   h.lower ? " lower" : "", h.upper ? " upper" : "");
 		}
 	}
+	set_stage("game drawing the frame");
 	return frame.shouldRender;
 }
 
@@ -1003,7 +1060,9 @@ void Vr::end_frame()
 	ei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 	ei.layerCount = count;
 	ei.layers = layers;
+	set_stage("xrEndFrame");
 	check(instance, xrEndFrame(session, &ei), "xrEndFrame");
+	set_stage("idle");
 }
 
 void to_view(const XrView &v, VrView *out)

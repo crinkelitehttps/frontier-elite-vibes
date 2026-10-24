@@ -134,13 +134,20 @@ void call_update_letterbox(void)
 	reinit_touch_buttons();
 }
 
+/* The emulator menu drawn on its screen in the headset's cockpit (draw_menu_vr)
+ * is laid out in a game area of its own */
+#define MENU_PX  4 /* texture pixels to a game unit (320 x 240) */
+#define MENU_TEX_W (300 * MENU_PX) /* the menu's windows cover 300 x 180 of it */
+#define MENU_TEX_H (180 * MENU_PX)
+static bool menu_rect;
+
 int Screen_GetGameOffsetX(void)
 {
-	return lb_x;
+	return menu_rect ? 0 : lb_x;
 }
 int Screen_GetGameOffsetY(void)
 {
-	return screen_h - lb_y - lb_h;
+	return menu_rect ? 0 : screen_h - lb_y - lb_h;
 }
 bool Screen_WindowToGame(int wx, int wy, int *gx, int *gy)
 {
@@ -155,11 +162,11 @@ bool Screen_WindowToGame(int wx, int wy, int *gx, int *gy)
 
 int Screen_GetGameHeight(void)
 {
-	return lb_h;
+	return menu_rect ? 240 * MENU_PX : lb_h;
 }
 int Screen_GetGameWidth(void)
 {
-	return lb_w;
+	return menu_rect ? 320 * MENU_PX : lb_w;
 }
 
 static void layout_rects(int w, int h, int r[GD_VP_COUNT][4])
@@ -904,13 +911,54 @@ static void update_swap_interval(bool vr)
 	current = want;
 }
 
+/* The emulator menu's picture for its screen in the cockpit (PLACE_MENU),
+ * while the menu is open: 0 if it is not. Mipmapped, as it is seen small;
+ * what no window covers is clear. */
+static GLuint menu_fbo, menu_tex;
+
+static GLuint draw_menu_vr(void)
+{
+	if (!ui_menu_open())
+		return 0;
+	if (!menu_fbo)
+	{
+		glGenTextures(1, &menu_tex);
+		glBindTexture(GL_TEXTURE_2D, menu_tex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, MENU_TEX_W, MENU_TEX_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glGenFramebuffers(1, &menu_fbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, menu_fbo);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, menu_tex, 0);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			log_printf("The menu's framebuffer is incomplete\n");
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, menu_fbo);
+	glViewport(0, 0, MENU_TEX_W, MENU_TEX_H);
+	glDisable(GL_SCISSOR_TEST);
+	glClearColor(0, 0, 0, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	menu_rect = true;
+	ui_render_vr(MENU_TEX_W, MENU_TEX_H);
+	menu_rect = false;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindTexture(GL_TEXTURE_2D, menu_tex);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return menu_tex;
+}
+
 /* The frame for the headset, if it wants one: the cockpit per eye, or
  * the classic picture on the virtual screen. Before the window's: the
  * window's cockpit is turned by the same head pose. */
-static bool draw_vr(void)
+static bool draw_vr(bool with_menu)
 {
 	vr_update();
 	update_swap_interval(vr_running());
+	cockpit_set_menu_texture(0);
+	ui_set_vr_menu(false);
 	if (!vr_running())
 	{
 		laser_off();
@@ -931,6 +979,13 @@ static bool draw_vr(void)
 	else
 	{
 		cockpit_set_headset(NULL, NULL);
+	}
+	/* the menu, on a screen in the cockpit (the window then doesn't show it) */
+	if (with_menu && tracked && (scr_show.cockpit || scr_show.sub))
+	{
+		GLuint menu = draw_menu_vr();
+		cockpit_set_menu_texture(menu);
+		ui_set_vr_menu(menu != 0);
 	}
 	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub ? scr_show.group : -1);
 	laser_update(cockpit && tracked);
@@ -1373,7 +1428,7 @@ static void draw_picture(bool with_menu)
 	if (scr_show.page_new && new_frame)
 		draw_page();
 	draw_coms_flight(new_frame);
-	bool cockpit = draw_vr();
+	bool cockpit = draw_vr(with_menu);
 	draw_frame(screen_w, screen_h, cockpit, true);
 	if (with_menu)
 		ui_render(); /* 4. emulator menu */
@@ -1482,6 +1537,8 @@ void Screen_StopRenderThread(void)
 
 void Nu_DrawScreen(void)
 {
+	netplay_tick(); /* game thread: the other player's ghost ship */
+
 	Screen_SyncSize(); /* a DPI change (browser zoom, other monitor) may come without a resize event */
 
 	/* the text the game queued during the frame, into the emulated screen */
@@ -1498,5 +1555,3 @@ void Nu_DrawScreen(void)
 	context_to_main();
 	draw_picture(true);
 }
-	netplay_tick(); /* game thread: the other player's ghost ship */
-

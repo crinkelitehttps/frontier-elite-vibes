@@ -14,6 +14,7 @@
 
 #include <SDL.h>
 
+#include "audio.h"
 #include "freecam.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
@@ -62,6 +63,7 @@ typedef struct
 	int manual_book;
 	int orbit_assist;
 	int exact_step;
+	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
 
@@ -99,6 +101,7 @@ static const struct
 	{"manual_book", offsetof(Settings, manual_book)},
 	{"orbit_assist", offsetof(Settings, orbit_assist)},
 	{"exact_step", offsetof(Settings, exact_step)},
+	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
 	{"screen_place_screen_y", offsetof(Settings, screen_place[0].y)},
@@ -135,6 +138,15 @@ static const struct
 	{"screen_place_coms_qz", offsetof(Settings, screen_place[3].qz)},
 	{"screen_place_coms_qw", offsetof(Settings, screen_place[3].qw)},
 	{"screen_place_coms_w", offsetof(Settings, screen_place[3].w)},
+	{"screen_place_menu_on", offsetof(Settings, screen_place[4].on)},
+	{"screen_place_menu_x", offsetof(Settings, screen_place[4].x)},
+	{"screen_place_menu_y", offsetof(Settings, screen_place[4].y)},
+	{"screen_place_menu_z", offsetof(Settings, screen_place[4].z)},
+	{"screen_place_menu_qx", offsetof(Settings, screen_place[4].qx)},
+	{"screen_place_menu_qy", offsetof(Settings, screen_place[4].qy)},
+	{"screen_place_menu_qz", offsetof(Settings, screen_place[4].qz)},
+	{"screen_place_menu_qw", offsetof(Settings, screen_place[4].qw)},
+	{"screen_place_menu_w", offsetof(Settings, screen_place[4].w)},
 };
 #define N_FIELDS ((int)(sizeof(fields) / sizeof(fields[0])))
 
@@ -193,6 +205,7 @@ static Settings current(void)
 	s.manual_book = manual_book;
 	s.orbit_assist = orbit_assist;
 	s.exact_step = exact_step;
+	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
 }
@@ -243,6 +256,8 @@ static void apply(const Settings *s)
 		vr_near_cm = s->vr_near;
 	orbit_assist = s->orbit_assist != 0;
 	exact_step = s->exact_step != 0;
+	if (s->volume >= 0 && s->volume <= 100)
+		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */
 	if (s->manual_page != manual_page())
 		manual_set_page(s->manual_page);

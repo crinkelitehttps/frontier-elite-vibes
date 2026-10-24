@@ -269,6 +269,7 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		h.shown = c.active;
 		if (!c.active)
 		{
+			cockpit_menu_pointer(i, false, 0, 0, false);
 			h.near = h.down = false;
 			for (auto &t : h.touch)
 				t.reset();
@@ -305,6 +306,9 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 		h.near = t.is_near;
 		h.on_host = pick >= SURF_HOST && pick < SURF_MAP;
 		h.on_map = pick == SURF_MAP || pick == SURF_SHIP;
+		/* the emulator menu's screen has a pointer, not taps */
+		cockpit_menu_pointer(i, pick == SURF_HOST + COCKPIT_HOST_MENU && t.is_near,
+							 pick >= 0 && mirrored[pick] ? 1 - t.u : t.u, t.v, t.down);
 		h.side = pick == SURF_SHIP ? COCKPIT_SCREEN_SHIP : COCKPIT_SCREEN_MAP;
 		if (t.pressed)
 			vr_buzz(i, 0.03f, 0.7f);
@@ -383,6 +387,8 @@ bool hands_update(const VrHand hands[2], bool cockpit, const int board[2])
 
 void hands_off(void)
 {
+	cockpit_menu_pointer(0, false, 0, 0, false);
+	cockpit_menu_pointer(1, false, 0, 0, false);
 	for (Hand &h : hand)
 		h = Hand{};
 	current = -1;

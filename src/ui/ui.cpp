@@ -18,6 +18,7 @@
 extern "C"
 {
 #include "freecam.h"
+#include "gl/gl_cockpit.h"
 #include "main.h"
 #include "renderer.h"
 }
@@ -186,9 +187,63 @@ extern "C" bool ui_visible(void)
 	return initialised && (toggle_m68k_menu || ui_galaxy_open() || (freecam_active() && freecam_show_help));
 }
 
+static bool vr_menu_shown, in_vr_menu;
+
+extern "C" bool ui_menu_open(void)
+{
+	return initialised && toggle_m68k_menu && !ui_galaxy_open();
+}
+
+extern "C" void ui_set_vr_menu(bool shown)
+{
+	vr_menu_shown = shown;
+}
+
+extern "C" bool ui_in_vr_menu(void)
+{
+	return in_vr_menu;
+}
+
+/* The hands' pointer as a touch screen's: the menu scrolls by dragging */
+extern "C" void ui_render_vr(int w, int h)
+{
+	if (!ui_menu_open())
+		return;
+	update_style();
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplSDL2_NewFrame();
+	ImGuiIO &io = ImGui::GetIO();
+	io.DisplaySize = ImVec2((float)w, (float)h);
+	io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+	io.ConfigInputTrickleEventQueue = false; /* a position and a press in one frame */
+	float u, v;
+	bool down;
+	/* (after the window's mouse, which the backend has just queued) */
+	io.AddMouseSourceEvent(ImGuiMouseSource_TouchScreen);
+	if (cockpit_menu_pointer_get(&u, &v, &down))
+	{
+		io.AddMousePosEvent(u * (float)w, v * (float)h);
+		io.AddMouseButtonEvent(ImGuiMouseButton_Left, down);
+	}
+	else
+	{
+		io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+		io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+	}
+	ImGui::NewFrame();
+	in_vr_menu = true;
+	ui_menu_draw();
+	in_vr_menu = false;
+	touch_drag_scroll();
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
 extern "C" void ui_render(void)
 {
-	if (!ui_visible())
+	/* (no frame of the window's between the menu's: a widget being dragged
+	 * would be lost to a frame that doesn't have it) */
+	if (!ui_visible() || vr_menu_shown)
 		return;
 
 	update_style();
@@ -204,7 +259,7 @@ extern "C" void ui_render(void)
 
 	if (ui_galaxy_open())
 		ui_galaxy_draw();
-	else if (toggle_m68k_menu)
+	else if (toggle_m68k_menu && !vr_menu_shown)
 		ui_menu_draw();
 	if (freecam_active() && freecam_show_help)
 		ui_freecam_overlay();

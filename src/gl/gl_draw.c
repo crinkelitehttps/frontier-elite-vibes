@@ -99,7 +99,7 @@ static const char *FS_FLAT = "in vec4 vColor;\n"
  * ========================================================================= */
 #if GL_IS_GLES
 static const char *VS_HEADER = "#version 300 es\nprecision highp float;\n";
-static const char *FS_HEADER = "#version 300 es\nprecision mediump float;\n";
+static const char *FS_HEADER = "#version 300 es\nprecision highp float;\n";
 #else
 static const char *VS_HEADER = "#version 330 core\n";
 static const char *FS_HEADER = "#version 330 core\n";

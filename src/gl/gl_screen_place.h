@@ -53,6 +53,7 @@ enum
 	PLACE_CAMERA, /* the camera screen */
 	PLACE_SHIP,   /* the SHIP group's screen */
 	PLACE_COMS,   /* the COMS group's screen (and options) */
+	PLACE_MENU,   /* the emulator menu (while it is open) */
 	PLACE_COUNT
 };
 

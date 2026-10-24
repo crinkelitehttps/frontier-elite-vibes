@@ -19,6 +19,8 @@
 #endif
 
 BOOL bDisableSound = FALSE;
+int audio_volume = 100;
+
 
 #define SND_FREQ     22050
 #define NUM_CHANNELS 4 /* sound effects playing at once */
@@ -235,6 +237,15 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 			out[2 * i] = clamp16(out[2 * i] + mix);
 			out[2 * i + 1] = clamp16(out[2 * i + 1] + mix);
 		}
+	}
+
+	/* the volume, squared so the slider feels even to the ear */
+	int vol = audio_volume < 0 ? 0 : audio_volume > 100 ? 100 : audio_volume;
+	if (vol < 100)
+	{
+		int gain = vol * vol * 256 / 10000;
+		for (int i = 0; i < len / 2; i++)
+			out[i] = (Sint16)((out[i] * gain) >> 8);
 	}
 }
 

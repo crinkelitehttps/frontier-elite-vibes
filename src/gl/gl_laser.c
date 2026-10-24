@@ -221,6 +221,10 @@ void laser_update(bool cockpit)
 	}
 	if (!hands[current].active && hands[!current].active)
 		current = !current;
+	/* the emulator menu's screen: the beam is its pointer, the trigger its button */
+	for (int i = 0; i < 2; i++)
+		cockpit_menu_pointer(i, beams[i].on && on_host[i] && host_id[i] == COCKPIT_HOST_MENU, host_u[i], host_v[i],
+							 trigger_on[i]);
 
 	/* the map's pointer: the beam on the screen, a pressed one before the other */
 	int mp = -1;

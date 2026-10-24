@@ -93,6 +93,9 @@ static const char DEFAULT_CFG[] =
 	"#   manual                     the clipboard (controls and the game\n"
 	"#                              manual): up to read / put away (also F11)\n"
 	"#   manual-page <n>            turn n pages (-n: back); repeats while held\n"
+	"#   menu                       the emulator menu (the cog) on / off; with a VR\n"
+	"#                              headset it is a screen in the cockpit: grip it\n"
+	"#                              to move, turn and size it (it is kept)\n"
 	"#   Key names as SDL spells them: a-z 0-9 f1-f10 = - , . / ; return space\n"
 	"#   escape tab backspace up down left right home end pageup pagedown\n"
 	"#   insert delete \"left shift\" \"right shift\" (aliases: enter esc lshift\n"
@@ -143,6 +146,7 @@ static const char DEFAULT_CFG[] =
 	"shift1 b       key f8\n"
 	"shift1 a       key f9\n"
 	"shift1 start   key f10\n"
+	"shift1 rightstick menu             # the menu (VR: left menu button + right stick click)\n"
 	"\n"
 	"# ---- Right shoulder held: yaw (above) and time acceleration\n"
 	"rightshoulder  shift2\n"
@@ -151,6 +155,7 @@ static const char DEFAULT_CFG[] =
 	"shift2 dpup    key shift+f3\n"
 	"shift2 dpright key shift+f4\n"
 	"shift2 y       key shift+f5        # fastest\n"
+
 	"\n"
 	"# ---- The clipboard: Right shoulder + A (VR: right grip + right trackpad\n"
 	"# down), or grab it with a VR hand. While it is out the d-pad (VR: left\n"
@@ -198,7 +203,8 @@ typedef enum
 	ACT_POINTER_X, /* axes moving it while it is on */
 	ACT_POINTER_Y,
 	ACT_MANUAL,     /* the clipboard up / away */
-	ACT_MANUAL_PAGE /* turn `pages` pages */
+	ACT_MANUAL_PAGE, /* turn `pages` pages */
+	ACT_MENU         /* the emulator menu (the cog) on / off */
 } Action;
 
 #define MAX_CHORDS 8
@@ -357,7 +363,7 @@ static bool is_axis_action(Action a)
 static bool is_press_action(Action a)
 {
 	return a == ACT_KEY || a == ACT_CYCLE || a == ACT_RECENTER || a == ACT_COCKPIT || a == ACT_ORBIT || a == ACT_POINTER ||
-		   a == ACT_MANUAL || a == ACT_MANUAL_PAGE;
+		   a == ACT_MANUAL || a == ACT_MANUAL_PAGE || a == ACT_MENU;
 }
 
 /* `gap`: a blank line came before, taken by the next binding */
@@ -513,6 +519,10 @@ static bool parse_line(char *line, const char *source, int line_no, bool *gap)
 		}
 		b.action = ACT_MANUAL_PAGE;
 		b.pages = (int)pages;
+	}
+	else if (!strcmp(act, "menu"))
+	{
+		b.action = ACT_MENU;
 	}
 	else
 	{
@@ -992,6 +1002,9 @@ void gamepad_update(void)
 		case ACT_MANUAL:
 			clipboard_toggle();
 			break;
+		case ACT_MENU:
+			toggle_m68k_menu = !toggle_m68k_menu;
+			break;
 		case ACT_POINTER:
 			if (vpad.active) /* the motion controllers point */
 				break;
@@ -1118,7 +1131,7 @@ void gamepad_help(int i, GamepadHelp *h)
 		[ACT_YAW] = "yaw",		   [ACT_LOOK_X] = "look x",		  [ACT_LOOK_Y] = "look y",
 		[ACT_STRAFE_X] = "strafe x", [ACT_STRAFE_Y] = "strafe y", [ACT_RECENTER] = "recentre",
 		[ACT_COCKPIT] = "cockpit view", [ACT_ORBIT] = "orbit display", [ACT_POINTER] = "pointer", [ACT_POINTER_X] = "pointer x",
-		[ACT_POINTER_Y] = "pointer y", [ACT_MANUAL] = "clipboard",
+		[ACT_POINTER_Y] = "pointer y", [ACT_MANUAL] = "clipboard", [ACT_MENU] = "menu",
 	};
 	switch (b->action)
 	{

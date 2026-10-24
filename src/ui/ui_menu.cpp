@@ -9,7 +9,9 @@
 #include <SDL.h>
 #include <stdio.h>
 
+#include "../audio.h"
 #include "imgui.h"
+#include "ui.h"
 #include "ui_menu.h"
 #include "ui_style.h"
 #include "ui_galaxy.h"
@@ -172,7 +174,7 @@ void page_home()
 			home_message = "The free camera works in the flight view.";
 	}
 #endif
-	if (ui_button("GALAXY ATLAS"))
+	if (!ui_in_vr_menu() && ui_button("GALAXY ATLAS"))
 	{
 		/* opens over the menu; the menu is there again when it closes */
 		ui_galaxy_show(true);
@@ -197,6 +199,9 @@ void page_settings()
 	bool keep_aspect = Screen_GetLetterboxMode();
 
 	ui_heading("Game settings");
+	ImGui::TextWrapped("Volume");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##volume", &audio_volume, 0, 100, "%d%%");
 	if (ui_button("Fullscreen Toggle"))
 		Screen_ToggleFullScreen();
 	if (ui_button("Cycle Renderer"))

@@ -7,6 +7,8 @@
 #include "main.h"
 
 extern BOOL bDisableSound; /* --nosound */
+extern int audio_volume;   /* 0-100 percent, applied to everything mixed */
+
 
 void Audio_Init(void);
 void Audio_UnInit(void);

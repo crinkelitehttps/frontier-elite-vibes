@@ -165,6 +165,14 @@ bool cockpit_shown(void);
  * is `centre`'s instead of the head tracker's, and the turned passes
  * cover `eyes` too. NULL: no headset this frame. */
 void cockpit_set_headset(const VrView *centre, const VrView eyes[2]);
+/* The emulator menu's picture (ui_render_vr) for its screen in the cockpit
+ * (PLACE_MENU), set before cockpit_begin_frame; 0: the menu isn't there */
+void cockpit_set_menu_texture(GLuint tex);
+/* A hand (0, 1) is pointing at the menu's screen at u, v (0..1 from its top
+ * left), pressing or not; or no longer (on false). Drawing thread. */
+void cockpit_menu_pointer(int hand, bool on, float u, float v, bool down);
+/* The pointer the menu has now: the pressing hand, else a pointing one */
+bool cockpit_menu_pointer_get(float *u, float *v, bool *down);
 /* Draws what follows (projections, cockpit_draw, the passes) as seen by a
  * headset's eye, with its lens; NULL: back to the window */
 void cockpit_use_eye(const VrView *eye);
@@ -243,8 +251,9 @@ bool cockpit_place_play(int place, float corners[4][3]);
 /* The screens a tap on is the host's, not the game's: the camera screen
  * and the groups' screens that aren't live, while shown, the same way,
  * up to COCKPIT_HOST_MAX; ids for cockpit_host_tap. Returns how many. */
-#define COCKPIT_HOST_MAX 3
-#define COCKPIT_HOST_IDS (COCKPIT_SCREENS + 1) /* ids are 0 .. this - 1 */
+#define COCKPIT_HOST_MAX 5
+#define COCKPIT_HOST_MENU (COCKPIT_SCREENS + 1) /* the emulator menu's screen */
+#define COCKPIT_HOST_IDS (COCKPIT_SCREENS + 2) /* ids are 0 .. this - 1 */
 int cockpit_host_screens(float corners[][4][3], int ids[], int max);
 /* A tap on host screen `id` at u, v (0..1 from its top left): the camera
  * screen's camera_tap, or a group's key. Any thread. */
