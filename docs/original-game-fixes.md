@@ -196,11 +196,16 @@ ship's hull, worked out in the other ship's frame. There is no proximity fuse at
 **Original code:** `jsr 750(a5)` / `bra.s l74f04` in `L74eda` (6 bytes).
 
 **Fix:** `jmp Lmine_phys` (same size). Every tick the mine looks at all objects in its frame that are ships
-(model above `$10`, not a body, not its owner at `212(a0)`) and, when one is within about 500 m (squared
-distance in units of 1024 mm below 250000), goes off by the game's own hit path (`l75824`, a1 = that ship):
-the normal damage for the mine's model (100 for the XB74), the explosion, the owner's credit. Both variants.
-Tested with `tools/savetool/scenarios/mine-test.txt`: a pad ship 380 m away is untouched by the mine in the
-old build and takes the 100 damage in the new one. The radius is the constant `250000` in `Lmine_phys`.
+(model above `$10`, not a body, not its owner at `212(a0)`) and, when one is within the radius, goes off by
+the game's own hit path (`l75824`, a1 = that ship): the normal damage for the mine's model (100 for the XB74),
+the explosion, the owner's credit. The radius is an option (menu, Flight: a checkbox and a slider, 10-2000 m;
+`mine_prox` and `mine_radius` in `glfrontier.cfg`; default on, 250 m); off is the game's own behaviour. The
+host gives it to the 68k code with `Call_MineRadius` (`$97`). A hook at the start of `l75824` (`Lmine_boom`,
+replaces `move.b 93(a1),d0` / `cmp.b 212(a0),d0`) also applies the mine's damage to the player, owner or
+not, when the player is within the radius as a mine goes off (by the fuse or by hitting a ship) and is not the
+ship that was hit. Both variants. Tested with `tools/savetool/scenarios/mine-test.txt` (a pad ship 380 m away,
+the player's hull set to 400): at 500 m the pad ship loses 100 hull and so does the player; at the default
+250 m nothing goes off; in the old build the mine just sat there.
 
 ## Known, not fixed
 

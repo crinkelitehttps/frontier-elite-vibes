@@ -226,6 +226,12 @@ void page_settings()
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::SliderInt("##smokecap", &smoke_cap_ms, 10, 2000, "smoke keeps speed over %d m/s", ImGuiSliderFlags_Logarithmic);
 	}
+	wrapped_checkbox("Proximity mines go off when a ship comes near (off: only when one flies into the mine)", &mine_prox);
+	if (mine_prox)
+	{
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::SliderInt("##mineradius", &mine_radius_m, 10, 2000, "mine goes off within %d m", ImGuiSliderFlags_Logarithmic);
+	}
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

@@ -177,6 +177,8 @@ Call_OrbitAssist	equ	$8d
 Call_ExactStep	equ	$90
 * Smoke puffs take the speed over a cap from their ship (glfrontier.cfg smoke_inherit).
 Call_SmokeVel	equ	$96
+* Proximity mines: the radius they go off at, d0 = units of 1024 mm, 0 off (glfrontier.cfg mine_prox / mine_radius).
+Call_MineRadius	equ	$97
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -51756,9 +51758,9 @@ L757e0:
 
 L75818:
 		dc.b	$0,$a,$0,$64,$0,$c8,$1,$2c,$1,$90,$0,$64
-	l75824:	move.b	93(a1),d0
-		cmp.b	212(a0),d0
-		bne.s	l75836
+	l75824:	jmp	Lmine_boom
+		nop
+	l7582c:	bne.s	l75836
 		cmpi.w	#$2,116(a0)
 		ble.s	l75894
 	l75836:	cmpi.w	#$10,90(a0)
@@ -68269,39 +68271,27 @@ Lpol_next:
 * works in the ship's own frame, which is why it seemed to need the target to
 * point at the mine). Now every tick the mine looks at all ships in its frame
 * (not bodies, not missiles / mines / debris, model > $10; not its owner,
-* 212(a0)) and goes off when one is within about 500 m (the squared distance
-* in units of 1024 mm, 250000), by the game's own hit path l75824 with a1 =
-* that ship. Replaces jsr 750(a5) / bra.s l74f04 in L74eda.
+* 212(a0)) and goes off when one is within the radius the host gives
+* (Call_MineRadius, 250 m by default; units of 1024 mm, 0 = as before), by the
+* game's own hit path l75824 with a1 = that ship. Replaces jsr 750(a5) /
+* bra.s l74f04 in L74eda.
+* Lmine_boom, at the start of l75824 (replaces move.b 93(a1),d0 / cmp.b
+* 212(a0),d0), also hurts the player, owner or not, with the mine's damage if
+* the player is within the radius when a mine goes off (by the fuse or by
+* touching a ship) and is not the ship already hit.
 ******************************************************************************
-Lmine_phys:
-		jsr	750(a5)
-		movem.l	d0-7/a1-4,-(a7)
-		movea.l	A6_big_space(a6),a4
-		moveq	#$72,d7
-	lmine_next:
-		btst	#$2,0(a4,d7.w)
-		beq.w	lmine_skip
-		btst	#$4,0(a4,d7.w)
-		bne.w	lmine_skip
-		cmp.b	93(a0),d7
-		beq.w	lmine_skip
-		cmp.b	212(a0),d7
-		beq.w	lmine_skip
-		move.w	d7,d0
-		jsr	L44af8
-		cmpi.w	#$10,90(a1)
-		bls.w	lmine_skip
-		cmpi.b	#$1,94(a1)
-		beq.w	lmine_skip
+* squared distance (units of 1024 mm) of a0 and a1 in d5, or $7fffffff when
+* they are in different frames or further than d4 on an axis
+Lmine_dist:
 		move.b	68(a1),d0
 		cmp.b	68(a0),d0
-		bne.w	lmine_skip
+		bne.s	lmine_dist_far
 		move.b	69(a1),d0
 		cmp.b	69(a0),d0
-		bne.w	lmine_skip
+		bne.s	lmine_dist_far
 		moveq	#0,d5
 		moveq	#0,d6
-	lmine_axis:
+	lmine_dist_axis:
 		move.l	44(a1,d6.w),d0
 		move.l	56(a1,d6.w),d1
 		sub.l	44(a0,d6.w),d0
@@ -68311,25 +68301,88 @@ Lmine_phys:
 		ext.w	d2
 		ext.l	d2
 		cmp.l	d2,d1
-		bne.w	lmine_skip
+		bne.s	lmine_dist_far
 		asr.l	#8,d0
 		asr.l	#2,d0
-		cmpi.l	#1000,d0
-		bgt.w	lmine_skip
-		cmpi.l	#-1000,d0
-		blt.w	lmine_skip
+		cmp.l	d4,d0
+		bgt.s	lmine_dist_far
+		move.l	d4,d1
+		neg.l	d1
+		cmp.l	d1,d0
+		blt.s	lmine_dist_far
 		muls	d0,d0
 		add.l	d0,d5
 		addq.w	#4,d6
 		cmpi.w	#12,d6
-		bne.w	lmine_axis
-		cmpi.l	#250000,d5
-		bhi.w	lmine_skip
+		bne.s	lmine_dist_axis
+		rts
+	lmine_dist_far:
+		move.l	#$7fffffff,d5
+		rts
+
+Lmine_phys:
+		jsr	750(a5)
+		movem.l	d0-7/a1-4,-(a7)
+		hcall	#Call_MineRadius
+		move.l	d0,d4
+		beq.w	lmine_off
+		move.l	d4,d3
+		muls	d4,d3
+		movea.l	A6_big_space(a6),a4
+		moveq	#$72,d7
+	lmine_next:
+		btst	#$2,0(a4,d7.w)
+		beq.s	lmine_skip
+		btst	#$4,0(a4,d7.w)
+		bne.s	lmine_skip
+		cmp.b	93(a0),d7
+		beq.s	lmine_skip
+		cmp.b	212(a0),d7
+		beq.s	lmine_skip
+		move.w	d7,d0
+		jsr	L44af8
+		cmpi.w	#$10,90(a1)
+		bls.s	lmine_skip
+		cmpi.b	#$1,94(a1)
+		beq.s	lmine_skip
+		bsr.w	Lmine_dist
+		cmp.l	d3,d5
+		bhi.s	lmine_skip
 		move.l	a1,32(a7)
 		movem.l	(a7)+,d0-7/a1-4
 		movem.l	(a7)+,d2-3
 		jmp	l75824
 	lmine_skip:
 		dbra	d7,lmine_next
+	lmine_off:
 		movem.l	(a7)+,d0-7/a1-4
 		jmp	l74f04
+
+Lmine_boom:
+		cmpi.b	#$48,211(a0)
+		bne.s	lmine_boom_done
+		movem.l	d0-7/a1-4,-(a7)
+		movea.l	674(a6),a2
+		cmpa.l	a1,a2
+		beq.s	lmine_boom_pop
+		hcall	#Call_MineRadius
+		move.l	d0,d4
+		beq.s	lmine_boom_pop
+		move.l	d4,d3
+		muls	d4,d3
+		movea.l	a2,a1
+		bsr.w	Lmine_dist
+		cmp.l	d3,d5
+		bhi.s	lmine_boom_pop
+		move.w	90(a0),d0
+		subq.w	#6,d0
+		lea	L75818,a3
+		move.w	0(a3,d0.w),d0
+		move.b	212(a0),d7
+		jsr	486(a5)
+	lmine_boom_pop:
+		movem.l	(a7)+,d0-7/a1-4
+	lmine_boom_done:
+		move.b	93(a1),d0
+		cmp.b	212(a0),d0
+		jmp	l7582c

@@ -119,6 +119,17 @@ bool smoke_inherit = false;
 int smoke_cap_ms = 500; /* the speed smoke keeps from the ship, m/s */
 #define SMOKE_UNITS_PER_MS 10.6 /* 5300 units = 500 m/s */
 
+/* A proximity mine goes off when a ship is within this radius (Lmine_phys in
+   fe2.s). The 68k side wants it in units of 1024 mm, 0 for the game's own
+   behaviour (the mine has to touch the ship). */
+bool mine_prox = true;
+int mine_radius_m = 250;
+
+void Call_MineRadius(void)
+{
+	SetReg(REG_D0, mine_prox ? mine_radius_m * 1000 / 1024 : 0);
+}
+
 void Call_SmokeVel(void)
 {
 	if (!smoke_inherit)
@@ -494,5 +505,6 @@ HOSTCALL hcalls[] = {
 	[0x94] = Call_NetDamage,
 	[0x95] = Call_NetPending,
 	[0x96] = Call_SmokeVel,
+	[0x97] = Call_MineRadius,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

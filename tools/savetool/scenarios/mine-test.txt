@@ -5,3 +5,4 @@ out ../../../../savs/MineTest
 name MineTest
 ship[172] c1
 ship[173] c1
+hull 400

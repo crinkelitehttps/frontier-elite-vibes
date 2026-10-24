@@ -65,6 +65,8 @@ typedef struct
 	int exact_step;
 	int smoke_inherit;
 	int smoke_cap;
+	int mine_prox;
+	int mine_radius;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -105,6 +107,8 @@ static const struct
 	{"exact_step", offsetof(Settings, exact_step)},
 	{"smoke_inherit", offsetof(Settings, smoke_inherit)},
 	{"smoke_cap", offsetof(Settings, smoke_cap)},
+	{"mine_prox", offsetof(Settings, mine_prox)},
+	{"mine_radius", offsetof(Settings, mine_radius)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -211,6 +215,8 @@ static Settings current(void)
 	s.exact_step = exact_step;
 	s.smoke_inherit = smoke_inherit;
 	s.smoke_cap = smoke_cap_ms;
+	s.mine_prox = mine_prox;
+	s.mine_radius = mine_radius_m;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -265,6 +271,9 @@ static void apply(const Settings *s)
 	smoke_inherit = s->smoke_inherit != 0;
 	if (s->smoke_cap >= 10 && s->smoke_cap <= 2000)
 		smoke_cap_ms = s->smoke_cap;
+	mine_prox = s->mine_prox != 0;
+	if (s->mine_radius >= 10 && s->mine_radius <= 2000)
+		mine_radius_m = s->mine_radius;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */
