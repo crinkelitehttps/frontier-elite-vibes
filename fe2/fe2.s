@@ -58456,9 +58456,9 @@ L7ed00:
 		bclr	#$0,129(a6)
 		rts
 
-	l7edac:	cmp.l	4(a0),d2
-		dbeq	d7,l7ee7e
-		bne.s	l7eda0
+	l7edac:	jmp	Lpax_late
+		nop
+	l7edb4:	bne.s	l7eda0
 		tst.l	12(a0)
 		bne.s	l7ee06
 		movem.l	d7/a0,-(a7)
@@ -67294,3 +67294,28 @@ Lsmoke_vel:
 		move.b	#$b,94(a1)
 		hcall	#Call_SmokeVel
 		rts
+
+******************************************************************************
+* Passengers past their month (bit 15 of the entry's flags, set by L7f0cc)
+* only left the ship at their destination, and there without giving their
+* cabins back (744(a6) keeps counting them), so a late group stayed aboard
+* for good. Now an unnamed passenger group that is past its month leaves at
+* the next landing wherever that is, by the path named clients take (L7ee06:
+* cabins freed, the angry message, entry removed). Parcels and named
+* clients are as before. Replaces cmp.l 4(a0),d2 / dbeq d7,l7ee7e at l7edac.
+* In: a0 = entry, d2 = current system, d7 = entries left.
+******************************************************************************
+Lpax_late:
+		tst.l	12(a0)
+		bne.s	lpax_late_dest
+		cmpi.b	#$1c,3(a0)
+		beq.s	lpax_late_dest
+		jmp	l7ee06
+	lpax_late_dest:
+		cmp.l	4(a0),d2
+		beq.s	lpax_late_here
+		dbra	d7,lpax_late_next
+	lpax_late_here:
+		jmp	l7edb4
+	lpax_late_next:
+		jmp	l7ee7e

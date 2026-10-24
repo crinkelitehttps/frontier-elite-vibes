@@ -22415,7 +22415,6 @@ extern void __F73414 ();
 extern void __F7341a ();
 extern void __F73420 ();
 extern void __F7342e ();
-extern void __F73434 ();
 extern void __F7343e ();
 extern void __F73444 ();
 extern void __F73446 ();
@@ -25008,6 +25007,9 @@ extern void __Fa9584 ();
 extern void __Fa9586 ();
 extern void __Fa958a ();
 extern void __Fa9592 ();
+extern void __Fa959c ();
+extern void __Fa95a4 ();
+extern void __Fa95b0 ();
 #endif /* PART1 */
 #define __DL22_PlayEffect (0x22)
 #define __DL54_StopMusic (0x28)
@@ -33580,6 +33582,7 @@ extern void __Fa9592 ();
 #define __Dl7eda0 (0x73424)
 #define __D73428 (0x73428)
 #define __Dl7edac (0x73430)
+#define __Dl7edb4 (0x73438)
 #define __D73454 (0x73454)
 #define __Dl7edd6 (0x7345a)
 #define __D73462 (0x73462)
@@ -34964,6 +34967,10 @@ extern void __Fa9592 ();
 #define __DLalt_hud (0xa9534)
 #define __Dlalt_hud_cmp (0xa9584)
 #define __DLsmoke_vel (0xa958c)
+#define __DLpax_late (0xa9598)
+#define __Dlpax_late_dest (0xa95ac)
+#define __Dlpax_late_here (0xa95b6)
+#define __Dlpax_late_next (0xa95bc)
 #ifdef PART2
 void __F36 ()
 {
@@ -246586,21 +246593,6 @@ void __F7342e ()
 	dest &= ~(1 << src);
 	wrbyte(Regs[14]._s32+129, dest);
 }
-void __F73434 ()
-{
-	s32 dest = Regs[2]._s32;
-
-	s32 src = rdlong(Regs[8]._s32+4);
-
-	s32 val = (s32)dest - (s32)src;
-	s32 flgs = ((s32)src) < 0;
-	s32 flgo = ((s32)dest) < 0;
-	s32 flgn = ((s32)val) < 0;
-	V = ((flgs != flgo) && (flgn != flgo));
-	C = ((u32)src) > ((u32)dest);
-	N = (flgn != 0);
-	nZ = val;
-}
 void __F7343e ()
 {
 	nZ = rdlong(Regs[8]._s32+12);
@@ -270948,6 +270940,43 @@ void __Fa9592 ()
 	N = val < 0;
 	V = 0;
 	C = 0;
+}
+void __Fa959c ()
+{
+	nZ = rdlong(Regs[8]._s32+12);
+	N = nZ < 0;
+	V = 0;
+	C = 0;
+}
+void __Fa95a4 ()
+{
+	s32 dest = rdbyte(Regs[8]._s32+3);
+
+	s32 src = 28;
+
+	s32 val = (s8)dest - (s8)src;
+	s32 flgs = ((s8)src) < 0;
+	s32 flgo = ((s8)dest) < 0;
+	s32 flgn = ((s8)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u8)src) > ((u8)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __Fa95b0 ()
+{
+	s32 dest = Regs[2]._s32;
+
+	s32 src = rdlong(Regs[8]._s32+4);
+
+	s32 val = (s32)dest - (s32)src;
+	s32 flgs = ((s32)src) < 0;
+	s32 flgo = ((s32)dest) < 0;
+	s32 flgn = ((s32)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u32)src) > ((u32)dest);
+	N = (flgn != 0);
+	nZ = val;
 }
 #endif /* PART2 */
 #ifdef PART1
@@ -461004,11 +461033,14 @@ __Nl7edac:
 	#ifdef M68K_DEBUG
 		line_no = 58728;
 	#endif
-	__F73434 ();
+	{
+		goto __NLpax_late;
+	}
 	#ifdef M68K_DEBUG
 		line_no = 58729;
 	#endif
-	if ((!(!nZ)) && (--Regs[7]._s16 != -1)) goto __Nl7ee7e;
+__Nl7edb4:
+	case (0x73438):
 	#ifdef M68K_DEBUG
 		line_no = 58730;
 	#endif
@@ -484827,6 +484859,81 @@ __NLsmoke_vel:
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
 	goto jumptable;
+__NLpax_late:
+	case (0xa9598):
+	#ifdef M68K_DEBUG
+		line_no = 68111;
+	#endif
+	__Fa959c ();
+	#ifdef M68K_DEBUG
+		line_no = 68112;
+	#endif
+	if (nZ)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlpax_late_dest;
+		goto handle_exception;
+	} else {
+		goto __Nlpax_late_dest;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68113;
+	#endif
+	__Fa95a4 ();
+	#ifdef M68K_DEBUG
+		line_no = 68114;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlpax_late_dest;
+		goto handle_exception;
+	} else {
+		goto __Nlpax_late_dest;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68115;
+	#endif
+	{
+		goto __Nl7ee06;
+	}
+__Nlpax_late_dest:
+	case (0xa95ac):
+	#ifdef M68K_DEBUG
+		line_no = 68117;
+	#endif
+	__Fa95b0 ();
+	#ifdef M68K_DEBUG
+		line_no = 68118;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlpax_late_here;
+		goto handle_exception;
+	} else {
+		goto __Nlpax_late_here;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68119;
+	#endif
+	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlpax_late_next;
+__Nlpax_late_here:
+	case (0xa95b6):
+	#ifdef M68K_DEBUG
+		line_no = 68121;
+	#endif
+	{
+		goto __Nl7edb4;
+	}
+__Nlpax_late_next:
+	case (0xa95bc):
+	#ifdef M68K_DEBUG
+		line_no = 68123;
+	#endif
+	{
+		goto __Nl7ee7e;
+	}
 	goto end_;
 		default: 
 	if (fe2vm_depth) {

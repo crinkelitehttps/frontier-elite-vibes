@@ -13,7 +13,7 @@ struct (`a0`/`a1`); `a6` is the game's global block. Every fix is a same-size
 in the middle moves. `tools/atari_patch/patch_atari.py` applies the fixes to the Atari ST executable
 (the new code goes after the end of the text; no cave needed). A binary patch needs room for that code (the game's code
 ends at the end of `fe2.s`; the new routines are `Lgrav_norm`, `Lgrav_mass`,
-`Lcool_dec`, `Lprox_log`, `Lframe_cand`) or a code cave. All fixes are in both
+`Lcool_dec`, `Lprox_log`, `Lframe_cand`, `Lpax_late`) or a code cave. All fixes are in both
 `fe2/fe2.s` and `fe2/fe2_modded.s`. The `hcall` in `Lprox_log` is a
 diagnostic and can be dropped.
 
@@ -122,6 +122,30 @@ before. It is an option, off by default: `smoke_inherit` in `glfrontier.cfg`,
 and `smoke_cap` is the limit in m/s (10-2000, default 500; one velocity unit is
 about 0.095 m/s). In the cog menu under Flight. Both variants. Tested with
 `tools/savetool/scenarios/smoke-fast-*.txt` (ships at 1.5 and 5 km/s).
+
+## 6. Passengers past their month never leave (`l7edac`, `Lpax_late`)
+
+**Symptom:** passengers taken from the bulletin board and not delivered within
+a month stay in the ship, and their cabins stay used, until the player ejects
+in an escape pod. (Original-game bug report 10.)
+
+**Cause:** the daily event (`L7f0cc`) only marks a late entry (bit 15 of its
+flags word at `2(a0)`); the entry is removed later by `L7ee5e`. For the
+bulletin-board entries (bit 13 set, no client name at `12(a0)`) `l7edac` does
+that only when the ship is in the entry's destination system, and its late
+arrival path (`L7ef98` message `$9c35`) removes the entry without freeing the
+cabins (`744(a6)`) the way the named-client path `l7ee06` does. So a late group
+waits for a destination the player may never visit, and when it is reached the
+cabins stay counted.
+
+**Original code:** `cmp.l 4(a0),d2` / `dbeq d7,l7ee7e` at `l7edac` (8 bytes).
+
+**Fix:** `jmp Lpax_late` + `nop` (same size). For an unnamed entry that is not
+a parcel (low byte of the flags is not `$1c`), `Lpax_late` jumps to `l7ee06`
+at once: cabins freed, the "Don't even ask for payment" message, entry removed,
+at the next landing wherever it is. Named clients and parcels keep the
+destination test. Both variants. Tested by writing an expired entry into the
+list (`poke`) with a different destination: it leaves and `744(a6)` drops.
 
 ## Known, not fixed
 

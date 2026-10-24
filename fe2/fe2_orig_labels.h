@@ -362,6 +362,7 @@
 #define FE2_Lnet_physics                             0x83650 /* Lnet_physics */
 #define FE2_Lalt_hud                                 0x83674 /* Lalt_hud */
 #define FE2_Lsmoke_vel                               0x836cc /* Lsmoke_vel */
+#define FE2_Lpax_late                                0x836d8 /* Lpax_late */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

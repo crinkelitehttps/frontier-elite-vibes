@@ -404,5 +404,6 @@
 #define FE2_Lframe_cand                              0xa9500 /* Lframe_cand */
 #define FE2_Lalt_hud                                 0xa9534 /* Lalt_hud */
 #define FE2_Lsmoke_vel                               0xa958c /* Lsmoke_vel */
+#define FE2_Lpax_late                                0xa9598 /* Lpax_late */
 
 #endif /* FE2_LABELS_H */
