@@ -86,6 +86,10 @@ const char *cheat_goto_body(int slot, double distance_km);
  * old position, which means nothing in the new system: follow with cheat_goto_body. NULL or a reason. */
 const char *cheat_enter_system(unsigned id);
 
+/* Sends event N to the game's modules (the module broadcast); 16 is the hyperspace arrival, which
+ * generates the system's traders, pirates and police. For testing. */
+void cheat_broadcast_event(int event);
+
 /* Shipyard items, in the order of the game's equipment list */
 typedef enum
 {

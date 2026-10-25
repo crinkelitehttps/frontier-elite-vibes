@@ -577,6 +577,16 @@ const char *cheat_enter_system(unsigned id)
 	return NULL;
 }
 
+void cheat_broadcast_event(int event)
+{
+	fe2vm_regs r;
+	fe2vm_begin();
+	memset(&r, 0, sizeof(r));
+	r.d[0] = event;
+	game_call(FE2_a5_jumptab + A5_BROADCAST, &r);
+	fe2vm_end_keep();
+}
+
 /* The ship part of the player's ship model */
 static u32 ship_data(void)
 {

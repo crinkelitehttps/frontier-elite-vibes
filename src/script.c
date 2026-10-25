@@ -12,6 +12,7 @@
  *     wait SECONDS
  *   moving (the cheat menu's Location section, cheats.h)
  *     enter ID           make the system with this id (hex, as in tools/galaxy_catalog) the current one
+ *     event N            send event N to the game's modules (16: hyperspace arrival, makes pirates)
  *     goto NAME KM       KM above planet NAME's surface, or from station NAME; NAME may be
  *                        @planet, @star, @station for the first of that kind
  *     pos X Y Z          km from the centre of the body the ship is relative to
@@ -358,6 +359,8 @@ static void run(char *line)
 		const char *why = cheat_enter_system((unsigned)strtoul(args, NULL, 16));
 		say("enter %s: %s", args, why ? why : "ok");
 	}
+	else if (!strcmp(line, "event"))
+		cheat_broadcast_event(atoi(args));
 	else if (!strcmp(line, "goto"))
 		cmd_goto(args);
 	else if (!strcmp(line, "pos"))
