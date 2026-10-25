@@ -50435,13 +50435,13 @@ L7490a:
 
 L7490c:
 		move.b	670(a6),d7
-		moveq	#4,d0
+		moveq	#7,d0
 		jsr	A5_RandInt(a5)
 		tst.w	d0
-* Rolls 1 and 2 make the group of three (issue 6), as First Encounters' roll does.
+* Of 7 rolls: 0 a lone pirate, 1 and 2 the group of three (issue 6), 3-6 none. Same pirates per roll as the original.
 		beq.s	l74922
 		subq.w	#3,d0
-		bne.w	l7494a
+		bcs.w	l7494a
 		rts
 
 	l74922:	move.l	a0,-(a7)

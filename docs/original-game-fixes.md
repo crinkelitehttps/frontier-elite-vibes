@@ -218,11 +218,14 @@ at once (issue 6). Frontier: First Encounters has groups.
 (`F698` in JJFFE's `srctools/cagent.txt`) is the same except that 2 is a group too (of random ship types), and
 its groups are 2-4 ships. Singles stay a quarter of the rolls there as well.
 
-**Original code:** `subq.w #1,d0` / `beq.w l7494a` (6 bytes).
+**Original code:** `moveq #4,d0` ... `subq.w #1,d0` / `beq.w l7494a` (the roll and the group test).
 
-**Fix:** `subq.w #3,d0` / `bne.w l7494a` (same size): rolls 1 and 2 make the group of three. Groups come twice as
-often (half the rolls, ships per roll 1.0 -> 1.75 on average); singles and the group itself are unchanged. Both
-variants. Not done: First Encounters' mixed-type groups and its 2-4 group size. Not tested in game yet.
+**Fix:** the roll is now `RandInt(7)` (`moveq #7,d0`): 0 a lone pirate, 1 and 2 the group of three
+(`subq.w #3,d0` / `bcs.w l7494a`), 3-6 nothing. Same code size. Pirates per roll stay at the original 1.0
+(1/7 x 1 + 2/7 x 3), but they now come as a group twice as often as alone (2/7 against 1/7; it was 1/4 each).
+A first version, roll 2 also a group out of 4, raised the average to 1.75 per roll and was too many
+(tested in game: two attackers on the first trip from Lave). Both variants. Not done: First Encounters'
+mixed-type groups and its 2-4 group size.
 
 ## Known, not fixed
 

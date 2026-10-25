@@ -219378,7 +219378,7 @@ void __F69004 ()
 }
 void __F69006 ()
 {
-	s32 val = 4;
+	s32 val = 7;
 	Regs[0]._s32 = val;
 	nZ = val;
 	N = val < 0;
@@ -430727,7 +430727,7 @@ __NL7490c:
 	#ifdef M68K_DEBUG
 		line_no = 50219;
 	#endif
-	if (nZ)
+	if (C)
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
 		rdest = __Dl7494a;
