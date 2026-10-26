@@ -5,6 +5,8 @@
  * ship object; the fe2/fe2_modded.s code each one comes from is noted next to it.
  */
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cheats.h"
@@ -449,6 +451,126 @@ int cheat_bodies(CheatBody *out, int max)
 								 : 0.0;
 	}
 	return n;
+}
+
+/* ---- ships ---- */
+
+#define OBJ_MODEL  90  /* word, byte offset into the game data's model table */
+#define OBJ_CLASS  236 /* byte, see docs/npc-ship-ai.md section 2.2 */
+#define OBJ_STATE  211 /* byte, the AI state */
+#define OBJ_REG    246 /* the ship's registration (the body's name for a body) */
+#define OBJ_MODULE_SHIPS 11
+#define SHIPDATA_NAME    14 /* word, string id of the ship type's name */
+#define A6_TARGET        708   /* byte, the target's object id (the flight view's click, the map's pick and L63aa4 write it) */
+#define A6_GAME_STRINGS  14474 /* long, the core string table: word offsets, then the texts */
+
+/* Copies a game string, printable characters only */
+static void copy_text(char *dst, int size, u32 src)
+{
+	int k = 0;
+	for (; k < size - 1; k++)
+	{
+		int c = (u8)rdbyte(src + k);
+		if (c < 32 || c > 126)
+			break;
+		dst[k] = (char)c;
+	}
+	dst[k] = 0;
+}
+
+/* The ship data of the object's model, or 0 when the model is not a ship's */
+static u32 model_ship_data(u32 obj)
+{
+	u32 data = (u32)rdlong(a6(A6_GAME_DATA));
+	u32 model = data + rd16(data + rd16(obj + OBJ_MODEL));
+	u32 off = rd16(model + MODEL_SHIP_DATA);
+	return off ? model + off : 0;
+}
+
+/* The ship type's name: a core string ($4000 + n), the table at A6_game_strings holding word offsets */
+static void ship_variant(u32 ship_data, char *out, int size)
+{
+	u32 id = rd16(ship_data + SHIPDATA_NAME);
+	u32 strings = (u32)rdlong(a6(A6_GAME_STRINGS));
+	if ((id & 0xc000) != 0x4000 || !strings)
+	{
+		snprintf(out, size, "model %u", id);
+		return;
+	}
+	copy_text(out, size, strings + (u32)(int16_t)rd16(strings + 2 * (id & 0x3fff)));
+	if (!out[0])
+		snprintf(out, size, "string %u", id);
+}
+
+static int ship_nearer(const void *a, const void *b)
+{
+	double x = ((const CheatShip *)a)->distance_km, y = ((const CheatShip *)b)->distance_km;
+	return x < y ? -1 : x > y;
+}
+
+int cheat_ships(CheatShip *out)
+{
+	if (!ship())
+		return 0;
+	pos64 base[3], me[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	for (int a = 0; a < 3; a++)
+		me[a] = base[a] + obj_pos(ship(), a);
+	int n = 0;
+	for (int i = 1; i < OBJECT_SLOTS; i++)
+	{
+		u32 o = slot_object(i);
+		if (o == ship() || !rdbyte(FE2_big_space + i) || (u8)rdbyte(o + OBJ_TYPE) != OBJ_MODULE_SHIPS)
+			continue;
+		int class_ = (u8)rdbyte(o + OBJ_CLASS);
+		if (class_ == 0xfa || class_ >= 0xfd) /* cargo, missiles, flashes and the player; $fb is a pirate */
+			continue;
+		u32 data = model_ship_data(o);
+		if (!data)
+			continue;
+		CheatShip *s = &out[n++];
+		s->slot = i;
+		copy_text(s->registration, sizeof(s->registration), o + OBJ_REG);
+		if (!s->registration[0])
+			snprintf(s->registration, sizeof(s->registration), "-");
+		ship_variant(data, s->variant, sizeof(s->variant));
+		pos64 at[3];
+		abs_pos((u8)rdbyte(o + OBJ_PARENT), at);
+		double sum = 0.0;
+		for (int a = 0; a < 3; a++)
+		{
+			double d = (double)(at[a] + obj_pos(o, a) - me[a]) / MM_PER_KM;
+			sum += d * d;
+		}
+		s->distance_km = sqrt(sum);
+		s->state = (u8)rdbyte(o + OBJ_STATE);
+		s->at_rest = !rdlong(o + OBJ_VEL) && !rdlong(o + OBJ_VEL + 4) && !rdlong(o + OBJ_VEL + 8);
+	}
+	qsort(out, n, sizeof(*out), ship_nearer);
+	return n;
+}
+
+int cheat_target(void)
+{
+	return ship() ? (u8)rdbyte(a6(A6_TARGET)) : 0;
+}
+
+const char *cheat_set_target(int slot)
+{
+	if (!ship())
+		return "No ship yet.";
+	if (slot != 0 && (slot < 1 || slot >= OBJECT_SLOTS || !rdbyte(FE2_big_space + slot) || slot_object(slot) == ship()))
+		return "That object is gone.";
+	wrbyte(a6(A6_TARGET), slot);
+	return NULL;
+}
+
+void cheat_target_name(char *out, int size)
+{
+	int slot = cheat_target();
+	out[0] = 0;
+	if (slot > 0 && slot < OBJECT_SLOTS && rdbyte(FE2_big_space + slot))
+		copy_text(out, size, slot_object(slot) + OBJ_REG);
 }
 
 const char *cheat_goto_body(int slot, double distance_km)

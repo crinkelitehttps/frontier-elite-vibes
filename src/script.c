@@ -26,6 +26,7 @@
  *   other
  *     print              where we are
  *     bodies             the system's named bodies
+ *     ships              the other ships, nearest first (the menu's ship log)
  *     peek [b|w|l] ADDR  read game memory (ADDR: a number, or a6+N for a game global)
  *     poke [b|w|l] ADDR VALUE
  *     snap               write savs/SnapNN
@@ -290,6 +291,15 @@ static void cmd_print(void)
 		say("no ship");
 }
 
+static void cmd_ships(void)
+{
+	CheatShip ships[CHEAT_SHIPS_MAX];
+	int count = cheat_ships(ships);
+	for (int i = 0; i < count; i++)
+		say("ship %d %s %s %.3f km", ships[i].slot, ships[i].registration, ships[i].variant, ships[i].distance_km);
+	say("%d ships", count);
+}
+
 static void cmd_bodies(void)
 {
 	CheatBody bodies[64];
@@ -399,6 +409,8 @@ static void run(char *line)
 		cmd_print();
 	else if (!strcmp(line, "bodies"))
 		cmd_bodies();
+	else if (!strcmp(line, "ships"))
+		cmd_ships();
 	else if (!strcmp(line, "snap"))
 	{
 		char name[32];

@@ -77,6 +77,29 @@ typedef struct
 	double radius_km;
 } CheatBody;
 int cheat_bodies(CheatBody *out, int max);
+
+/* Every ship in the system except the player's: pirates, police, traders, ships parked at a
+ * station or still on their way in. Missiles, cargo and effects are left out. */
+typedef struct
+{
+	int slot;
+	char registration[16]; /* the ship's ID plate, e.g. AB-123 */
+	char variant[32];      /* the ship type, e.g. Cobra Mk III */
+	double distance_km;    /* from the player's ship */
+	int state;             /* the AI state byte (docs/npc-ship-ai.md section 5) */
+	bool at_rest;          /* its velocity is exactly zero */
+} CheatShip;
+#define CHEAT_SHIPS_MAX 115 /* the object table's size */
+/* Fills `out` (room for CHEAT_SHIPS_MAX) nearest first and returns how many; 0 without a ship */
+int cheat_ships(CheatShip *out);
+
+/* The ship's current target (the object the panel shows and a missile goes for): the slot of its
+ * object, 0 for none */
+int cheat_target(void);
+/* Makes the object in `slot` the target (0: none). NULL or a reason. */
+const char *cheat_set_target(int slot);
+/* The target's registration, or its name if it is a body; "" for none */
+void cheat_target_name(char *out, int size);
 /* Puts the ship `distance_km` above a planet's surface, or that far from a station, on the side it
  * is now (planet) or away from the planet the station is on (station); stops it. NULL or a reason. */
 const char *cheat_goto_body(int slot, double distance_km);

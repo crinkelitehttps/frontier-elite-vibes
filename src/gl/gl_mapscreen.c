@@ -14,6 +14,8 @@
 #include "game_state.h"
 #include "gl_cockpit.h"
 #include "gl_scene.h"
+#include "cheats.h"
+#include "debug_screen.h"
 #include "host.h" /* rdword, wrword, hcalls_count */
 #include "hostcall.h"
 #include "input.h"
@@ -87,6 +89,26 @@ bool cockpit_ship_live = true;
 #define SCAN_F3            0x3d
 #define HAND_OVER_MS       400
 
+/* Pages the host draws after the game's own, one more turn each (the ship screen's last page turns
+ * to the ship log, then the debug page, then the first page) */
+enum
+{
+	EXTRA_NONE,
+	EXTRA_SHIPS,
+	EXTRA_DEBUG,
+};
+/* The ship log page (320 x 168): a header, then rows of two lines, and arrows on the right. A tap on
+ * a row makes that ship the target. */
+#define LOG_TOP          12
+#define LOG_ROW_H        18
+#define LOG_ROWS         ((SHIP_PAGE_ROWS - LOG_TOP) / LOG_ROW_H)
+#define LOG_LIST_W       300
+#define LOG_ARROW_X      304
+#define LOG_ARROW_W      16
+#define LOG_ARROW_H      24
+#define LOG_REPEAT_DELAY 12 /* batches an arrow is held before it repeats, then how often */
+#define LOG_REPEAT_EVERY 4
+
 /* L457d8, the modules' fn 16 loop, is 0x7c before L45854 (no label) */
 #define MODULES_FN16 (FE2_CallHUDModfuncs - 0x7c)
 #define MODULES_OP   0x022e /* its first instruction, andi.b #,598(a6) */
@@ -112,6 +134,10 @@ static struct
 	int rect[64][4], id[64]; /* the buttons the page set, as the game had them at its end */
 	Uint64 last;			 /* the page was last made */
 	Uint32 handed;			 /* the real screen was opened (ticks) */
+	int extra;				 /* the host-drawn page (EXTRA_*, after the game's last) that is the one shown */
+	int log_first;			 /* the ship log: the first ship shown */
+	int log_ids[LOG_ROWS];	 /* the ships in its rows as last drawn (a tap is on those), 0 for none */
+	int log_hold;			 /* batches a press has been held on one of its arrows */
 } ship;
 
 /* No vblank comes in a batch: the game's wait for one (L41b98, the ship
@@ -128,6 +154,7 @@ void mapscreen_forget(void)
 {
 	kept.held = false;
 	ship.held = false;
+	ship.extra = EXTRA_NONE;
 }
 
 /* =========================================================================
@@ -866,6 +893,38 @@ typedef struct
 	bool handover; /* ... a tap on one of its items */
 } Batch;
 
+/* A press on the ship log page (or an arrow held on): true when it was the page's own. A row's tap
+ * makes its ship the target, or no target if it already is. */
+static bool ship_log_input(const Pointer *p)
+{
+	int arrow = 0;
+	if (p->on && p->x >= LOG_ARROW_X && p->x < LOG_ARROW_X + LOG_ARROW_W)
+	{
+		const int bottom = LOG_TOP + LOG_ROWS * LOG_ROW_H;
+		if (p->y >= LOG_TOP && p->y < LOG_TOP + LOG_ARROW_H)
+			arrow = -1;
+		else if (p->y >= bottom - LOG_ARROW_H && p->y < bottom)
+			arrow = 1;
+	}
+	if (arrow && (p->pressed || (p->buttons & 2)))
+	{
+		if (p->pressed || (ship.log_hold >= LOG_REPEAT_DELAY && (ship.log_hold - LOG_REPEAT_DELAY) % LOG_REPEAT_EVERY == 0))
+			ship.log_first += arrow;
+		ship.log_hold++;
+		return true;
+	}
+	ship.log_hold = 0;
+	if (!p->pressed || p->x >= LOG_LIST_W || p->y < LOG_TOP)
+		return false;
+	int row = (p->y - LOG_TOP) / LOG_ROW_H;
+	if (row >= LOG_ROWS || !ship.log_ids[row])
+		return false;
+	int id = ship.log_ids[row];
+	cheat_set_target(cheat_target() == id ? 0 : id);
+	kept.picked[0] = (uint8_t)cheat_target(); /* (the map's pick is its own copy) */
+	return true;
+}
+
 static void take_input(int group, Batch *b)
 {
 	memset(b, 0, sizeof *b);
@@ -948,10 +1007,11 @@ static void take_input(int group, Batch *b)
 		if (b->keys[i] == SCAN_F3)
 			b->turn = true;
 	b->nkeys = 0;
-	if (b->p.pressed)
+	const bool own = ship.extra == EXTRA_SHIPS && ship_log_input(&b->p);
+	if (b->p.pressed && !own)
 	{
 		int hit = -1;
-		for (int i = 0; i < ship.icons; i++)
+		for (int i = 0; i < (ship.extra ? 0 : ship.icons); i++)
 			if (b->p.x >= ship.rect[i][0] && b->p.x <= ship.rect[i][2] && b->p.y >= ship.rect[i][1] &&
 				b->p.y <= ship.rect[i][3])
 				hit = i;
@@ -1045,6 +1105,152 @@ static void ship_hand_over(void)
 	Input_TapSTKey(SCAN_F3);
 }
 
+static void draw_text(MapPage *out, int x, int y, int col, const char *text)
+{
+	for (; *text; text++)
+	{
+		const unsigned char *g = screen_text_glyph((unsigned char)*text);
+		if (!g)
+			g = screen_text_glyph(' ');
+		if (!g)
+			continue;
+		for (int row = 0; row < 8; row++)
+			for (int bit = 0; bit < 8; bit++)
+				if ((g[row] >> (7 - bit) & 1) && x + bit < 320 && y + row < SHIP_PAGE_ROWS)
+					out->screen[(y + row) * 320 + x + bit] = (uint8_t)col;
+		x += g[9];
+	}
+}
+
+static int palette_level(unsigned short c)
+{
+	return (c >> 8 & 15) + (c >> 4 & 15) + (c & 15);
+}
+
+/* The page's colours from the ship screen's palette: the brightest, the darkest and the one between */
+static void page_colours(const MapPage *out, int *bright, int *mid, int *dark)
+{
+	int n = out->len_main > 0 && out->len_main <= 256 ? out->len_main : 16;
+	*bright = *dark = 0;
+	for (int i = 1; i < n; i++)
+	{
+		if (palette_level(out->main_pal[i]) > palette_level(out->main_pal[*bright]))
+			*bright = i;
+		if (palette_level(out->main_pal[i]) < palette_level(out->main_pal[*dark]))
+			*dark = i;
+	}
+	int half = (palette_level(out->main_pal[*bright]) + palette_level(out->main_pal[*dark])) / 2;
+	*mid = *bright;
+	for (int i = 0; i < n; i++)
+		if (abs(palette_level(out->main_pal[i]) - half) < abs(palette_level(out->main_pal[*mid]) - half))
+			*mid = i;
+}
+
+static int text_width(const char *text)
+{
+	int w = 0;
+	for (; *text; text++)
+	{
+		const unsigned char *g = screen_text_glyph((unsigned char)*text);
+		if (!g)
+			g = screen_text_glyph(' ');
+		if (g)
+			w += g[9];
+	}
+	return w;
+}
+
+static void fill_rect(MapPage *out, int x0, int y0, int x1, int y1, int col)
+{
+	for (int y = y0; y <= y1 && y < SHIP_PAGE_ROWS; y++)
+		for (int x = x0; x <= x1 && x < 320; x++)
+			out->screen[y * 320 + x] = (uint8_t)col;
+}
+
+/* The debug page over the ship screen's: black rows above the panel, the
+ * lines in the palette's brightest colour */
+static void draw_debug_page(MapPage *out)
+{
+	int bright, mid, dark;
+	page_colours(out, &bright, &mid, &dark);
+	memset(out->screen, dark, (size_t)320 * SHIP_PAGE_ROWS);
+	static char lines[DEBUG_SCREEN_ROWS][DEBUG_SCREEN_COLS + 1];
+	int count = debug_screen_lines(lines);
+	draw_text(out, 4, 2, bright, "DEBUG");
+	if (!count)
+		draw_text(out, 4, 14, bright, "(nothing logged yet)");
+	for (int i = 0; i < count; i++)
+		draw_text(out, 4, 14 + i * 9, bright, lines[i]);
+}
+
+/* An arrow button in the log's right column */
+static void draw_log_arrow(MapPage *out, int y, bool up, int on, int dark)
+{
+	fill_rect(out, LOG_ARROW_X, y, LOG_ARROW_X + LOG_ARROW_W - 1, y + LOG_ARROW_H - 1, on);
+	const int cx = LOG_ARROW_X + LOG_ARROW_W / 2, cy = y + LOG_ARROW_H / 2;
+	for (int k = 0; k < 6; k++)
+		fill_rect(out, cx - k, up ? cy - 3 + k : cy + 2 - k, cx + k, up ? cy - 3 + k : cy + 2 - k, dark);
+}
+
+/* The ship log over the ship screen's page: the other ships in the system, nearest first, the count
+ * always at the top with the target. The current target's row is highlighted. */
+static void draw_ship_log_page(MapPage *out)
+{
+	int bright, mid, dark;
+	page_colours(out, &bright, &mid, &dark);
+	memset(out->screen, dark, (size_t)320 * SHIP_PAGE_ROWS);
+
+	static CheatShip ships[CHEAT_SHIPS_MAX];
+	const int total = cheat_ships(ships);
+	const int last_first = total > LOG_ROWS ? total - LOG_ROWS : 0;
+	if (ship.log_first > last_first)
+		ship.log_first = last_first;
+	if (ship.log_first < 0)
+		ship.log_first = 0;
+
+	char head[64];
+	if (total > LOG_ROWS)
+		snprintf(head, sizeof head, "SHIPS: %d (%d-%d)", total, ship.log_first + 1, ship.log_first + LOG_ROWS);
+	else
+		snprintf(head, sizeof head, "SHIPS: %d", total);
+	draw_text(out, 4, 2, bright, head);
+	char name[24], target[40];
+	cheat_target_name(name, sizeof name);
+	snprintf(target, sizeof target, "TARGET: %s", name[0] ? name : "NONE");
+	draw_text(out, 316 - text_width(target), 2, bright, target);
+
+	const int selected = cheat_target();
+	memset(ship.log_ids, 0, sizeof ship.log_ids);
+	for (int r = 0; r < LOG_ROWS && ship.log_first + r < total; r++)
+	{
+		const CheatShip *s = &ships[ship.log_first + r];
+		const int y = LOG_TOP + r * LOG_ROW_H;
+		const bool target_row = s->slot == selected;
+		char far_text[24];
+		const double km = s->distance_km;
+		if (km < 1.0)
+			snprintf(far_text, sizeof far_text, "%d m", (int)(km * 1000.0));
+		else if (km < 100.0)
+			snprintf(far_text, sizeof far_text, "%.1f km", km);
+		else if (km < 1e6)
+			snprintf(far_text, sizeof far_text, "%.0f km", km);
+		else
+			snprintf(far_text, sizeof far_text, "%.2e km", km);
+		if (target_row)
+			fill_rect(out, 0, y, LOG_LIST_W - 1, y + LOG_ROW_H - 2, bright);
+		draw_text(out, 4, y, target_row ? dark : bright, s->registration);
+		draw_text(out, LOG_LIST_W - 4 - text_width(far_text), y, target_row ? dark : bright, far_text);
+		draw_text(out, 4, y + 9, target_row ? dark : mid, s->variant);
+		ship.log_ids[r] = s->slot;
+	}
+	if (!total)
+		draw_text(out, 4, LOG_TOP + 2, mid, "NO OTHER SHIPS");
+
+	const int bottom = LOG_TOP + LOG_ROWS * LOG_ROW_H;
+	draw_log_arrow(out, LOG_TOP, true, ship.log_first > 0 ? bright : mid, dark);
+	draw_log_arrow(out, bottom - LOG_ARROW_H, false, ship.log_first < last_first ? bright : mid, dark);
+}
+
 bool mapscreen_page(int group, MapPage *out)
 {
 	static bool failed[COCKPIT_SCREENS];
@@ -1086,6 +1292,17 @@ bool mapscreen_page(int group, MapPage *out)
 	if (dbg)
 		for (int i = 0; i < 16384; i++)
 			dbg_before[i] = (uint8_t)rdbyte(a6 + (uint32_t)i);
+	if (is_ship && input.turn)
+	{
+		/* one turn past the game's last page (its next is the first) shows the
+		 * ship log, one more the debug page, and one more the first */
+		if (ship.extra == EXTRA_DEBUG)
+			ship.extra = EXTRA_NONE;
+		else if (ship.extra == EXTRA_SHIPS)
+			ship.extra = EXTRA_DEBUG, input.turn = false;
+		else if (ship.held && ship.state[4 + 1] == 0) /* (11959, the next page) */
+			ship.extra = EXTRA_SHIPS, input.turn = false;
+	}
 	bool ok = call(FE2_Clear3DView) && (step = 1, is_ship ? enter_ship(input.turn) : enter_map());
 	if (ok)
 	{
@@ -1138,6 +1355,10 @@ bool mapscreen_page(int group, MapPage *out)
 		log_printf("%s\n", buf);
 	}
 	bool keep = false;
+	if (ok && is_ship && ship.extra == EXTRA_SHIPS)
+		draw_ship_log_page(out);
+	else if (ok && is_ship && ship.extra == EXTRA_DEBUG)
+		draw_debug_page(out);
 	if (ok)
 	{
 		int owner = (uint16_t)rdword(a6 + A6_SCREEN_OWNER);

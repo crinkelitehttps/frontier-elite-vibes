@@ -31,6 +31,7 @@
 #include "script.h"
 #include "station_resume.h"
 #include "strafe.h"
+#include "time_guard.h"
 
 /* D0.b = exception number, A0 = handler */
 static void SetExceptionHandler(void)
@@ -76,6 +77,7 @@ static void Call_HostUpdate(void)
 	freecam_update();
 	station_resume_poll();
 	script_poll();
+	time_guard_update();
 }
 
 /* The game waiting for its next 20 ms tick: sleep rather than spin (a

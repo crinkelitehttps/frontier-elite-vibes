@@ -227,6 +227,30 @@ A first version, roll 2 also a group out of 4, raised the average to 1.75 per ro
 (tested in game: two attackers on the first trip from Lave). Both variants. Not done: First Encounters'
 mixed-type groups and its 2-4 group size.
 
+## 10. Ships appear out of nowhere at high time acceleration (`L4388c`, `Ltguard`)
+
+**Symptom:** with time acceleration at 1000x or 10000x a pirate is suddenly a few km away, with the "Ship is
+Under Attack" warning and the acceleration dropped to 1x (the report behind issue 6's second part).
+
+**Cause:** the AI decides once per game second, batched: at 10000x one frame is 200 s of flight and one AI look.
+The distance routine `L4388c` therefore has a shortcut (`l438f0`): when a ship would arrive within about a frame
+(`d6 = n - max(norm,2) - idx - idx/4` under 2, with an aim offset set) it is put next to its target, at the aim
+offset, with zero velocity. See `docs/time-acceleration-and-ship-spawning.md` 2.7 and `docs/npc-ship-ai.md` 8.
+
+**Original code:** `cmp.w #$8,d6` / `bgt.s L43926` (`bc7c0008 6e0e`) after `d6` is worked out.
+
+**Fix** (`Ltguard`, `Ltguard_tab`): a ship whose target is the player, with time accelerated and not in
+hyperspace, whose `d6` is at or under the limit for the present rate pushes the game's own Shift+F key for the next
+lower rate (10000x, 1000x, 100x, 10x, 1x) into its key queue (skipped while a key is waiting; Shift+F1 while
+something attacks, as the game refuses the others then). Each step gives the ship ten times the time to be seen. The limits
+(about one second of flight left at each rate, so each speed shows the approach for about 9 s) were measured, not
+derived, because `d6` is only a rough logarithm: 3 for 10000x and 1000x, 5 for 100x, 6 for 10x. Same code size;
+both variants; also in the Atari patch (`tools/atari_patch`). Only ships heading for the player are covered
+(pirates, police, missiles, mission hostiles); the host's `time_guard.c` (setting `time_guard_seconds`) covers every
+flying ship by distance and also logs sudden arrivals. Measured in a test instance at Castor, 10000x, three pirate
+waves: 12 -> 10 -> 7 -> 3 -> 0 at 0.80, 1.0, 1.2 and 1.5 real seconds of flight left (host estimate), stages of 7 to 9 s;
+the game's own warning at 4.2 km did the rest.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

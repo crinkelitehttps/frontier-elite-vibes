@@ -15,12 +15,12 @@ relocation table at the end). It needs only Python 3.
 
 ## What it does
 
-- Finds each of the seven hook sites by the original bytes (the bytes at
+- Finds each of the eight hook sites by the original bytes (the bytes at
   relocated addresses are ignored). Every pattern must match exactly once, so
   an executable it does not recognise is refused and nothing is written.
 - Replaces the original instructions with a same-size `jsr`/`jmp`/`bsr.s`, so
   nothing in the middle of the program moves.
-- Appends 128 bytes of new routines after the end of the text, grows the text
+- Appends 276 bytes of new routines after the end of the text, grows the text
   length in the header and extends the relocation table (a new entry for every
   absolute address: the hook targets and the `jsr` inside the new code).
 
@@ -44,6 +44,7 @@ Full write-ups with the replaced instructions are in
 | Ship destroyed far out in orbit | The ship explodes when its orbit crosses |r| = 2.0 position units (about 2490 km above Lave). | `L3f566`: the altitude square root is only valid below 2^30; past it the altitude reads 0 and the game thinks the ship landed. `Lprox_log` clamps the sum. |
 | Same, at high time acceleration | The ship flaps between frames at the zone edge and dies. | `L3f460`: the frame-switch cooldown ran down by dt/2 a frame; `Lcool_dec` takes at most the 1x amount. |
 | "Relative to" never switches to a station | The speed reference stays on the planet however close you fly to a station. | `L440fe`: targeted or loaded stations are flagged `$4f`, clearing the bit the frame search tests; `Lframe_cand` also accepts starport bodies. |
+| Ships appear out of nowhere at high time acceleration | At 1000x or 10000x a pirate is suddenly a few km away with the attack warning. | `L4388c l438f0`: the AI looks once per frame there and the game's shortcut puts a ship next to its target. `Ltguard` steps the rate down with the game's own Shift+F key as a ship heading for the player closes in (ships heading for the player only; the limits per rate are in `Ltguard_tab`). |
 | Passengers a month late never leave | They stay aboard and their cabins stay used until you eject. | `l7edac`: a late bulletin-board group left only at its destination, and without freeing the cabins; `Lpax_late` makes it leave at the next landing (cabins freed, angry message). |
 
 Not fixed: the speed bump at 20 km on a climb (see the end of

@@ -34,7 +34,8 @@ import tempfile
 HEADER = 0x1C
 
 # Code of fixes.s (assembled on its own, starting at 0): Lgrav_norm 0x00,
-# Lgrav_mass 0x0e, Lcool_dec 0x18, Lprox_log 0x2e, Lframe_cand 0x4c, Lpax_late 0x80.
+# Lgrav_mass 0x0e, Lcool_dec 0x18, Lprox_log 0x2e, Lframe_cand 0x4c, Lpax_late 0x80,
+# Ltguard 0xaa (and its table at the end).
 CAVE = bytes.fromhex(
     "5247e2484443d647444353434e754ca90060007adc434e75"
     "e28fbebc000001f163062e3c000001f19f6801164e75d081"
@@ -43,11 +44,15 @@ CAVE = bytes.fromhex(
     "000391d00c290001005e660c0829000401184cdf02014e75"
     "4cdf0201b0004e754aa8000c660e0c28001c000367064ef9"
     "000734aab4a80004670451cf00084ef9000734584ef90007"
-    "3522"
+    "3522bc7c00086e424a2e3fd0663ab3ee02a266340c2e0008"
+    "02c0672c362e28c0b67c000c6222d6433a3b30283805e044"
+    "bc446e14082e000128ec67027ac11d453fd11d7c00ff3fd0"
+    "4e75588f4ef900037ffe80008000800006c1800080008000"
+    "05c28000800003c3800003c4"
 )
-L_GRAV_NORM, L_GRAV_MASS, L_COOL_DEC, L_PROX_LOG, L_FRAME_CAND, L_PAX_LATE = 0x00, 0x0E, 0x18, 0x2E, 0x4C, 0x80
-# the jsr to the original L44af8 inside Lframe_cand, the three jmps of Lpax_late
-CAVE_RELOCS = [0x60, 0x90, 0xa0, 0xa6]
+L_GRAV_NORM, L_GRAV_MASS, L_COOL_DEC, L_PROX_LOG, L_FRAME_CAND, L_PAX_LATE, L_TGUARD = 0x00, 0x0E, 0x18, 0x2E, 0x4C, 0x80, 0xaa
+# the jsr to the original L44af8 inside Lframe_cand, the three jmps of Lpax_late, the jmp of Ltguard
+CAVE_RELOCS = [0x60, 0x90, 0xa0, 0xa6, 0xf6]
 
 # Each hook: name, original bytes, context before / after (bytes that must be
 # there too), new bytes as a function of (hook text offset, cave text base)
@@ -85,6 +90,8 @@ HOOKS = [
      bytes.fromhex("083400040000"), 0x38822, jsr(L_FRAME_CAND)),
     ("passengers: late group leaves (l7edac)",
      bytes.fromhex("b4a8000457cf00cc"), 0x73450, jmp_nop(L_PAX_LATE)),
+    ("time acceleration: step down for ships closing in (L4388c l438f0)",
+     bytes.fromhex("bc7c00086e0e"), 0x37FEA, jsr(L_TGUARD)),
 ]
 
 

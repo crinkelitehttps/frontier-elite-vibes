@@ -36,6 +36,7 @@ extern "C"
 #include "gl/gl_screen_place.h"
 #include "headtrack.h"
 #include "hostcall.h"
+#include "time_guard.h"
 #include "vr.h"
 }
 
@@ -58,6 +59,7 @@ enum class Side
 	None,
 	Console,
 	MoreCheats,
+	ShipLog,
 };
 
 Page page = Page::Home;
@@ -226,6 +228,9 @@ void page_settings()
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::SliderInt("##smokecap", &smoke_cap_ms, 10, 2000, "smoke keeps speed over %d m/s", ImGuiSliderFlags_Logarithmic);
 	}
+	ImGui::TextWrapped("Time acceleration slows as a ship closes in, so the approach shows for this long at each speed (0 = off)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##timeguard", &time_guard_seconds, 0, 60, time_guard_seconds ? "%d s at each speed" : "off");
 	wrapped_checkbox("Proximity mines go off when a ship comes near (off: only when one flies into the mine)", &mine_prox);
 	if (mine_prox)
 	{
@@ -408,6 +413,8 @@ void page_debug()
 		page = Page::DebugOptions;
 	if (ui_button(side == Side::Console ? "HIDE CONSOLE" : "SHOW CONSOLE"))
 		side = (side == Side::Console) ? Side::None : Side::Console;
+	if (ui_button(side == Side::ShipLog ? "HIDE SHIP LOG" : "SHOW SHIP LOG"))
+		side = (side == Side::ShipLog) ? Side::None : Side::ShipLog;
 
 	/* Build tag from the end of fe2_modded.s (Lbuildtag_marker). Changes
 	 * whenever that file changes - if this still shows the word you had
@@ -482,6 +489,99 @@ void side_console()
 	ImGui::BeginChild("##log", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
 	ImGui::TextUnformatted(clslog ? clslog : "");
 	ImGui::EndChild();
+}
+
+/* A distance as the ship log shows it: metres up to a kilometre, then kilometres, then powers of ten */
+void format_distance(char *out, size_t size, double km)
+{
+	if (km < 1.0)
+		snprintf(out, size, "%d m", (int)(km * 1000.0));
+	else if (km < 100.0)
+		snprintf(out, size, "%.1f km", km);
+	else if (km < 1e6)
+		snprintf(out, size, "%.0f km", km);
+	else
+		snprintf(out, size, "%.2e km", km);
+}
+
+/* A button of the game's look holding an up or down arrow, held to repeat */
+bool arrow_button(const char *id, bool up, float width)
+{
+	ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, true);
+	bool pressed = ui_button(id, width);
+	ImGui::PopItemFlag();
+	const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+	const float p = ui_style_px(), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2, r = 3 * p;
+	ImDrawList *dl = ImGui::GetWindowDrawList();
+	if (up)
+		dl->AddTriangleFilled(ImVec2(cx, cy - r), ImVec2(cx - r, cy + r), ImVec2(cx + r, cy + r), IM_COL32_WHITE);
+	else
+		dl->AddTriangleFilled(ImVec2(cx - r, cy - r), ImVec2(cx + r, cy - r), ImVec2(cx, cy + r), IM_COL32_WHITE);
+	return pressed;
+}
+
+/* Every other ship in the system, nearest first, updated every frame. The count stays at the top;
+ * the list scrolls by whole entries with the arrows on its right (or the mouse wheel). */
+void side_ship_log()
+{
+	CheatShip ships[CHEAT_SHIPS_MAX];
+	int total = cheat_ships(ships);
+	static int first = 0;
+
+	const float p = ui_style_px();
+	const ImGuiStyle &style = ImGui::GetStyle();
+	const float line = ImGui::GetTextLineHeightWithSpacing();
+	const float entry_h = 2 * line + style.ItemSpacing.y;
+	const float arrow_w = 14 * p;
+	const ImVec2 area = ImGui::GetContentRegionAvail();
+
+	int rows = (int)((area.y - line) / entry_h);
+	if (rows < 1)
+		rows = 1;
+	int last_first = total > rows ? total - rows : 0;
+
+	if (total > rows)
+		ImGui::Text("Ships: %d  (%d-%d)", total, first + 1, first + rows < total ? first + rows : total);
+	else
+		ImGui::Text("Ships: %d", total);
+
+	const ImVec2 list(area.x - arrow_w - style.ItemSpacing.x, area.y - line);
+	ImGui::BeginChild("##ships", list, ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+	if (ImGui::IsWindowHovered())
+		first -= (int)ImGui::GetIO().MouseWheel;
+	if (first > last_first)
+		first = last_first;
+	if (first < 0)
+		first = 0;
+	for (int i = first; i < total && i < first + rows; i++)
+	{
+		char far_text[24];
+		format_distance(far_text, sizeof(far_text), ships[i].distance_km);
+		ImGui::TextUnformatted(ships[i].registration);
+		ImGui::SameLine(list.x - ImGui::CalcTextSize(far_text).x - style.WindowPadding.x);
+		ImGui::TextUnformatted(far_text);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
+		ImGui::TextUnformatted(ships[i].variant);
+		ImGui::PopStyleColor();
+	}
+	if (total == 0)
+		ImGui::TextUnformatted("No other ships.");
+	ImGui::EndChild();
+
+	ImGui::SameLine();
+	ImGui::BeginGroup();
+	if (arrow_button("##shiplog_up", true, arrow_w))
+		first--;
+	const float gap = list.y - 2 * ImGui::GetFrameHeight() - 2 * style.ItemSpacing.y;
+	if (gap > 0)
+		ImGui::Dummy(ImVec2(arrow_w, gap));
+	if (arrow_button("##shiplog_down", false, arrow_w))
+		first++;
+	ImGui::EndGroup();
+	if (first > last_first)
+		first = last_first;
+	if (first < 0)
+		first = 0;
 }
 
 void player_cheats()
@@ -818,11 +918,13 @@ void ui_menu_draw(void)
 		return;
 
 	ImGui::SetNextWindowPos(game_pos(120, 0));
-	ImGui::SetNextWindowSize(game_size(170, 180));
-	if (ui_begin_window(side == Side::Console ? "CONSOLE" : "MORE CHEATS"))
+	ImGui::SetNextWindowSize(game_size(side == Side::ShipLog ? 200 : 170, 180));
+	if (ui_begin_window(side == Side::Console ? "CONSOLE" : side == Side::ShipLog ? "SHIP LOG" : "MORE CHEATS"))
 	{
 		if (side == Side::Console)
 			side_console();
+		else if (side == Side::ShipLog)
+			side_ship_log();
 		else
 			side_more_cheats();
 	}

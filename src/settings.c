@@ -27,6 +27,7 @@
 #include "mods.h"
 #include "renderer.h"
 #include "settings.h"
+#include "time_guard.h"
 #include "touch_input.h"
 #include "vr.h"
 
@@ -67,6 +68,7 @@ typedef struct
 	int smoke_cap;
 	int mine_prox;
 	int mine_radius;
+	int time_guard;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -109,6 +111,7 @@ static const struct
 	{"smoke_cap", offsetof(Settings, smoke_cap)},
 	{"mine_prox", offsetof(Settings, mine_prox)},
 	{"mine_radius", offsetof(Settings, mine_radius)},
+	{"time_guard_seconds", offsetof(Settings, time_guard)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -217,6 +220,7 @@ static Settings current(void)
 	s.smoke_cap = smoke_cap_ms;
 	s.mine_prox = mine_prox;
 	s.mine_radius = mine_radius_m;
+	s.time_guard = time_guard_seconds;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -274,6 +278,8 @@ static void apply(const Settings *s)
 	mine_prox = s->mine_prox != 0;
 	if (s->mine_radius >= 10 && s->mine_radius <= 2000)
 		mine_radius_m = s->mine_radius;
+	if (s->time_guard >= 0 && s->time_guard <= 120)
+		time_guard_seconds = s->time_guard;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */

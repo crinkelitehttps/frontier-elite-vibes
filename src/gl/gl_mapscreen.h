@@ -30,6 +30,11 @@
  * does in the game; a tap on one of the page's own buttons (the cargo to
  * jettison, the equipment to use) does something to the game and the batch
  * undoes what it does, so the real screen is opened on the same page for it.
+ *
+ * The host draws two pages of its own after the game's last, one more turn each: the ship log (the
+ * other ships in the system, nearest first, with the count; a tap on one makes it the ship's target,
+ * a tap on the target again clears it; arrows on the right scroll) and the debug page
+ * (debug_screen.h). Another turn is the game's first page again.
  */
 #ifndef GL_MAPSCREEN_H
 #define GL_MAPSCREEN_H
