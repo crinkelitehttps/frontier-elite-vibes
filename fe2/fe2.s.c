@@ -34987,6 +34987,7 @@ extern void __F83a32 ();
 #define __DLrange_chk (0x83a10)
 #define __Dlrange_ok (0x83a32)
 #define __Dlrange_out (0x83a34)
+#define __DLcam_relvec (0x83a3c)
 #ifdef PART2
 void __F36 ()
 {
@@ -485486,6 +485487,14 @@ __Nlrange_out:
 	#endif
 	{
 		goto __Nl390d6;
+	}
+__NLcam_relvec:
+	case (0x83a3c):
+	#ifdef M68K_DEBUG
+		line_no = 67723;
+	#endif
+	{
+		goto __NL4350e;
 	}
 	goto end_;
 		default: 

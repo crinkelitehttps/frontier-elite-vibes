@@ -68514,3 +68514,12 @@ lrange_ok:
 lrange_out:
 		addq.l	#4,a7
 		jmp	l390d6
+
+******************************************************************************
+* Camera screen's zoom-target view (src/gl/gl_camera.c): the game's own
+* relative vector, a0 = the target, a1 = the ship, a4 = the big space. Out:
+* d0-d2 the vector as 16 bit values, d7 their shift (L4350e: the position of
+* a1 less that of a0 in the frame L3901c settles on, each d << d7 mm).
+******************************************************************************
+Lcam_relvec:
+		jmp	L4350e

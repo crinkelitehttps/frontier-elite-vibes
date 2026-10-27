@@ -26,6 +26,14 @@
  *   flight view lets you click on is in the picture: its centre, where
  *   its label starts, the one point a tap picks it by.
  *
+ *   The seventh button is the target view: the batch moves the ship up to
+ *   the target's distance / 2^zoom (the + and - buttons, 8x at first, never
+ *   nearer than 250 m of a ship or 1.5 radii of a body), a run with only the
+ *   target drawn finds where it is in the view, and the camera's axes turn
+ *   to face it with the ship's up kept. The ship is put back before the
+ *   target's range is drawn, so that is the true one. The game's own
+ *   relative vector (Lcam_relvec) does the distances.
+ *
  *   gl_cockpit.c shows it on a screen beside the cockpit's screen; a tap
  *   on it (mouse, laser, hand) on a thing makes that the target, else goes
  *   to the next direction.

@@ -60,8 +60,13 @@ enum
 	CAM_RIGHT,
 	CAM_UP,
 	CAM_DOWN,
+	CAM_TARGET, /* aimed at the target, moved up close to it */
 	CAM_COUNT
 };
+/* Buttons after the directions: the target view's zoom */
+#define BTN_ZOOM_IN  CAM_COUNT
+#define BTN_ZOOM_OUT (CAM_COUNT + 1)
+#define BTN_COUNT    (CAM_COUNT + 2)
 /* Each camera's axes (right, up, ahead) in the game's view of the ship: x
  * right, y up, z ahead */
 static const float AXES[CAM_COUNT][3][3] = {
@@ -71,7 +76,14 @@ static const float AXES[CAM_COUNT][3][3] = {
 	{{0, 0, -1}, {0, 1, 0}, {1, 0, 0}},
 	{{1, 0, 0}, {0, 0, -1}, {0, 1, 0}},
 	{{1, 0, 0}, {0, 0, 1}, {0, -1, 0}},
+	{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, /* CAM_TARGET: tgt_axes instead */
 };
+/* CAM_TARGET's axes, worked out for each picture (aim_at) */
+static float tgt_axes[3][3];
+/* The target view closes to the target's distance / 2^zoom_level */
+#define ZOOM_MIN 1
+#define ZOOM_MAX 10
+static SDL_atomic_t zoom_level = {3};
 
 static SDL_atomic_t cam_dir;
 
@@ -147,7 +159,13 @@ void camera_tap(float u, float v)
 	int b = button_at(x, y);
 	if (b >= 0)
 	{
-		SDL_AtomicSet(&cam_dir, b);
+		if (b < CAM_COUNT)
+			SDL_AtomicSet(&cam_dir, b);
+		else
+		{
+			int z = SDL_AtomicGet(&zoom_level) + (b == BTN_ZOOM_IN ? 1 : -1);
+			SDL_AtomicSet(&zoom_level, z < ZOOM_MIN ? ZOOM_MIN : z > ZOOM_MAX ? ZOOM_MAX : z);
+		}
 		return;
 	}
 	int best = -1;
@@ -339,7 +357,7 @@ static void cam_pass(void)
 	uint32_t cam = (uint32_t)GetReg(REG_A3);
 	if (GetReg(REG_D0) == 0)
 	{
-		const float(*a)[3] = AXES[batch_dir];
+		const float(*a)[3] = batch_dir == CAM_TARGET ? tgt_axes : AXES[batch_dir];
 		for (int i = 0; i < 9; i++)
 			saved_camera[i] = (int16_t)rdword(cam + 2 * (uint32_t)i);
 		for (int r = 0; r < 3; r++)
@@ -411,15 +429,19 @@ static uint32_t rgb(uint16_t c)
 
 static void button_rect(int i, int *x, int *y)
 {
-	*x = BTN_RIGHT - (CAM_COUNT - i) * BTN_SIZE - (CAM_COUNT - 1 - i) * BTN_GAP + 1;
+	/* the zoom buttons go left of the directions, + then - from the right */
+	int k = i < CAM_COUNT ? i : -1 - (i - CAM_COUNT);
+	*x = BTN_RIGHT - (CAM_COUNT - k) * BTN_SIZE - (CAM_COUNT - 1 - k) * BTN_GAP + 1;
 	*y = BTN_BOTTOM - BTN_SIZE + 1;
 }
 
 /* Which button a point of the picture is on, -1 if none */
 static int button_at(float x, float y)
 {
-	for (int i = 0; i < CAM_COUNT; i++)
+	for (int i = 0; i < BTN_COUNT; i++)
 	{
+		if (i >= CAM_COUNT && SDL_AtomicGet(&cam_dir) != CAM_TARGET)
+			break;
 		int bx, by;
 		button_rect(i, &bx, &by);
 		if (x >= bx && x < bx + BTN_SIZE && y >= by && y < by + BTN_SIZE)
@@ -433,8 +455,10 @@ static int button_at(float x, float y)
 static void draw_buttons(int current)
 {
 	const uint32_t edge = 0xffc08040, arrow = 0xffffffff; /* ABGR */
-	for (int i = 0; i < CAM_COUNT; i++)
+	for (int i = 0; i < BTN_COUNT; i++)
 	{
+		if (i >= CAM_COUNT && current != CAM_TARGET)
+			break;
 		int bx, by;
 		button_rect(i, &bx, &by);
 		uint32_t back = i == current ? 0xff805020 : 0xff402010;
@@ -443,6 +467,28 @@ static void draw_buttons(int current)
 				pixels[(by + y) * CAMERA_W + bx + x] =
 					(x == 0 || y == 0 || x == BTN_SIZE - 1 || y == BTN_SIZE - 1) ? edge : back;
 		int cx = bx + BTN_SIZE / 2, cy = by + BTN_SIZE / 2;
+		if (i == CAM_TARGET || i >= CAM_COUNT)
+		{
+			if (i == CAM_TARGET) /* a sight: a ring with a dot */
+			{
+				for (int a = -4; a <= 4; a++)
+					for (int b = -4; b <= 4; b++)
+					{
+						int d2 = a * a + b * b;
+						if ((d2 >= 12 && d2 <= 20) || d2 <= 1)
+							pixels[(cy + b) * CAMERA_W + cx + a] = arrow;
+					}
+			}
+			else
+			{
+				for (int a = -4; a <= 4; a++)
+					pixels[cy * CAMERA_W + cx + a] = arrow;
+				if (i == BTN_ZOOM_IN)
+					for (int b = -4; b <= 4; b++)
+						pixels[(cy + b) * CAMERA_W + cx] = arrow;
+			}
+			continue;
+		}
 		bool horiz = i == CAM_LEFT || i == CAM_RIGHT;
 		/* the way the tip points: -1 up / left, +1 down / right */
 		int sign = (i == CAM_REAR || i == CAM_DOWN || i == CAM_RIGHT) ? 1 : -1;
@@ -500,6 +546,222 @@ static void use_flight_colours(void)
 	wrbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS, flight.clr);
 }
 
+/* =========================================================================
+ * The target view: the camera moves up close to the target (the ship is
+ * moved inside the batch, then put back) and turns to face it
+ * ========================================================================= */
+#define OBJ_POS_LO 44 /* three longs, mm; the high longs at +56 (2^32 mm a unit) */
+#define OBJ_POS_HI 56
+#define OBJ_CACHE  19 /* the game's cache of the absolute position: 19..43 */
+#define OBJ_TYPE   94 /* byte, 1 for a body */
+#define OBJ_RADIUS_LO 266
+#define OBJ_RADIUS_HI 270
+#define MM_PER_KM  1e6
+#define MIN_SHIP_KM 0.25 /* nearest it gets to a thing, by its kind */
+#define MIN_BODY_KM 1.0
+#define DOLLY_TRIES 4
+
+typedef long long pos64;
+
+static pos64 obj_pos(uint32_t obj, int axis)
+{
+	return ((pos64)rdlong(obj + OBJ_POS_HI + 4 * (uint32_t)axis) << 32) |
+		   (uint32_t)rdlong(obj + OBJ_POS_LO + 4 * (uint32_t)axis);
+}
+
+/* Moves the ship and drops the game's cache of where it is */
+static void ship_move(uint32_t ship, const double d[3])
+{
+	for (int a = 0; a < 3; a++)
+	{
+		pos64 v = obj_pos(ship, a) + (pos64)llround(d[a]);
+		wrlong(ship + OBJ_POS_LO + 4 * (uint32_t)a, (int)(uint32_t)(v & 0xffffffff));
+		wrlong(ship + OBJ_POS_HI + 4 * (uint32_t)a, (int)(v >> 32));
+	}
+	wrbyte(ship + OBJ_CACHE, 0);
+}
+
+/* The ship's position less the target's, mm, as the game works it out
+ * (Lcam_relvec); the distance, or -1 */
+static double relative(uint32_t target, uint32_t ship, double w[3])
+{
+	fe2vm_regs r;
+	memset(&r, 0, sizeof r);
+	r.a[0] = target;
+	r.a[1] = ship;
+	r.a[4] = big_space();
+	if (fe2vm_call(FE2_Lcam_relvec, &r) != 0)
+		return -1;
+	double scale = ldexp(1.0, (int16_t)r.d[7]);
+	for (int i = 0; i < 3; i++)
+		w[i] = (double)(int16_t)r.d[i] * scale;
+	return sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+}
+
+/* How near the view goes to the target, mm */
+static double nearest(uint32_t target)
+{
+	if ((uint8_t)rdbyte(target + OBJ_TYPE) != 1)
+		return MIN_SHIP_KM * MM_PER_KM;
+	double r = ((double)(uint16_t)rdword(target + OBJ_RADIUS_HI) +
+				(double)(uint32_t)rdlong(target + OBJ_RADIUS_LO) / 4294967296.0) * 4294.967296;
+	return (r * 1.5 > MIN_BODY_KM ? r * 1.5 : MIN_BODY_KM) * MM_PER_KM;
+}
+
+/* Moves the ship towards the target to distance / zoom. The sign of the
+ * game's vector is tried, not trusted. False if it can't tell. */
+static bool dolly(uint32_t target, uint32_t ship, double zoom)
+{
+	double w[3];
+	double dist = relative(target, ship, w);
+	if (dist <= 0)
+		return false;
+	double want = dist / zoom, least = nearest(target);
+	if (want < least)
+		want = least;
+	if (dist <= want)
+		return true;
+	double sign = -1;
+	for (int t = 0; t < DOLLY_TRIES; t++)
+	{
+		double err = dist - want;
+		if (t > 0 && fabs(err) < want * 0.05)
+			break;
+		double d[3];
+		for (int i = 0; i < 3; i++)
+			d[i] = sign * w[i] / dist * err;
+		ship_move(ship, d);
+		double now = relative(target, ship, w);
+		if (now <= 0)
+			return false;
+		if (t == 0 && now > dist)
+		{
+			/* it went the wrong way: back, and the other way */
+			for (int i = 0; i < 3; i++)
+				d[i] = -2 * d[i];
+			sign = 1;
+			ship_move(ship, d);
+			now = relative(target, ship, w);
+			if (now <= 0)
+				return false;
+		}
+		dist = now;
+	}
+	return true;
+}
+
+/* Nu_NativeFar for the probe run: where the target is in the view */
+static uint32_t probe_target;
+static float probe_pos[3];
+static bool probe_seen;
+
+static void cam_probe(void)
+{
+	SetReg(REG_D0, 0);
+	uint32_t a6 = (uint32_t)GetReg(REG_A6);
+	if ((uint32_t)rdlong(a6 - 212) != probe_target)
+		return;
+	for (int i = 0; i < 3; i++)
+		probe_pos[i] = (float)(int32_t)rdlong(a6 - 16 + 4 * (uint32_t)i);
+	probe_seen = true;
+}
+
+static uint32_t target_object(void)
+{
+	uint32_t space = big_space();
+	int slot = (uint8_t)rdbyte(GAME_A6 + A6_TARGET);
+	if (!slot || !slot_shown(space, slot))
+		return 0;
+	return slot_object(space, slot);
+}
+
+/* The axes that face the camera at `v`, the target's place in the front
+ * view, the ship's up kept as near as it goes */
+static void aim_axes(const float v[3])
+{
+	float len = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+	float *r = tgt_axes[0], *u = tgt_axes[1], *f = tgt_axes[2];
+	for (int i = 0; i < 3; i++)
+		f[i] = v[i] / len;
+	r[0] = f[2];
+	r[1] = 0;
+	r[2] = -f[0];
+	float rl = sqrtf(r[0] * r[0] + r[2] * r[2]);
+	if (rl < 1e-3f)
+	{
+		r[0] = 1;
+		r[2] = 0;
+	}
+	else
+	{
+		r[0] /= rl;
+		r[2] /= rl;
+	}
+	u[0] = f[1] * r[2] - f[2] * r[1];
+	u[1] = f[2] * r[0] - f[0] * r[2];
+	u[2] = f[0] * r[1] - f[1] * r[0];
+}
+
+/* The target view's set up: the ship moved close to the target and the axes
+ * turned to it. A run with only the target drawn finds where it is. False
+ * (the ship put back) if there is none. `saved` is the ship's bytes to put
+ * back by target_done. */
+static uint8_t ship_saved[64 - OBJ_CACHE + 4];
+
+static void ship_keep(uint32_t ship)
+{
+	for (uint32_t i = 0; i < sizeof ship_saved; i++)
+		ship_saved[i] = (uint8_t)rdbyte(ship + OBJ_CACHE + i);
+}
+
+static void ship_back(uint32_t ship)
+{
+	for (uint32_t i = 0; i < sizeof ship_saved; i++)
+		wrbyte(ship + OBJ_CACHE + i, ship_saved[i]);
+}
+
+static bool run_view(bool draw)
+{
+	bool ok = run(FE2_Clear3DView, 0) && run(FLIGHT_VIEW, 0) && run(FE2_MakePalette, GAME_A6 + A6_MAIN_PALETTE1);
+	return ok && (!draw || run(FE2_Draw3DView, 0));
+}
+
+static bool aim_at(uint32_t target, uint32_t ship)
+{
+	ship_keep(ship);
+	if (!dolly(target, ship, (double)(1 << SDL_AtomicGet(&zoom_level))))
+	{
+		ship_back(ship);
+		return false;
+	}
+	/* the run with only the target drawn, looking ahead */
+	uint32_t space = big_space();
+	uint8_t flags[NUM_SLOTS];
+	for (int i = 1; i < NUM_SLOTS; i++)
+	{
+		flags[i] = (uint8_t)rdbyte(space + (uint32_t)i);
+		if (slot_object(space, i) != target)
+			wrbyte(space + (uint32_t)i, flags[i] & ~0x08);
+	}
+	probe_target = target;
+	probe_seen = false;
+	hcalls[0x83] = cam_probe;
+	int dir = batch_dir;
+	batch_dir = CAM_FRONT;
+	bool ok = run_view(true);
+	batch_dir = dir;
+	hcalls[0x83] = cam_far;
+	for (int i = 1; i < NUM_SLOTS; i++)
+		wrbyte(space + (uint32_t)i, flags[i]);
+	if (!ok || !probe_seen || !(probe_pos[0] || probe_pos[1] || probe_pos[2]))
+	{
+		ship_back(ship);
+		return false;
+	}
+	aim_axes(probe_pos);
+	return true;
+}
+
 void camera_capture(bool screen)
 {
 	if (!screen)
@@ -530,14 +792,31 @@ void camera_capture(bool screen)
 		use_flight_colours();
 	put_shots();
 	uint32_t scr = (uint32_t)rdlong(FE2_logscreen);
-	bool ok = run(FE2_Clear3DView, 0) && run(FLIGHT_VIEW, 0) && run(FE2_MakePalette, GAME_A6 + A6_MAIN_PALETTE1);
+	/* the target view: the ship is up close to the target for the picture */
+	uint32_t ship = game_player_ship(), moved = 0;
+	int shown = batch_dir;
+	if (batch_dir == CAM_TARGET)
+	{
+		uint32_t target = target_object();
+		if (target && target != ship && aim_at(target, ship))
+			moved = ship;
+		else
+			batch_dir = CAM_FRONT;
+		ext_len = 0;
+		nhits = 0;
+	}
+	bool ok = run_view(false);
 	if (ok)
 	{
 		/* the background as the game's frame loop has it, then the view */
 		memset(STRam + scr, (rdbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS) & 1) ? 0xe : 0, CAMERA_W * CAMERA_H);
 		/* then the target and the labels on things, as the game's HUD
 		 * draws them (Lcam_hud) */
-		ok = run(FE2_Draw3DView, 0) && run(FE2_Lcam_hud, 0);
+		ok = run(FE2_Draw3DView, 0);
+		/* where the ship is, for the range on the target */
+		if (moved)
+			ship_back(moved);
+		ok = ok && run(FE2_Lcam_hud, 0);
 	}
 	if (ok)
 	{
@@ -560,7 +839,7 @@ void camera_capture(bool screen)
 	failed = !ok;
 	if (!ok)
 		return;
-	draw_buttons(batch_dir);
+	draw_buttons(shown);
 	SDL_LockMutex(lock);
 	memcpy(pub, pixels, sizeof pub);
 	memcpy(pub_hits, hits, (size_t)nhits * sizeof hits[0]);
