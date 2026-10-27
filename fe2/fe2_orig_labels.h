@@ -375,6 +375,7 @@
 #define FE2_Lmine_phys                               0x83882 /* Lmine_phys */
 #define FE2_Lmine_boom                               0x838fa /* Lmine_boom */
 #define FE2_Ltguard_tab                              0x839f6 /* Ltguard_tab */
+#define FE2_Lrange_chk                               0x83a10 /* Lrange_chk */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

@@ -231,6 +231,9 @@ void page_settings()
 	ImGui::TextWrapped("Time acceleration slows as a ship closes in, so the approach shows for this long at each speed (0 = off)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##timeguard", &time_guard_seconds, 0, 60, time_guard_seconds ? "%d s at each speed" : "off");
+	ImGui::TextWrapped("A ship farther than this still gets its target marker, not \"Target Out of Range\" (0 = the game's own limit, some 10000 km)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##targetrange", &target_range_au, 0, 100, target_range_au ? "targets seen to %d AU" : "game's limit");
 	wrapped_checkbox("Proximity mines go off when a ship comes near (off: only when one flies into the mine)", &mine_prox);
 	if (mine_prox)
 	{

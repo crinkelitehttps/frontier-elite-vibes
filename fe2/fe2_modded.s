@@ -179,6 +179,8 @@ Call_ExactStep	equ	$90
 Call_SmokeVel	equ	$96
 * Proximity mines: the radius they go off at, d0 = units of 1024 mm, 0 off (glfrontier.cfg mine_prox / mine_radius).
 Call_MineRadius	equ	$97
+* Target range: the farthest an object is still placed on the screen, d0 = exponent (glfrontier.cfg target_range_au).
+Call_TargetRange	equ	$98
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -10941,8 +10943,9 @@ L390f2:
 	l39180:	add.w	d6,d7
 		sub.w	88(a4),d7
 		move.b	d7,95(a4)
-		cmp.w	16(a5),d7
-		bge.w	l390d6
+* Target range: hook, same size (jsr + nop). See Lrange_chk at the end of the file.
+		jsr	Lrange_chk
+		nop
 		move.l	a4,-212(a6)
 		clr.w	-156(a6)
 		clr.b	96(a4)
@@ -68481,3 +68484,33 @@ Ltguard_tab:
 		dc.w	$03c3
 		dc.w	$8000
 		dc.w	$03c4
+
+******************************************************************************
+* Target range. L390f2 gives up on an object whose distance exponent d7 is at
+* or over the model's word at 16(a5): no screen position (110(a4) = $8000) and
+* the HUD says "Target Out of Range". Within the range from glfrontier.cfg
+* target_range_au the object is placed anyway: d7 is cut to just under the
+* limit, so it goes on as a distant dot (the l39092 disc), with its real
+* exponent kept in 95(a4). The distance is 2^(14 + d7 + 88(a4)) mm (the
+* position is shifted down until its largest part is under $4000, d7 counts
+* the shifts less the scale in 88(a4)); Call_TargetRange gives the exponent
+* d7 + 88(a4) has to stay under, $8000 for the game's own limit.
+* In place of "cmp.w 16(a5),d7 / bge.w l390d6".
+******************************************************************************
+Lrange_chk:
+		cmp.w	16(a5),d7
+		blt.s	lrange_ok
+		movem.l	d0-1,-(a7)
+		hcall	#Call_TargetRange
+		move.w	d7,d1
+		add.w	88(a4),d1
+		cmp.w	d0,d1
+		movem.l	(a7)+,d0-1
+		bge.s	lrange_out
+		move.w	16(a5),d7
+		subq.w	#1,d7
+lrange_ok:
+		rts
+lrange_out:
+		addq.l	#4,a7
+		jmp	l390d6

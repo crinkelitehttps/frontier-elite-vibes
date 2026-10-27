@@ -69,6 +69,7 @@ typedef struct
 	int mine_prox;
 	int mine_radius;
 	int time_guard;
+	int target_range_au;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -112,6 +113,7 @@ static const struct
 	{"mine_prox", offsetof(Settings, mine_prox)},
 	{"mine_radius", offsetof(Settings, mine_radius)},
 	{"time_guard_seconds", offsetof(Settings, time_guard)},
+	{"target_range_au", offsetof(Settings, target_range_au)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -221,6 +223,7 @@ static Settings current(void)
 	s.mine_prox = mine_prox;
 	s.mine_radius = mine_radius_m;
 	s.time_guard = time_guard_seconds;
+	s.target_range_au = target_range_au;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -280,6 +283,8 @@ static void apply(const Settings *s)
 		mine_radius_m = s->mine_radius;
 	if (s->time_guard >= 0 && s->time_guard <= 120)
 		time_guard_seconds = s->time_guard;
+	if (s->target_range_au >= 0 && s->target_range_au <= 100)
+		target_range_au = s->target_range_au;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */

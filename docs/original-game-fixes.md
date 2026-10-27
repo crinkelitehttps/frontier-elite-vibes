@@ -251,6 +251,16 @@ flying ship by distance and also logs sudden arrivals. Measured in a test instan
 waves: 12 -> 10 -> 7 -> 3 -> 0 at 0.80, 1.0, 1.2 and 1.5 real seconds of flight left (host estimate), stages of 7 to 9 s;
 the game's own warning at 4.2 km did the rest.
 
+## 11. Target out of range at about 10000 km (`L390f2`, `Lrange_chk`)
+
+Symptom: a ship farther than some 10000 km shows "Target Out of Range" and no target marker.
+Cause: `L390f2` gives up on an object whose distance exponent `d7` is at or over the model's word at `16(a5)`
+(`cmp.w 16(a5),d7 / bge.w l390d6`): no screen position (`110(a4) = $8000`), `96(a4)` set.
+Fix: the compare is a hook (`jsr Lrange_chk / nop`, same size). Within a range from `glfrontier.cfg`
+`target_range_au` (cog menu, 3 AU by default, 0 = the game's own limit) `d7` is cut to `16(a5) - 1`, so the object goes on
+as the distant dot (`l39092`) with a screen position and the native scene captures it for the own HUD. The range is
+compared as an exponent: the distance is 2^(14 + `d7` + `88(a4)`) mm (`Call_TargetRange`). Both variants.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

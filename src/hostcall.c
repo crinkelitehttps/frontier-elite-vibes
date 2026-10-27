@@ -132,6 +132,19 @@ void Call_MineRadius(void)
 	SetReg(REG_D0, mine_prox ? mine_radius_m * 1000 / 1024 : 0);
 }
 
+/* How far an object is still put on the screen (Lrange_chk in fe2.s), so the
+   HUD can mark a target the game calls out of range. The 68k side compares
+   the exponent of the distance: it is 2^(14 + e) mm. 0 AU = the game's own
+   limit (the model's, some 10000 km for a ship). */
+int target_range_au = 3;
+#define MM_PER_AU 1.495978707e14
+
+void Call_TargetRange(void)
+{
+	int e = target_range_au > 0 ? (int)floor(log2(target_range_au * MM_PER_AU)) - 14 : -32768;
+	SetReg(REG_D0, (uint16_t)(int16_t)e);
+}
+
 void Call_SmokeVel(void)
 {
 	if (!smoke_inherit)
@@ -508,5 +521,6 @@ HOSTCALL hcalls[] = {
 	[0x95] = Call_NetPending,
 	[0x96] = Call_SmokeVel,
 	[0x97] = Call_MineRadius,
+	[0x98] = Call_TargetRange,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);

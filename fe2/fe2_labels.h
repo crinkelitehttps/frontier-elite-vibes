@@ -417,5 +417,6 @@
 #define FE2_Lmine_phys                               0xa9742 /* Lmine_phys */
 #define FE2_Lmine_boom                               0xa97ba /* Lmine_boom */
 #define FE2_Ltguard_tab                              0xa98b6 /* Ltguard_tab */
+#define FE2_Lrange_chk                               0xa98d0 /* Lrange_chk */
 
 #endif /* FE2_LABELS_H */

@@ -24,6 +24,8 @@ void Call_SmokeVel(void);
 extern bool mine_prox;
 extern int mine_radius_m;
 void Call_MineRadius(void);
+extern int target_range_au;
+void Call_TargetRange(void);
 void Call_SubSteps(void);
 void Call_SubSkip(void);
 int substep_shift(unsigned int dt);
