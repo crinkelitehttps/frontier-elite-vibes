@@ -17,11 +17,12 @@
 extern "C"
 {
 #include "clipboard_font.h"
-#include "gamepad.h"
 #include "main.h"
 #include "vr.h"
 }
 #include "manual.h"
+#include "gamepad.h"
+#include "vibe/bindings.h"
 
 const char *manual_arg;
 int manual_book = 1;
@@ -74,35 +75,25 @@ bool open_pdf(const std::string &path)
 }
 
 /* ---- the controls pages ------------------------------------------------- */
-const char LEGEND[] = "S1 / S2: hold shift 1 / 2   M: while the clipboard is out";
-
-/* The bindings as seen on one device: the pad's names, or the VR
- * controllers' (bindings they can't reach left out) */
+/* The bindings as seen on one device (the library's pages), the VR one
+ * with a word on the hands */
 vibe::Section device_section(bool vr)
 {
-	vibe::Section s;
-	s.title = vr ? "VR motion controllers" : "Gamepad (Xbox layout)";
-	s.lines = {LEGEND};
-	if (vr)
-	{
-		s.lines.push_back("Hands: touch the panel with a fingertip; take the clipboard with a grip at it.");
-		s.lines.push_back("Both grips held: move the hands forward / back to move the panel.");
-	}
-	s.lines.push_back("");
-	bool any = false;
-	for (int i = 0; i < gamepad_help_count(); i++)
-	{
-		GamepadHelp h;
-		gamepad_help(i, &h);
-		const char *control = vr ? h.vr_control : h.control;
-		if (!control[0])
-			continue;
-		if (h.gap && any)
-			s.lines.push_back("");
-		s.lines.push_back(row(control, h.action, h.note));
-		any = true;
-	}
-	return s;
+	const std::string title = vr ? "VR motion controllers" : "Gamepad (Xbox layout)";
+	for (const vibe::Section &s : gamepad_bindings().sections())
+		if (s.title == title)
+		{
+			vibe::Section out = s;
+			if (vr)
+				out.lines.insert(out.lines.begin() + 1,
+								 {"Hands: touch the panel with a fingertip; take the clipboard with a grip at it.",
+								  "Both grips held: move the hands forward / back to move the panel."});
+			return out;
+		}
+	vibe::Section none;
+	none.title = title;
+	none.lines = {"No bindings for these controllers."};
+	return none;
 }
 
 vibe::Section keyboard_section()
@@ -126,11 +117,9 @@ vibe::Section keyboard_section()
 	};
 	/* the game's keys the controller presses, with what they do */
 	std::vector<std::string> keys;
-	for (int i = 0; i < gamepad_help_count(); i++)
+	for (const vibe::Bindings::Help &h : gamepad_bindings().help())
 	{
-		GamepadHelp h;
-		gamepad_help(i, &h);
-		if (!h.key || !h.note[0])
+		if (!h.key || h.note.empty())
 			continue;
 		std::string l = row(h.action, h.note, "");
 		while (!l.empty() && l.back() == ' ')

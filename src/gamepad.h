@@ -3,12 +3,14 @@
  * Switch and most others), mapped by a binding file onto the game's
  * steering, look-around in the cockpit and keyboard keys.
  *
- * The bindings come from gamepad.cfg in the working directory (beside
- * glfrontier.cfg); it is written with the built-in default (gamepad.c,
- * which documents the format) the first time the game runs without one.
+ * The bindings are vibe-lib's (vibe/bindings.h) and come from gamepad.cfg in
+ * the working directory (beside glfrontier.cfg); it is written with the
+ * built-in default (gamepad.cpp, which documents the format) the first time
+ * the game runs without one. A file in the earlier format is converted
+ * (gamepad_legacy.h) and the old one kept as gamepad.cfg.old.
  *
- * A VR headset's motion controllers are a second, virtual pad on the same
- * bindings (gamepad_set_virtual).
+ * A VR headset's motion controllers are read on the same bindings
+ * (gamepad_set_vr).
  *
  * The `manual` layer acts while the cockpit clipboard is out
  * (gl_clipboard.h), in place of its controls' other bindings.
@@ -44,34 +46,34 @@ void gamepad_look(float *x, float *y);
 /* A controller is connected */
 bool gamepad_connected(void);
 
-/* A pad made of other controls (a VR headset's motion controllers,
- * gl_laser.c) in the Xbox layout, read with the real one through the same
- * bindings. Any thread; a button pressed since the last update counts as
- * down for one. */
+/* A VR headset's motion controllers (gl_laser.c), per hand (0 left, 1
+ * right), read with the real pad through the same bindings. Any thread; a
+ * button pressed since the last update counts as down for one. */
 typedef struct
 {
-	bool active;
-	unsigned buttons;                     /* bit n: SDL_GameControllerButton n */
-	float axes[SDL_CONTROLLER_AXIS_MAX]; /* -1..1, SDL's directions (y down +), triggers 0..1 */
-} GamepadVirtual;
-void gamepad_set_virtual(const GamepadVirtual *v);
-
-/* The loaded bindings in words, in file order (the clipboard's controls
- * pages, manual.cpp) */
-typedef struct
-{
-	bool gap;             /* a blank line before it in the file */
-	char control[32];     /* "S2 RB", "M D-pad left" */
-	char vr_control[32];  /* the same on VR controllers; "" if they have none */
-	char action[64];      /* "Shift+F1", "steer y inverted", "page +10" */
-	char note[96];        /* the line's comment */
-	bool key;             /* a key or cycle binding (action: its keys) */
-} GamepadHelp;
-int gamepad_help_count(void);
-void gamepad_help(int i, GamepadHelp *h);
+	bool active[2];     /* on, with the input focus */
+	float trigger[2];   /* 0..1; 0 where the trigger is a mouse click */
+	bool squeeze[2];    /* the grip button */
+	bool menu[2];
+	bool lower[2], upper[2]; /* face buttons (Touch, Index): A / X, B / Y */
+	bool stick_click[2];
+	bool pad_click[2];
+	float stick[2][2];  /* thumbstick, -1..1, x right +, y down + */
+	float pad[2][2];    /* trackpad, as the stick */
+} GamepadVr;
+void gamepad_set_vr(const GamepadVr *v);
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+namespace vibe
+{
+class Bindings;
+}
+/* The loaded bindings (the clipboard's controls pages, manual.cpp) */
+vibe::Bindings &gamepad_bindings();
 #endif
 
 #endif /* GAMEPAD_H */

@@ -82,58 +82,22 @@ static bool ray_to_virtual_screen(const float o[3], const float d[3], int *sx, i
 	return true;
 }
 
-/* A hand's controls as the virtual pad (gamepad.h), in the Xbox layout:
- * left hand on the left half, right on the right, the trackpad as the
- * d-pad (left) or the face buttons (right) */
-static void add_to_pad(int i, const VrHand *h, GamepadVirtual *v)
+/* A hand's controls for the bindings (gamepad.h); the trigger only where it
+ * isn't a mouse click */
+static void add_to_vr(int i, const VrHand *h, GamepadVr *v)
 {
-	typedef struct
-	{
-		int x, y, trigger, stick, shoulder, menu, lower, upper;
-		int pad[4]; /* up, down, left, right */
-	} PadMap;
-	static const PadMap MAP[2] = {
-		{SDL_CONTROLLER_AXIS_LEFTX,
-		 SDL_CONTROLLER_AXIS_LEFTY,
-		 SDL_CONTROLLER_AXIS_TRIGGERLEFT,
-		 SDL_CONTROLLER_BUTTON_LEFTSTICK,
-		 SDL_CONTROLLER_BUTTON_LEFTSHOULDER,
-		 SDL_CONTROLLER_BUTTON_BACK,
-		 SDL_CONTROLLER_BUTTON_X,
-		 SDL_CONTROLLER_BUTTON_Y,
-		 {SDL_CONTROLLER_BUTTON_DPAD_UP, SDL_CONTROLLER_BUTTON_DPAD_DOWN, SDL_CONTROLLER_BUTTON_DPAD_LEFT,
-		  SDL_CONTROLLER_BUTTON_DPAD_RIGHT}},
-		{SDL_CONTROLLER_AXIS_RIGHTX,
-		 SDL_CONTROLLER_AXIS_RIGHTY,
-		 SDL_CONTROLLER_AXIS_TRIGGERRIGHT,
-		 SDL_CONTROLLER_BUTTON_RIGHTSTICK,
-		 SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
-		 SDL_CONTROLLER_BUTTON_START,
-		 SDL_CONTROLLER_BUTTON_A,
-		 SDL_CONTROLLER_BUTTON_B,
-		 {SDL_CONTROLLER_BUTTON_Y, SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_X, SDL_CONTROLLER_BUTTON_B}},
-	};
-	const PadMap *m = &MAP[i];
-	v->axes[m->x] = h->stick[0];
-	v->axes[m->y] = -h->stick[1]; /* SDL: down + */
-	v->axes[m->trigger] = trigger_use[i] == TRIGGER_PAD ? h->trigger : 0.0f;
-	unsigned b = 0;
-	if (h->stick_click)
-		b |= 1u << m->stick;
-	if (h->squeeze)
-		b |= 1u << m->shoulder;
-	if (h->menu)
-		b |= 1u << m->menu;
-	if (h->lower)
-		b |= 1u << m->lower;
-	if (h->upper)
-		b |= 1u << m->upper;
-	if (h->pad_click)
-	{
-		float x = h->pad[0], y = h->pad[1];
-		b |= 1u << m->pad[fabsf(x) > fabsf(y) ? (x < 0 ? 2 : 3) : (y > 0 ? 0 : 1)];
-	}
-	v->buttons |= b;
+	v->active[i] = true;
+	v->trigger[i] = trigger_use[i] == TRIGGER_PAD ? h->trigger : 0.0f;
+	v->squeeze[i] = h->squeeze;
+	v->menu[i] = h->menu;
+	v->lower[i] = h->lower;
+	v->upper[i] = h->upper;
+	v->stick_click[i] = h->stick_click;
+	v->pad_click[i] = h->pad_click;
+	v->stick[i][0] = h->stick[0];
+	v->stick[i][1] = -h->stick[1]; /* down + */
+	v->pad[i][0] = h->pad[0];
+	v->pad[i][1] = -h->pad[1];
 }
 
 void laser_update(bool cockpit)
@@ -246,19 +210,18 @@ void laser_update(bool cockpit)
 					   trigger_use[current] == TRIGGER_CLICK ? 0x2 : 0);
 	was_active = active;
 
-	GamepadVirtual v;
+	GamepadVr v;
 	memset(&v, 0, sizeof v);
-	v.active = connected;
 	for (int i = 0; i < 2; i++)
 		if (hands[i].connected)
 		{
-			/* the grips move the panel or screen (gl_hands.h), not the pad's */
+			/* the grips move the panel or screen (gl_hands.h), not the bindings' */
 			if (gesture)
 				hands[i].squeeze = false;
-			add_to_pad(i, &hands[i], &v);
+			add_to_vr(i, &hands[i], &v);
 		}
 	if (connected || was_connected)
-		gamepad_set_virtual(&v);
+		gamepad_set_vr(&v);
 	was_connected = connected;
 }
 
@@ -278,9 +241,9 @@ void laser_off(void)
 		Input_SetLaser(false, false, 0, 0, 0);
 	if (was_connected)
 	{
-		GamepadVirtual v;
+		GamepadVr v;
 		memset(&v, 0, sizeof v);
-		gamepad_set_virtual(&v);
+		gamepad_set_vr(&v);
 	}
 	was_active = was_connected = false;
 }
