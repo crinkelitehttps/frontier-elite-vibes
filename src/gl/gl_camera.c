@@ -18,6 +18,7 @@
 #include "renderer.h" /* logscreen2 */
 
 bool cockpit_camera = true;
+int camera_zoom_max = 1024;
 
 #define CAMERA_FPS 50
 
@@ -82,8 +83,17 @@ static const float AXES[CAM_COUNT][3][3] = {
 static float tgt_axes[3][3];
 /* The target view closes to the target's distance / 2^zoom_level */
 #define ZOOM_MIN 1
-#define ZOOM_MAX 10
+#define ZOOM_MAX 20 /* levels: 2^level, as far as camera_zoom_max lets it */
 static SDL_atomic_t zoom_level = {3};
+
+/* The highest level camera_zoom_max allows */
+static int zoom_top(void)
+{
+	int top = ZOOM_MIN;
+	while (top < ZOOM_MAX && (1 << (top + 1)) <= camera_zoom_max)
+		top++;
+	return top;
+}
 
 static SDL_atomic_t cam_dir;
 
@@ -164,7 +174,8 @@ void camera_tap(float u, float v)
 		else
 		{
 			int z = SDL_AtomicGet(&zoom_level) + (b == BTN_ZOOM_IN ? 1 : -1);
-			SDL_AtomicSet(&zoom_level, z < ZOOM_MIN ? ZOOM_MIN : z > ZOOM_MAX ? ZOOM_MAX : z);
+			int top = zoom_top();
+			SDL_AtomicSet(&zoom_level, z < ZOOM_MIN ? ZOOM_MIN : z > top ? top : z);
 		}
 		return;
 	}
@@ -553,13 +564,16 @@ static void use_flight_colours(void)
 #define OBJ_POS_LO 44 /* three longs, mm; the high longs at +56 (2^32 mm a unit) */
 #define OBJ_POS_HI 56
 #define OBJ_CACHE  19 /* the game's cache of the absolute position: 19..43 */
+#define OBJ_PARENT 68 /* byte, the frame's slot */
+#define OBJ_ROTATING 69 /* byte, set if the position is in the parent's turning frame */
 #define OBJ_TYPE   94 /* byte, 1 for a body */
 #define OBJ_RADIUS_LO 266
 #define OBJ_RADIUS_HI 270
 #define MM_PER_KM  1e6
 #define MIN_SHIP_KM 0.25 /* nearest it gets to a thing, by its kind */
 #define MIN_BODY_KM 1.0
-#define DOLLY_TRIES 4
+#define DOLLY_TRIES 6
+#define DOLLY_TOLERANCE 0.0005 /* of the distance wanted */
 
 typedef long long pos64;
 
@@ -585,6 +599,14 @@ static void ship_move(uint32_t ship, const double d[3])
  * (Lcam_relvec); the distance, or -1 */
 static double relative(uint32_t target, uint32_t ship, double w[3])
 {
+	/* in the same frame the game just subtracts the positions: so do we,
+	 * to the millimetre (its vector below has 15 bits) */
+	if (rdbyte(ship + OBJ_PARENT) == rdbyte(target + OBJ_PARENT) && rdbyte(ship + OBJ_ROTATING) == rdbyte(target + OBJ_ROTATING))
+	{
+		for (int i = 0; i < 3; i++)
+			w[i] = (double)(obj_pos(ship, i) - obj_pos(target, i));
+		return sqrt(w[0] * w[0] + w[1] * w[1] + w[2] * w[2]);
+	}
 	fe2vm_regs r;
 	memset(&r, 0, sizeof r);
 	r.a[0] = target;
@@ -625,7 +647,7 @@ static bool dolly(uint32_t target, uint32_t ship, double zoom)
 	for (int t = 0; t < DOLLY_TRIES; t++)
 	{
 		double err = dist - want;
-		if (t > 0 && fabs(err) < want * 0.05)
+		if (t > 0 && fabs(err) < want * DOLLY_TOLERANCE)
 			break;
 		double d[3];
 		for (int i = 0; i < 3; i++)
@@ -676,27 +698,70 @@ static uint32_t target_object(void)
 }
 
 /* The axes that face the camera at `v`, the target's place in the front
- * view, the ship's up kept as near as it goes */
-static void aim_axes(const float v[3])
+ * view. Roll is the ship's up kept as near as it goes, but straight above
+ * or below the ship that has no direction (the target under a ship flying
+ * over it), so near there the last picture's roll is carried on instead,
+ * and the two are blended on the way. */
+#define ROLL_FREE_FROM 0.6f /* |ahead . up| from which the last roll counts */
+#define ROLL_FREE_TO   0.95f
+
+static void normalize3(float v[3], float len)
 {
-	float len = sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-	float *r = tgt_axes[0], *u = tgt_axes[1], *f = tgt_axes[2];
 	for (int i = 0; i < 3; i++)
-		f[i] = v[i] / len;
-	r[0] = f[2];
-	r[1] = 0;
-	r[2] = -f[0];
-	float rl = sqrtf(r[0] * r[0] + r[2] * r[2]);
-	if (rl < 1e-3f)
+		v[i] /= len;
+}
+
+static float length3(const float v[3])
+{
+	return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+static void aim_axes(const float v[3], bool keep_roll)
+{
+	static float last_right[3];
+	float *r = tgt_axes[0], *u = tgt_axes[1], *f = tgt_axes[2];
+	memcpy(f, v, sizeof(float) * 3);
+	normalize3(f, length3(f));
+	/* the ship's up decides: right = up x ahead */
+	float by_up[3] = {f[2], 0, -f[0]};
+	float up_len = length3(by_up);
+	/* the last right, made square to the new ahead */
+	float by_last[3] = {0, 0, 0};
+	float last_len = 0;
+	if (keep_roll)
+	{
+		float d = last_right[0] * f[0] + last_right[1] * f[1] + last_right[2] * f[2];
+		for (int i = 0; i < 3; i++)
+			by_last[i] = last_right[i] - d * f[i];
+		last_len = length3(by_last);
+	}
+	bool have_up = up_len > 1e-3f, have_last = last_len > 1e-3f;
+	if (have_up)
+		normalize3(by_up, up_len);
+	if (have_last)
+		normalize3(by_last, last_len);
+	float t = (fabsf(f[1]) - ROLL_FREE_FROM) / (ROLL_FREE_TO - ROLL_FREE_FROM);
+	t = t < 0 ? 0 : t > 1 ? 1 : t;
+	if (!have_up && !have_last)
 	{
 		r[0] = 1;
-		r[2] = 0;
+		r[1] = r[2] = 0;
 	}
+	else if (!have_up || !have_last)
+		memcpy(r, have_up ? by_up : by_last, sizeof(float) * 3);
 	else
 	{
-		r[0] /= rl;
-		r[2] /= rl;
+		float dot = by_up[0] * by_last[0] + by_up[1] * by_last[1] + by_up[2] * by_last[2];
+		if (dot < 0) /* turned right round: the nearer end wins */
+			memcpy(r, t > 0.5f ? by_last : by_up, sizeof(float) * 3);
+		else
+		{
+			for (int i = 0; i < 3; i++)
+				r[i] = (1 - t) * by_up[i] + t * by_last[i];
+			normalize3(r, length3(r));
+		}
 	}
+	memcpy(last_right, r, sizeof last_right);
 	u[0] = f[1] * r[2] - f[2] * r[1];
 	u[1] = f[2] * r[0] - f[0] * r[2];
 	u[2] = f[0] * r[1] - f[1] * r[0];
@@ -726,10 +791,10 @@ static bool run_view(bool draw)
 	return ok && (!draw || run(FE2_Draw3DView, 0));
 }
 
-static bool aim_at(uint32_t target, uint32_t ship)
+static bool aim_at(uint32_t target, uint32_t ship, bool keep_roll)
 {
 	ship_keep(ship);
-	if (!dolly(target, ship, (double)(1 << SDL_AtomicGet(&zoom_level))))
+	if (!dolly(target, ship, (double)(1 << (SDL_AtomicGet(&zoom_level) < zoom_top() ? SDL_AtomicGet(&zoom_level) : zoom_top()))))
 	{
 		ship_back(ship);
 		return false;
@@ -758,7 +823,7 @@ static bool aim_at(uint32_t target, uint32_t ship)
 		ship_back(ship);
 		return false;
 	}
-	aim_axes(probe_pos);
+	aim_axes(probe_pos, keep_roll);
 	return true;
 }
 
@@ -798,8 +863,18 @@ void camera_capture(bool screen)
 	if (batch_dir == CAM_TARGET)
 	{
 		uint32_t target = target_object();
-		if (target && target != ship && aim_at(target, ship))
+		/* the roll carries on while the same target stays in view */
+		static uint32_t last_target;
+		static unsigned last_seq;
+		static unsigned seq;
+		seq++;
+		bool keep = target == last_target && last_seq + 1 == seq;
+		if (target && target != ship && aim_at(target, ship, keep))
+		{
 			moved = ship;
+			last_target = target;
+			last_seq = seq;
+		}
 		else
 			batch_dir = CAM_FRONT;
 		ext_len = 0;

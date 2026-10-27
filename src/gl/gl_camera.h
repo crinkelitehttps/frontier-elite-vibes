@@ -55,6 +55,8 @@ extern "C"
 
 /* Setting: the camera screen in the cockpit */
 extern bool cockpit_camera;
+/* Setting: the most the target view magnifies (glfrontier.cfg camera_zoom_max), a power of two is used */
+extern int camera_zoom_max;
 
 /* With the GL context */
 void camera_init(void);

@@ -22,6 +22,7 @@
 #include "gl/gl_mapscreen.h"
 #include "gl/gl_screen_place.h"
 #include "hostcall.h"
+#include "gl/gl_camera.h"
 #include "main.h"
 #include "manual.h"
 #include "mods.h"
@@ -70,6 +71,7 @@ typedef struct
 	int mine_radius;
 	int time_guard;
 	int target_range_au;
+	int camera_zoom_max;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -114,6 +116,7 @@ static const struct
 	{"mine_radius", offsetof(Settings, mine_radius)},
 	{"time_guard_seconds", offsetof(Settings, time_guard)},
 	{"target_range_au", offsetof(Settings, target_range_au)},
+	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -224,6 +227,7 @@ static Settings current(void)
 	s.mine_radius = mine_radius_m;
 	s.time_guard = time_guard_seconds;
 	s.target_range_au = target_range_au;
+	s.camera_zoom_max = camera_zoom_max;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -285,6 +289,8 @@ static void apply(const Settings *s)
 		time_guard_seconds = s->time_guard;
 	if (s->target_range_au >= 0 && s->target_range_au <= 100)
 		target_range_au = s->target_range_au;
+	if (s->camera_zoom_max >= 2 && s->camera_zoom_max <= 1048576)
+		camera_zoom_max = s->camera_zoom_max;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */
