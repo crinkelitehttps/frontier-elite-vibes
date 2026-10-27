@@ -345,6 +345,7 @@ static GLuint label_tex;
 #define USE_RENDER_THREAD 1
 #endif
 
+volatile unsigned long dbg_frames; /* for the watchdog in main.c */
 bool render_thread_enabled = USE_RENDER_THREAD;
 
 static SDL_mutex *frame_lock;  /* scr_pub and the scene's published copy */
@@ -1414,6 +1415,8 @@ static void draw_page(void)
 		scene_drop_shown();
 }
 
+static Uint32 last_draw_ticks;
+
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
@@ -1432,6 +1435,8 @@ static void draw_picture(bool with_menu)
 	draw_frame(screen_w, screen_h, cockpit, true);
 	if (with_menu)
 		ui_render(); /* 4. emulator menu */
+	dbg_frames++;
+	last_draw_ticks = SDL_GetTicks();
 	SDL_GL_SwapWindow(window);
 }
 
@@ -1533,6 +1538,24 @@ void Screen_StopRenderThread(void)
 	SDL_UnlockMutex(ctx_lock);
 	SDL_WaitThread(render_thread, NULL);
 	render_thread = NULL;
+}
+
+/* Game thread, from the host update. The game's menus wait for input in a loop
+ * that draws nothing, and the headset's frames and controllers are served only
+ * by drawing: without this the picture freezes there and no click ever comes.
+ * Draws the last frame again when none has been drawn for a while. */
+void Screen_RefreshVr(void)
+{
+	static bool logged;
+	if (render_thread_enabled || !vr_running() || SDL_GetTicks() - last_draw_ticks < 10)
+		return;
+	if (!logged)
+	{
+		logged = true;
+		log_printf("VR refresh: the game stopped drawing, drawing for it\n");
+	}
+	context_to_main();
+	draw_picture(true);
 }
 
 void Nu_DrawScreen(void)

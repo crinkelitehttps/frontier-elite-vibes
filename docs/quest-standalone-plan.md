@@ -1,7 +1,7 @@
 # Standalone VR (Meta Quest 2) plan
 
 Goal: run GLFrontier on a Quest 2 (and similar Android OpenXR headsets) with no PC.
-Written 2026-10-22 from a skim of the build files; nothing here has been built or measured on Android yet.
+Written 2026-10-22 from a skim of the build files. Status 2026-10-27: the APK builds and runs on a Quest 1 (new game, flight); performance on a planet surface is poor and not yet investigated.
 
 ## Why it should work
 

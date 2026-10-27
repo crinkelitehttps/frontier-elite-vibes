@@ -11,6 +11,8 @@
 #include "audio.h"
 #include "freecam.h"
 #include "gamepad.h"
+#include "game_state.h"
+#include "host.h"
 #include "gl/gl_clipboard.h"
 #include "gl/gl_cockpit.h"
 #include "m68000.h"
@@ -80,6 +82,31 @@ static void clslog_append(const char *text, size_t len)
 	clslog[clslog_len] = '\0';
 }
 
+#ifdef ANDROID
+/* The log also goes to glfrontier.log in the app's external files directory
+ * (Android/data/<package>/files/, reachable by USB or adb pull without
+ * logcat); the last run's log is kept as glfrontier.log.old. */
+static FILE *android_log_file(void)
+{
+	static FILE *f;
+	static int tried;
+	if (!tried)
+	{
+		tried = 1;
+		const char *dir = SDL_AndroidGetExternalStoragePath();
+		if (dir)
+		{
+			char path[512], old[520];
+			snprintf(path, sizeof path, "%s/glfrontier.log", dir);
+			snprintf(old, sizeof old, "%s.old", path);
+			rename(path, old);
+			f = fopen(path, "w");
+		}
+	}
+	return f;
+}
+#endif
+
 void log_printf(const char *fmt, ...)
 {
 	char buf[1024];
@@ -123,6 +150,17 @@ void log_printf(const char *fmt, ...)
 	fflush(stdout); /* keep the log when the game is killed or crashes */
 #ifdef ANDROID
 	__android_log_write(ANDROID_LOG_INFO, "FE2", buf);
+	{
+		static SDL_SpinLock log_lock;
+		SDL_AtomicLock(&log_lock);
+		FILE *lf = android_log_file();
+		if (lf)
+		{
+			fputs(buf, lf);
+			fflush(lf);
+		}
+		SDL_AtomicUnlock(&log_lock);
+	}
 #endif
 	clslog_append(buf, total_len);
 }
@@ -476,6 +514,62 @@ static Uint32 vbl_callback(Uint32 interval, void *param)
 	return (Uint32)emulation_speed;
 }
 
+/* Diagnoses freezes: a thread that logs the game's progress counters every
+ * 5 s, and the 68k registers and stack top while they stand still. The reads
+ * are racy on purpose; it only has to point at where the game is stuck. */
+extern volatile unsigned long dbg_host_updates, dbg_idles, dbg_game_starts, dbg_frames;
+
+static int watchdog_main(void *arg)
+{
+	unsigned long last_upd = ~0ul, last_frames = 0, last_idles = 0;
+	unsigned long last_frames_seen = 0;
+	int still_ms = 0, beat_ms = 0, nodraw_ms = 0;
+	(void)arg;
+	for (;;)
+	{
+		SDL_Delay(500);
+		unsigned long upd = dbg_host_updates, frames = dbg_frames, idles = dbg_idles;
+		beat_ms += 500;
+		still_ms = upd == last_upd ? still_ms + 500 : 0;
+		nodraw_ms = frames == last_frames_seen ? nodraw_ms + 500 : 0;
+		last_frames_seen = frames;
+		if (nodraw_ms >= 2000 && nodraw_ms % 2000 == 0 && still_ms == 0)
+		{
+			/* the game runs but draws nothing: where is it? */
+			uint32_t a7 = (uint32_t)GetReg(REG_A7), a6 = GAME_A6;
+			log_printf("NODRAW %d ms: updates %lu, idles %lu, frames %lu, mode=%02x/%02x\n", nodraw_ms, upd, idles, frames,
+				a6 ? rdbyte(a6 + 704) : -1, a6 ? rdbyte(a6 + 705) : -1);
+			hostcall_trace_dump();
+			Input_LogButtons();
+			Call_DumpRegs();
+			log_printf("Stack @%x:", a7);
+			for (int i = 0; i < 16; i++)
+				log_printf(" $%x", STMemory_ReadLong(a7 + 4 * i));
+			log_printf("\n");
+		}
+		if (still_ms >= 2000 && still_ms % 2000 == 0)
+		{
+			uint32_t a7 = (uint32_t)GetReg(REG_A7);
+			log_printf("STALL %d ms: game not calling HostUpdate (idles %+ld, frames %+ld, starts %lu)\n", still_ms,
+				(long)(idles - last_idles), (long)(frames - last_frames), dbg_game_starts);
+			hostcall_trace_dump();
+			Call_DumpRegs();
+			log_printf("Stack @%x: $%x $%x $%x $%x $%x $%x $%x $%x\n", a7, STMemory_ReadLong(a7), STMemory_ReadLong(a7 + 4),
+				STMemory_ReadLong(a7 + 8), STMemory_ReadLong(a7 + 12), STMemory_ReadLong(a7 + 16),
+				STMemory_ReadLong(a7 + 20), STMemory_ReadLong(a7 + 24), STMemory_ReadLong(a7 + 28));
+		}
+		else if (beat_ms >= 5000)
+		{
+			beat_ms = 0;
+			log_printf("HEART updates=%lu idles=%lu frames=%lu starts=%lu\n", upd, idles, frames, dbg_game_starts);
+		}
+		if (still_ms == 0)
+			last_idles = idles, last_frames = frames;
+		last_upd = upd;
+	}
+	return 0;
+}
+
 static void sig_handler(int signum)
 {
 	if (signum == SIGSEGV)
@@ -501,6 +595,9 @@ int main(int argc, char *argv[])
 	if (use_fullscreen && !bInFullScreen)
 		Screen_ToggleFullScreen();
 
+	log_printf("Build %s %s (VR refresh in menus)\n", __DATE__, __TIME__);
+	hostcall_trace_install();
+	SDL_CreateThread(watchdog_main, "watchdog", NULL);
 	SDL_AddTimer(20, &vbl_callback, NULL);
 	Main_UnPauseEmulation();
 	Start680x0(); /* runs until the game quits */

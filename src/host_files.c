@@ -131,6 +131,8 @@ void Call_Fread(void)
  * marker, so a log can be split into one section per game. */
 void Call_GameStart(void)
 {
+	extern volatile unsigned long dbg_game_starts;
+	dbg_game_starts++;
 	char name[GAME_NAME_MAX];
 	read_game_string(GAME_A6 + 14400, name, sizeof(name)); /* A6_commander_name */
 	log_printf("==== Game start: commander '%s' ====\n", name);

@@ -53,6 +53,7 @@ void Input_SetDrag(bool held, float dx, float dy);
 void Input_MouseMoved(void);             /* the mouse moved (main.c) */
 
 /* Host calls: the game polls the mouse and keyboard */
+void Input_LogButtons(void);
 void Call_GetMouseInput(void);
 void Call_GetKeyboardEvent(void);
 

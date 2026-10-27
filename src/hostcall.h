@@ -11,6 +11,8 @@
 
 /* hostcall.c */
 void Call_DumpRegs(void);
+void hostcall_trace_install(void);
+void hostcall_trace_dump(void);
 void Call_DumpDebug(void);
 void Call_OrbitAssist(void);
 void Call_FlightLog(void);

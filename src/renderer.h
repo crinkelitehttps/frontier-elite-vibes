@@ -101,6 +101,7 @@ void Nu_InsertZNode(void);
 void Nu_ComplexStartInner(void);
 void Nu_ComplexBezier(void);
 void Nu_DrawScreen(void);
+void Screen_RefreshVr(void); /* a frame for the headset while the game draws nothing */
 void Nu_PutTeardrop(void);
 void Nu_PutOval(void);
 void Nu_IsGLRenderer(void);

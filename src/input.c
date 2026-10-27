@@ -140,6 +140,13 @@ void Input_MouseMoved(void)
 	SDL_AtomicUnlock(&laser_lock);
 }
 
+/* The watchdog's report (main.c): the buttons as the game would see them */
+void Input_LogButtons(void)
+{
+	log_printf("Buttons: laser active=%d buttons=%x pressed=%x drag=%d swallowed=%x owns=%d mouse=%x pos=%d,%d\n", laser.active,
+		laser.buttons, laser.pressed, laser.drag, laser_swallowed, laser_owns, input.cur_mousebut_state, (int)laser.x, (int)laser.y);
+}
+
 /* Main thread, at each poll: the laser's buttons for the game, and a
  * drag's motion */
 static int take_laser(int *mx, int *my)

@@ -111,7 +111,7 @@ Saves from the modded game can hold mod state the original game doesn't know abo
 
 ### Android
 
-*Inherited from GLFrontier Extended; not built or tested in this fork.*
+*Inherited from GLFrontier Extended; the 2D build has been run on a phone in this fork.*
 
 ```
 tools\build-android.bat          # -> build-android/GLFrontier.apk
@@ -126,6 +126,10 @@ No Gradle: the script builds the APK with the SDK's own tools (CMake + NDK, java
 * `--abi arm64-v8a x86_64` picks the CPUs to include (default arm64-v8a, every current phone; add x86_64 for the emulator). Anything but the default gets the ABIs in its name, e.g. `GLFrontier-x86_64.apk`, so `GLFrontier.apk` is always the one for phones.
 * Game data is compiled into the library, so the APK is all there is; saves go to the app's internal storage.
 * The APK is signed with the debug key (`~/.android/debug.keystore`, or one made in the cache folder).
+
+### Meta Quest (standalone VR)
+
+`python3 tools/androidBuild/build_android.py --quest` builds `GLFrontier-quest.apk` (package `org.glfrontier.extended.quest`, shown as GLFrontier VR): the Android build with OpenXR, so the cockpit, controllers and menus work as on the desktop with no PC. It runs on a Quest 1 (tested; performance on the surface of a planet is poor). Install it with `adb install -r`. The game writes its log to `Android/data/org.glfrontier.extended.quest/files/glfrontier.log` (the last run's as `glfrontier.log.old`), and to logcat under the tag `FE2`; a watchdog logs `HEART` lines and a `NODRAW` report if the game stops drawing.
 
 ## Icon
 
