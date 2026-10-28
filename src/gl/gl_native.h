@@ -105,6 +105,12 @@ bool native_enabled(void);
 /* Its value: 1 wireframe, 2 filled (the default), 0 off */
 int native_mode(void);
 
+/* Extra detail on top of the game's Shape detail option, in factors of 2
+ * (glfrontier.cfg native_detail_boost, 0 = the game's own distances): a
+ * model's `if z` tests drop parts this many times twice as far away
+ * (docs/level-of-detail.md section 4) */
+extern int native_detail_boost;
+
 #ifdef __cplusplus
 }
 #endif

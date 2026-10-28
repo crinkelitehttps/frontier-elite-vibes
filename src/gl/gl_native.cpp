@@ -392,7 +392,11 @@ struct Frame
 	/* Model text's strings by text_key (Nu_NativeText): the last the game
 	 * formatted for each, kept while it isn't run (off screen) */
 	std::unordered_map<uint64_t, std::string> texts;
+	/* Which publish it is (native_publish*): its models run once, not once a
+	 * picture, however often it is drawn (prepare) */
+	uint32_t serial = 0;
 };
+uint32_t publishes = 0;
 /* shows[0]: the world, shows[1]: the last frame of the game's other
  * screens, which leaves the world as it was (native_acquire) */
 Frame rec, pub, pub_world, pub_page, shows[3];
@@ -460,6 +464,8 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 
 /* The far body Nu_NativeFar last saw (L390f2's frame, its object) */
 static uint32_t far_a6, far_addr;
+
+int native_detail_boost = 2;
 /* Every far body's radius, by object (game thread): a planet's size before
  * its planet has been seen close up (native_capture_dirs) */
 static std::unordered_map<uint32_t, float> far_radius;
@@ -928,6 +934,7 @@ extern "C" void native_publish(void)
 	map_orbit_build(rec);
 	pub = rec;
 	pub.texts = texts_seen;
+	pub.serial = ++publishes;
 }
 
 extern "C" void native_publish_world(void)
@@ -935,6 +942,7 @@ extern "C" void native_publish_world(void)
 	map_orbit_build(rec);
 	pub_world = rec;
 	pub_world.texts = texts_seen;
+	pub_world.serial = ++publishes;
 }
 
 extern "C" void native_acquire(bool screen, bool world)
@@ -954,6 +962,7 @@ extern "C" void native_publish_page(void)
 	map_orbit_build(rec, true);
 	pub_page = rec;
 	pub_page.texts = texts_seen;
+	pub_page.serial = ++publishes;
 }
 
 extern "C" void native_acquire_page(void)
@@ -1019,6 +1028,12 @@ struct Node
 	 * own: those nodes are sorted among the others by their keys, and what
 	 * is inside each among itself */
 	std::array<float, ZTREE_MAX + 1> path;
+	/* Each level's key as a point (view space) and how far it is pushed
+	 * back, so the key can be worked out again for any view (rekey) */
+	std::array<P3, ZTREE_MAX + 1> kpt;
+	std::array<float, ZTREE_MAX + 1> kpush;
+	std::array<float, ZTREE_MAX + 1> dpath; /* the keys for the view drawn */
+	int seq = 0; /* made in this order (the model's), for equal keys */
 	int depth;
 	std::vector<Tri> tris;
 	std::vector<Seg> segs;
@@ -1028,6 +1043,12 @@ struct Node
 	 * paints these under whatever is nearer, and they need not lie under it
 	 * in 3D (a cloud's shadow hangs below the cloud, above the ground) */
 	bool under = false;
+	/* The key along the view being drawn (dpath[0], rekey): the game keys
+	 * along its own camera, and its cockpit passes keyed again along each
+	 * turned camera. The game's keys only order things right ahead of it:
+	 * seen sideways in Lave Station's bay, the scaffold outside the
+	 * station was "nearer" than the bay (an underlay) and drawn over it */
+	float dist = 0;
 	bool planet = false; /* the planet command: the sphere goes here */
 	float radius = 0;    /* ...the planet's, view units */
 };
@@ -1076,14 +1097,23 @@ struct Runner
 	uint32_t frame_seed;
 	int batch = -1; /* the node a batch is going into (L385e4_3dview_word1) */
 	std::vector<float> zpath; /* the open ztree nodes' keys */
+	std::vector<P3> zpt; /* ...and their points (Node.kpt) */
 	/* The sky: all of it, for any camera. The game draws the half of each
 	 * part that faces its camera (normal tests), from inside. */
 	bool sky = false;
 
-	Node &new_node(float key, bool under)
+	Node &new_node(float key, bool under, const P3 &pt, float push = 0)
 	{
 		Node n;
 		n.key = key;
+		for (size_t i = 0; i < zpt.size(); i++)
+		{
+			n.kpt[i] = zpt[i];
+			n.kpush[i] = 0;
+		}
+		n.kpt[zpt.size()] = pt;
+		n.kpush[zpt.size()] = push;
+		n.seq = (int)out.nodes.size();
 		n.depth = 0;
 		for (float k : zpath)
 			n.path[(size_t)n.depth++] = k;
@@ -1100,7 +1130,7 @@ struct Runner
 	{
 		if (batch >= 0)
 			return out.nodes[(size_t)batch];
-		return new_node(zkey(at), false);
+		return new_node(zkey(at), false, at);
 	}
 
 	/* ztree (L3a4b4): a node keyed on a vertex whose contents, up to the
@@ -1112,11 +1142,16 @@ struct Runner
 		{
 			if (!zpath.empty())
 				zpath.pop_back();
+			if (!zpt.empty())
+				zpt.pop_back();
 			return;
 		}
 		auto p = vertex(r, fe2::s8(w0 >> 5));
 		if (zpath.size() < ZTREE_MAX)
+		{
 			zpath.push_back(zkey(p ? *p : r.org));
+			zpt.push_back(p ? *p : r.org);
+		}
 	}
 
 	/* batch begin / end (L3a1c0_ZWTF): what follows, up to the end or the
@@ -1132,33 +1167,50 @@ struct Runner
 		batch = -1;
 		if (v == 0)
 			return;
-		auto dist = [&](int i) {
+		/* the key, and its point and push (Node.kpt) */
+		float key, push = 0;
+		P3 pt = r.org;
+		auto at = [&](int i, P3 &q) {
 			auto p = vertex(r, fe2::s8(i));
-			return p ? zkey(*p) : zkey(r.org);
+			q = p ? *p : r.org;
+			return zkey(q);
 		};
-		float key;
 		if (v == 0x7ff)
 			key = zkey(r.org);
 		else if (v == 0x7fe)
-			key = 1e30f;
+		{
+			key = push = 1e30f;
+			pt = P3{0, 0, 0};
+		}
 		else if (v == 0x7fd)
-			key = w.size() > 1 ? (int16_t)w[1] * r.k : 0;
+		{
+			key = push = w.size() > 1 ? (int16_t)w[1] * r.k : 0;
+			pt = P3{0, 0, 0};
+		}
 		else if ((v & 0x700) == 0x700)
-			key = dist(v) + (w.size() > 1 ? (int16_t)w[1] * r.k : 0);
+		{
+			push = w.size() > 1 ? (int16_t)w[1] * r.k : 0;
+			key = at(v, pt) + push;
+		}
 		else if (v & 0x100)
 		{
 			bool nearest = v & 0x200;
-			key = dist(v);
+			key = at(v, pt);
 			for (size_t i = 1; i < w.size(); i++)
 			{
-				float d = dist(w[i]);
-				key = nearest ? std::min(key, d) : std::max(key, d);
+				P3 q;
+				float k = at(w[i], q);
+				if (nearest ? k < key : k > key)
+				{
+					key = k;
+					pt = q;
+				}
 			}
 		}
 		else
-			key = dist(v);
+			key = at(v, pt);
 		bool under = v == 0x7fe || v == 0x7fd || ((v & 0x700) == 0x700 && v != 0x7ff && w.size() > 1 && (int16_t)w[1] > 0);
-		new_node(key, under);
+		new_node(key, under, pt, push);
 		batch = (int)out.nodes.size() - 1;
 	}
 
@@ -1374,7 +1426,7 @@ struct Runner
 	 * shift overflows */
 	std::optional<bool> beyond(const Run &r, int k) const
 	{
-		int sh = o.detail[k & 1] + r.s;
+		int sh = o.detail[k & 1] + r.s + native_detail_boost;
 		if (sh < 0 || sh > 31 || ((int64_t)k << sh) > 0x7fffffff)
 			return std::nullopt;
 		return len(r.org) > (float)((int64_t)k << sh);
@@ -1709,7 +1761,7 @@ struct Runner
 		if (child->planet)
 		{
 			if (!wire)
-				new_node(zkey(*org), false).planet = true;
+				new_node(zkey(*org), false, *org).planet = true;
 			return;
 		}
 		Run c;
@@ -1951,7 +2003,7 @@ struct Runner
 						  the third word) */
 				if (auto p = vertex(r, fe2::s8(w.size() > 2 ? w[2] : 0)))
 				{
-					Node &n = new_node(zkey(*p), false);
+					Node &n = new_node(zkey(*p), false, *p);
 					n.planet = true;
 					/* the radius word * 2^(s-8) (L3cdd8 on) */
 					n.radius = (w.size() > 1 ? (float)w[1] : 0) * r.k / 256;
@@ -2034,45 +2086,65 @@ void sort_nodes(std::vector<Node> &nodes);
 /* This frame's objects run (native_draw_sky does it first, native_draw
  * otherwise), each with the clip w it spans */
 bool prepared = false;
+/* The models only change with the game's frame, not with the head or the
+ * eye: the picture before this one, or the other eye, ran the same, so
+ * keep what it made (sorted, cut at the planet) and only measure the
+ * spans again, which do depend on the view */
+uint32_t prepared_serial = 0;
+bool prepared_wire = false;
 void prepare(bool wire)
 {
 	if (prepared)
 		return;
 	prepared = true;
-	run_objects(wire);
+	bool keep = shown->serial != 0 && shown->serial == prepared_serial && wire == prepared_wire &&
+				drawn.size() == (size_t)shown->n;
+	if (!keep)
+	{
+		run_objects(wire);
+		prepared_serial = shown->serial;
+		prepared_wire = wire;
+		for (Drawn &d : drawn)
+		{
+			/* in the game's order, what comes before a planet it calls */
+			if (wire || planet_native_count() == 0)
+				continue;
+			sort_nodes(d.nodes);
+			for (size_t i = 0; i < d.nodes.size(); i++)
+				if (d.nodes[i].planet)
+				{
+					d.before_planet.assign(std::make_move_iterator(d.nodes.begin()),
+										   std::make_move_iterator(d.nodes.begin() + (long)i));
+					d.nodes.erase(d.nodes.begin(), d.nodes.begin() + (long)i);
+					break;
+				}
+		}
+	}
 	mat4 mvp = gd_mvp();
 	auto clip_w = [&](const P3 &p) { return mvp.m[3] * p[0] + mvp.m[7] * p[1] + mvp.m[11] * p[2] + mvp.m[15]; };
 	for (Drawn &d : drawn)
 	{
+		d.near = 1e30f;
+		d.far = 0;
+		d.back = false;
 		auto span = [&](const P3 &p) {
 			float w = clip_w(p);
 			d.near = std::min(d.near, w);
 			d.far = std::max(d.far, w);
 		};
-		for (const Node &n : d.nodes)
-		{
-			for (const Tri &t : n.tris)
-				for (const P3 &p : t.p)
-					span(p);
-			for (const Seg &s : n.segs)
+		for (const std::vector<Node> *nodes : {&d.before_planet, &d.nodes})
+			for (const Node &n : *nodes)
 			{
-				span(s.a);
-				span(s.b);
-			}
-			for (const Dot &s : n.dots)
-				span(s.p);
-		}
-		/* in the game's order, what comes before a planet it calls */
-		if (wire || planet_native_count() == 0)
-			continue;
-		sort_nodes(d.nodes);
-		for (size_t i = 0; i < d.nodes.size(); i++)
-			if (d.nodes[i].planet)
-			{
-				d.before_planet.assign(std::make_move_iterator(d.nodes.begin()),
-									   std::make_move_iterator(d.nodes.begin() + (long)i));
-				d.nodes.erase(d.nodes.begin(), d.nodes.begin() + (long)i);
-				break;
+				for (const Tri &t : n.tris)
+					for (const P3 &p : t.p)
+						span(p);
+				for (const Seg &s : n.segs)
+				{
+					span(s.a);
+					span(s.b);
+				}
+				for (const Dot &s : n.dots)
+					span(s.p);
 			}
 	}
 }
@@ -2234,6 +2306,38 @@ void sort_nodes(std::vector<Node> &nodes)
 	});
 }
 
+/* The keys again along the view being drawn (the cockpit's turn and the
+ * head are in the projection: depth = clip w, x and y back out of clip x
+ * and y), as the game's cockpit passes keyed along each turned camera,
+ * then the nodes sorted by them; equal keys keep the model's order.
+ * Node.dist is the top level's key. */
+void sort_nodes_view(std::vector<Node> &nodes)
+{
+	mat4 mvp = gd_mvp();
+	const float *m = mvp.m, *pr = gd_projection()->m;
+	for (Node &n : nodes)
+	{
+		for (int i = 0; i < n.depth; i++)
+		{
+			const P3 &p = n.kpt[(size_t)i];
+			float cx = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+			float cy = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+			float w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+			float x = pr[0] != 0 ? (cx + pr[8] * w - pr[12]) / pr[0] : 0;
+			float y = pr[5] != 0 ? (cy + pr[9] * w - pr[13]) / pr[5] : 0;
+			float push = n.kpush[(size_t)i];
+			n.dpath[(size_t)i] = push >= 1e30f ? push : w + (std::fabs(x) + std::fabs(y)) / 8 + push;
+		}
+		n.dist = n.dpath[0];
+	}
+	std::sort(nodes.begin(), nodes.end(), [](const Node &a, const Node &b) {
+		for (int i = 0; i < std::min(a.depth, b.depth); i++)
+			if (a.dpath[(size_t)i] != b.dpath[(size_t)i])
+				return a.dpath[(size_t)i] > b.dpath[(size_t)i];
+		return a.seq < b.seq;
+	});
+}
+
 /* A planet object: its model (rings) round the sphere, what is farther
  * than its centre before it, the rest after (the game sorts the ring's
  * quarters, whose ends are behind the planet and in front). Faces across
@@ -2391,9 +2495,15 @@ extern "C" void native_draw_sky(void)
 	bool stars = !(cockpit_active() && shown == &shows[0] && atmos_sky_hides_stars());
 	if (shown->has_sky && stars)
 	{
-		Drawn d;
-		run_object(shown->sky, d, false, true);
-		draw_nodes(d.nodes);
+		/* round the camera: the same whichever way it looks */
+		static Drawn sky;
+		static uint32_t sky_serial;
+		if (!shown->serial || shown->serial != sky_serial)
+		{
+			run_object(shown->sky, sky, false, true);
+			sky_serial = shown->serial;
+		}
+		draw_nodes(sky.nodes);
 	}
 	for (const Drawn &d : drawn)
 		draw_nodes(d.before_planet);
@@ -2487,21 +2597,24 @@ extern "C" void native_draw(void)
 		}
 		group_far = std::max(group_far, placed[i]->far * placed[i]->shrink);
 	}
-	/* Underlays, all objects', in the game's order: each before any object
-	 * with a part nearer than its key (a city's ground plates, far back,
-	 * before everything), after objects wholly beyond it (a ship seen past
-	 * a station's bay, which the bay then hides). Painted, not depth
-	 * tested: they need not lie under what is drawn on them in 3D. */
+	/* Underlays, all objects', in the game's order: each before the first
+	 * part (of any object) nearer than its key (a city's ground plates, far
+	 * back, before everything), after the parts beyond it (a ship seen past
+	 * a station's bay, or the station's own scaffold outside it, which the
+	 * bay then hides). Painted, not depth tested: they need not lie under
+	 * what is drawn on them in 3D. Returns whether it drew any. */
+	for (Drawn *d : placed)
+		sort_nodes_view(d->nodes);
 	std::vector<std::pair<float, const Node *>> unders; /* true key, node */
 	for (const Drawn *d : placed)
 		for (const Node &n : d->nodes)
 			if (n.under)
-				unders.push_back({n.key * d->shrink, &n});
+				unders.push_back({n.dist * d->shrink, &n});
 	std::stable_sort(unders.begin(), unders.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
 		if (next_under >= unders.size() || unders[next_under].first <= beyond)
-			return;
+			return false;
 		gd_set_depth(nullptr);
 		for (; next_under < unders.size() && unders[next_under].first > beyond; next_under++)
 		{
@@ -2514,6 +2627,7 @@ extern "C" void native_draw(void)
 			draw_segs(n->segs);
 			draw_dots(n->dots);
 		}
+		return true;
 	};
 
 	float slice = groups.empty() ? 0 : 2.0f / (float)groups.size();
@@ -2525,20 +2639,20 @@ extern "C" void native_draw(void)
 			depth.far = std::max(depth.far, placed[j]->far * 1.01f + 1.0f);
 		depth.lo = -1 + slice * (float)g;
 		depth.hi = -1 + slice * (float)(g + 1);
-		float nearest = 1e30f;
-		for (size_t j = groups[g].first; j < groups[g].second; j++)
-			for (const Node &n : placed[j]->nodes)
-				if (!n.under)
-					nearest = std::min(nearest, n.key * placed[j]->shrink);
-		draw_unders(nearest);
-		for (size_t j = groups[g].first; j < groups[g].second; j++)
+		/* The group's objects farthest first, as the game draws objects: a
+		 * ship seen past a station's bay shares the station's slice, and
+		 * the bay (an underlay, no depth) must be painted over it */
+		std::vector<Drawn *> order(placed.begin() + (long)groups[g].first, placed.begin() + (long)groups[g].second);
+		std::stable_sort(order.begin(), order.end(),
+						 [](const Drawn *a, const Drawn *b) { return a->near * a->shrink > b->near * b->shrink; });
+		for (Drawn *dp : order)
 		{
-			Drawn &d = *placed[j];
+			Drawn &d = *dp;
 			/* Within the object, the game's order: its depth tree's nodes
 			 * farthest first, each in the model's order, as the models were
 			 * made for (a city's buildings stand half in its ground, decals
-			 * lie on their faces), hidden only by other objects... */
-			sort_nodes(d.nodes);
+			 * lie on their faces), the underlays among them, hidden only by
+			 * other objects... */
 			depth.write = false;
 			depth.depth_only = false;
 			gd_set_depth(&depth);
@@ -2546,6 +2660,8 @@ extern "C" void native_draw(void)
 			{
 				if (n.under)
 					continue;
+				if (draw_unders(n.dist * d.shrink))
+					gd_set_depth(&depth);
 				for (const Tri &t : n.tris)
 				{
 					set_colour(t.colour);

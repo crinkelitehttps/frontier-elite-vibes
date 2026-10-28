@@ -32,6 +32,7 @@ extern "C"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
+#include "gl/gl_native.h"
 #include "gl/gl_screen_edit.h"
 #include "gl/gl_screen_place.h"
 #include "headtrack.h"
@@ -240,6 +241,13 @@ void page_settings()
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::SliderInt("##mineradius", &mine_radius_m, 10, 2000, "mine goes off within %d m", ImGuiSliderFlags_Logarithmic);
 	}
+
+	ui_heading("Detail");
+	ImGui::TextWrapped("Model detail kept to this many times farther than the game's Shape detail option (buildings, stations, ships; native scene only)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	char boost_fmt[48];
+	snprintf(boost_fmt, sizeof boost_fmt, native_detail_boost ? "x%d farther" : "game's distances", 1 << native_detail_boost);
+	ImGui::SliderInt("##detailboost", &native_detail_boost, 0, 8, boost_fmt);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

@@ -825,8 +825,20 @@ static unsigned int world_bg; /* the last cockpit frame's sky, kept under the co
 
 /* Draws the frame into the bound framebuffer, w x h pixels: the window's,
  * or a headset's (no touch overlays there) */
+/* GLF_FRAME_LOG: milliseconds per stage, summed over the interval; 0-5 draw_picture's, 6-9 draw_frame's */
+static double stage_ms[10];
+
+static double stage_lap(Uint64 *t)
+{
+	Uint64 now = SDL_GetPerformanceCounter();
+	double ms = (double)(now - *t) * 1000.0 / (double)SDL_GetPerformanceFrequency();
+	*t = now;
+	return ms;
+}
+
 static void draw_frame(int w, int h, bool cockpit, bool window)
 {
+	Uint64 lap = SDL_GetPerformanceCounter();
 	int rects[GD_VP_COUNT][4];
 	layout_rects(w, h, rects);
 	if (cockpit) /* the 3D view fills the window */
@@ -859,12 +871,15 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	gd_set_viewport(GD_VP_VIEW3D);
 	gd_set_projection(&persp);
 	gd_set_wireframe(scr_show.renderer == R_GLWIRE);
+	stage_ms[6] += stage_lap(&lap);
 	native_draw_sky();
+	stage_ms[7] += stage_lap(&lap);
 	/* the cockpit's world is all native: the game's passes only capture it */
 	if (!(cockpit && native_mode() == 2))
 		scene_draw();
 	gl_prims_finish();
 	native_draw();
+	stage_ms[8] += stage_lap(&lap);
 	gd_set_wireframe(false);
 	/* our crosshair and velocity marker (gl_hud.h), on the world (not on
 	 * the cockpit's screen's picture) */
@@ -903,6 +918,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	if (window)
 		gl_overlay_draw();
 
+	stage_ms[9] += stage_lap(&lap);
 	gd_flush();
 }
 
@@ -912,7 +928,7 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 static void update_swap_interval(bool vr)
 {
 	static int current = -1;
-	int want = vr ? 0 : 1;
+	int want = vr || SDL_getenv("GLF_NOVSYNC") ? 0 : 1; /* GLF_NOVSYNC: measuring */
 	if (want == current)
 		return;
 	if (SDL_GL_SetSwapInterval(want) != 0 && want == 1)
@@ -1221,7 +1237,11 @@ static void log_rates(bool new_frame)
 	static int log = -1, pictures, frames;
 	static Uint32 since;
 	if (log < 0)
+#ifdef ANDROID
+		log = 1; /* no environment to set there */
+#else
 		log = SDL_getenv("GLF_FRAME_LOG") != NULL;
+#endif
 	if (!log)
 		return;
 	pictures++;
@@ -1233,6 +1253,15 @@ static void log_rates(bool new_frame)
 			log_printf("frames: %.1f pictures/s, %.1f game frames/s (%.1f shown)\n",
 					   pictures * 1000.0f / (now - since), SDL_AtomicGet(&published) * 1000.0f / (now - since),
 					   frames * 1000.0f / (now - since));
+		if (since)
+		{
+			log_printf("stages ms/picture: acquire %.2f sub %.2f vr %.2f window %.2f menu %.2f swap %.2f\n",
+					   stage_ms[0] / pictures, stage_ms[1] / pictures, stage_ms[2] / pictures,
+					   stage_ms[3] / pictures, stage_ms[4] / pictures, stage_ms[5] / pictures);
+		}
+		log_printf("window ms/picture: clear+setup %.2f sky %.2f native %.2f cockpit/screen %.2f\n", stage_ms[6] / pictures,
+				   stage_ms[7] / pictures, stage_ms[8] / pictures, stage_ms[9] / pictures);
+		memset(stage_ms, 0, sizeof stage_ms);
 		SDL_AtomicSet(&published, 0);
 		pictures = frames = 0;
 		since = now;
@@ -1428,8 +1457,10 @@ static Uint32 last_draw_ticks;
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
+	Uint64 lap = SDL_GetPerformanceCounter();
 	bool new_frame = acquire_frame();
 	log_rates(new_frame);
+	stage_ms[0] += stage_lap(&lap);
 	if (scr_show.sub)
 	{
 		page_buttons = scr_show.group == COCKPIT_SCREEN_MAP && mapscreen_real_buttons();
@@ -1439,13 +1470,27 @@ static void draw_picture(bool with_menu)
 	if (scr_show.page_new && new_frame)
 		draw_page();
 	draw_coms_flight(new_frame);
+	stage_ms[1] += stage_lap(&lap);
 	bool cockpit = draw_vr(with_menu);
-	draw_frame(screen_w, screen_h, cockpit, true);
-	if (with_menu)
+	stage_ms[2] += stage_lap(&lap);
+#ifdef ANDROID
+	/* the headset is all there is to see: nobody looks at the window, and
+	 * drawing the world a third time costs a third of the frame */
+	bool window_seen = !vr_running() || ui_visible();
+#else
+	bool window_seen = true;
+#endif
+	if (window_seen)
+		draw_frame(screen_w, screen_h, cockpit, true);
+	stage_ms[3] += stage_lap(&lap);
+	if (with_menu && window_seen)
 		ui_render(); /* 4. emulator menu */
+	stage_ms[4] += stage_lap(&lap);
 	dbg_frames++;
 	last_draw_ticks = SDL_GetTicks();
-	SDL_GL_SwapWindow(window);
+	if (window_seen)
+		SDL_GL_SwapWindow(window);
+	stage_ms[5] += stage_lap(&lap);
 }
 
 static int render_main(void *arg)
@@ -1474,7 +1519,7 @@ static int render_main(void *arg)
 		draw_picture(false);
 		/* no vsync (and no headset): don't draw much faster than a fast
 		 * display would show */
-		if (!vr_running() && SDL_GL_GetSwapInterval() == 0)
+		if (!vr_running() && SDL_GL_GetSwapInterval() == 0 && !SDL_getenv("GLF_NOVSYNC"))
 		{
 			double ms = (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency();
 			if (ms < 4.0)
