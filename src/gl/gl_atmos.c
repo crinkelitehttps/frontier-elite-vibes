@@ -61,6 +61,8 @@
 #include "renderer.h"
 
 #define ADDR_DYN_COLS 0x56 /* dynamic colour table */
+/* L9d3a: colour 14's default, copied into it as each 3D view starts */
+#define ADDR_COL14_DEFAULT (FE2_main_pal1_col14 + 0x64)
 #define TREE_HEADER   12   /* z, two child pointers */
 
 #define OP_SHAPE  42
@@ -118,12 +120,14 @@ typedef struct
 
 static AtmosBuf rec, pub, show;
 static int first_pending, planet_puts;
+/* ... of them by the cockpit's turned passes */
+static int turned_puts;
 static float scale_so_far = 1.0f;
 
 void soft_nodes_reset(void)
 {
 	rec.arena_used = 0;
-	rec.n_bands = first_pending = rec.n_planets = planet_puts = 0;
+	rec.n_bands = first_pending = rec.n_planets = planet_puts = turned_puts = 0;
 	rec.sky = -1;
 	rec.sky_ahead = rec.sky_air = false;
 	scale_so_far = 1.0f;
@@ -149,8 +153,11 @@ void atmos_publish(void)
 	 * with the planet's horizon in view; a capture pass towards it comes
 	 * every few frames, the others make no planet at all (the planet itself
 	 * stands in, gl_planet.c). Those keep the last frame's bands, which are
-	 * drawn round the planet's current place (draw_bands). A frame whose
-	 * planet routine ran without making any has none. */
+	 * drawn round the planet's current place (draw_bands). So do frames
+	 * whose only pass is the game camera's when it has the planet without
+	 * its horizon (nose up: save "Flicker3"); the turned passes look all
+	 * round. A frame whose planet routine ran in one of those without
+	 * making any has none. */
 	static AtmosBuf held;
 	static int held_age = HELD_FRAMES;
 	if (rec.n_bands > 0)
@@ -158,7 +165,7 @@ void atmos_publish(void)
 		copy_atmos(&held, &rec);
 		held_age = 0;
 	}
-	else if (planet_puts == 0 && held_age < HELD_FRAMES)
+	else if ((planet_puts == 0 || (cockpit_active() && turned_puts == 0)) && held_age < HELD_FRAMES)
 	{
 		held_age++;
 		copy_atmos(&pub, &held);
@@ -218,12 +225,21 @@ void Nu_AtmosBand(void)
 void atmos_place_bands(const float centre[3], float radius)
 {
 	planet_puts++;
+	if (cockpit_turned_pass())
+		turned_puts++;
 	if (first_pending < rec.n_bands)
 	{
+		/* L3da2e sets it only for some view directions: a pass looking
+		 * up leaves the default (space's), while the passes beside it set
+		 * the sky's. Only a pass that has the sky's counts, or frames with
+		 * the game's camera pass alone flip between the two (save
+		 * "flicker": nose up at Merlin, 500 m) */
+		int col = STMemory_ReadWord(FE2_main_pal1_col14) & 0xfff;
+		bool set = col != (STMemory_ReadWord(ADDR_COL14_DEFAULT) & 0xfff);
 		bool ahead = !cockpit_turned_pass();
-		if (ahead || !rec.sky_ahead)
+		if (set && (ahead || !rec.sky_ahead))
 		{
-			rec.sky = STMemory_ReadWord(FE2_main_pal1_col14) & 0xfff;
+			rec.sky = col;
 			rec.sky_ahead = ahead;
 			/* set with it (L3da2e); each pass clears it first (Lcockpit_world) */
 			rec.sky_air = (int16_t)STMemory_ReadWord(GAME_A6 + A6_IN_ATMOSPHERE) < 0;

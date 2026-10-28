@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cheats.h"
 #include "gl_api.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
@@ -344,6 +345,26 @@ static void remember_known(const NativePlanet *n)
 	k->ahead = n->ahead;
 }
 
+/* The planet the ship flies relative to at its exact distance. The game's
+ * own comes from positions rounded to a power of two per pass: at a few
+ * hundred metres up it was over a kilometre out, different each frame, and
+ * the eye went in and out of the planet (save "Flicker3"). Only its length
+ * is put right. */
+static void exact_distance(NativePlanet *n)
+{
+	/* only a view from the ship (not the external one, a map, a screen's page) */
+	FlightView v = game_flight_view();
+	if (game_screen() != SCREEN_FLIGHT || v == VIEW_EXTERNAL || v >= VIEW_COUNT)
+		return;
+	double ratio = cheat_ship_height_ratio(n->obj);
+	double d = sqrt(n->pos[0] * n->pos[0] + n->pos[1] * n->pos[1] + n->pos[2] * n->pos[2]);
+	if (ratio <= 0 || d <= 0 || n->radius <= 0)
+		return;
+	double k = n->radius * ratio / d;
+	for (int i = 0; i < 3; i++)
+		n->pos[i] *= k;
+}
+
 static void record_native(const PlanetDesc *p)
 {
 	if (native_mode() != 2)
@@ -368,6 +389,7 @@ static void record_native(const PlanetDesc *p)
 	for (int k = 0; k < 3; k++)
 		n->pos[k] = v[k];
 	n->radius = p->radius;
+	exact_distance(n);
 	n->shrink = native_frame_shrink(a6);
 	cockpit_pass_to_view(p->light, n->light);
 	for (int c = 0; c < 3; c++)
@@ -440,6 +462,7 @@ void planet_native_object(uint32_t addr, const float pos[3], const float cols[3]
 		turn_by(o->obj_cols, cols, d, t);
 		for (int k = 0; k < 3; k++)
 			n->pos[k] = (double)pos[k] + t[k];
+		exact_distance(n);
 		turn_by(o->obj_cols, cols, o->light, n->light);
 		for (int c = 0; c < 3; c++)
 		{

@@ -332,6 +332,27 @@ static u32 slot_object(int i)
 	return FE2_big_space + (u16)rdword(FE2_obj_offsets + 2 * (u32)i);
 }
 
+double cheat_ship_height_ratio(unsigned body)
+{
+	u32 me = ship();
+	if (!me || !body)
+		return 0;
+	int parent = (u8)rdbyte(me + OBJ_PARENT);
+	if (parent < 1 || parent >= OBJECT_SLOTS || slot_object(parent) != body)
+		return 0;
+	/* both in position units (2^32 mm) */
+	double radius = (double)(u16)rdword(body + OBJ_RADIUS_HI) + (double)(u32)rdlong(body + OBJ_RADIUS_LO) / 4294967296.0;
+	if (radius <= 0)
+		return 0;
+	double d2 = 0;
+	for (int k = 0; k < 3; k++)
+	{
+		double v = (double)obj_pos(me, k) / 4294967296.0;
+		d2 += v * v;
+	}
+	return sqrt(d2) / radius;
+}
+
 /* Applies `fn` to the position of the ship and of every object at the same spot */
 /* new_parent: the slot the ship (and what moves with it) becomes relative to, -1 to keep the parent */
 static void move_ship(const pos64 to[3], int new_parent)

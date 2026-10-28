@@ -2297,8 +2297,9 @@ void draw_planet_object(const Object &o, int sphere)
 	}
 }
 
-/* Far bodies and planets, farthest first */
-void draw_fars()
+/* The planets' objects this frame: a planet the game didn't put stands in
+ * where it was last seen (gl_planet.c). Again is harmless. */
+void place_planets()
 {
 	for (int i = 0; i < shown->n && !screen_only; i++)
 	{
@@ -2307,6 +2308,12 @@ void draw_fars()
 		if (c && c->planet)
 			planet_native_object(o.addr, o.pos, o.cols);
 	}
+}
+
+/* Far bodies and planets, farthest first */
+void draw_fars()
+{
+	place_planets();
 	/* a far body, or a planet (its sphere and/or its object), by true
 	 * distance: each is shrunk by its own power of two */
 	struct Item
@@ -2390,6 +2397,10 @@ extern "C" void native_draw_sky(void)
 	}
 	for (const Drawn &d : drawn)
 		draw_nodes(d.before_planet);
+	/* before the bands: they are drawn round their planet, and a planet
+	 * standing in must be there already (frames the game didn't put it, as
+	 * while a cockpit screen's page is made: save "flicker2") */
+	place_planets();
 	if (!screen_only)
 		atmos_draw_native();
 	draw_fars();

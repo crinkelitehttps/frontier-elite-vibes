@@ -60,6 +60,9 @@ void cheat_repair(void);
  * takes over from there, so a far jump can make it re-pick the frame. A landed or docked ship is
  * set to manual control. */
 bool cheat_ship_position(double km[3]);
+/* The ship's distance from the centre of `body` (an object's address) over the body's radius,
+ * exact (the 64-bit positions); 0 unless the body is the ship's frame parent. */
+double cheat_ship_height_ratio(unsigned body);
 void cheat_ship_set_position(const double km[3]);
 /* Moves the ship `km` further from (or, negative, nearer to) its frame parent */
 void cheat_ship_move_out(double km);
