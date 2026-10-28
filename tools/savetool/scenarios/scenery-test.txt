@@ -1,0 +1,9 @@
+# Issue 3 surface scenery: ~10 km over Merlin (below the ~20 km scenery threshold), front view, rich.
+# Fly forward at speed and watch where hills/clouds/craters appear.
+base ../bases/merlin-flying
+out ../../../../savs/Scenery10
+name Scenery10
+cash 5000000
+ship_up 9.65
+# player is slot 107; forward axis = matrix column 2 = (-0.977, 0, -0.172), ~1.5 km/s (raw unit 0.095 m/s)
+vel 107,-15430,0,-2720
