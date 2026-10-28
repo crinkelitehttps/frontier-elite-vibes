@@ -55,6 +55,7 @@
 #include "gl_native.h"
 #include "gl_planet.h"
 #include "gl_scene.h"
+#include "game_state.h"
 #include "m68000.h"
 #include "host.h"
 #include "renderer.h"
@@ -101,6 +102,15 @@ typedef struct
 {
 	int n_bands, n_planets, arena_used;
 	bool held; /* the bands of an earlier frame: only while their planet is drawn */
+	/* The sky's colour (rgb444, -1: the game's own). The game sets its
+	 * background colour 14 to the haze's while it makes the bands, but to
+	 * the ground's when its view is all ground (l3cd84): that filled its
+	 * whole picture, but the cockpit looks every way, and its background
+	 * is whatever the last pass left. So it is taken as the bands are
+	 * made, from the game camera's own pass when that has them. */
+	int sky;
+	bool sky_ahead;
+	bool sky_air; /* ... and the game said the player is in the air then: no stars */
 	AtmosBand bands[BANDS_MAX];
 	AtmosPlanet planets[PLANETS_MAX];
 	int16_t arena[ARENA_WORDS];
@@ -114,6 +124,8 @@ void soft_nodes_reset(void)
 {
 	rec.arena_used = 0;
 	rec.n_bands = first_pending = rec.n_planets = planet_puts = 0;
+	rec.sky = -1;
+	rec.sky_ahead = rec.sky_air = false;
 	scale_so_far = 1.0f;
 }
 
@@ -123,6 +135,9 @@ static void copy_atmos(AtmosBuf *dst, const AtmosBuf *src)
 	dst->n_planets = src->n_planets;
 	dst->arena_used = src->arena_used;
 	dst->held = src->held;
+	dst->sky = src->sky;
+	dst->sky_ahead = src->sky_ahead;
+	dst->sky_air = src->sky_air;
 	memcpy(dst->bands, src->bands, sizeof(AtmosBand) * (size_t)src->n_bands);
 	memcpy(dst->planets, src->planets, sizeof(AtmosPlanet) * (size_t)src->n_planets);
 	memcpy(dst->arena, src->arena, sizeof(int16_t) * (size_t)src->arena_used);
@@ -153,6 +168,23 @@ void atmos_publish(void)
 	else
 		held_age = HELD_FRAMES;
 	copy_atmos(&pub, &rec);
+	/* The sky's colour stays between the frames that make bands, whatever
+	 * the others' planet routine did (all ground, or a planet put without
+	 * its horizon): only those know it */
+	static int sky = -1, sky_age = HELD_FRAMES;
+	static bool sky_air;
+	if (rec.sky >= 0)
+	{
+		sky = rec.sky;
+		sky_air = rec.sky_air;
+		sky_age = 0;
+	}
+	else if (sky_age < HELD_FRAMES)
+	{
+		sky_age++;
+		pub.sky = sky;
+		pub.sky_air = sky_air;
+	}
 }
 
 void atmos_acquire(void)
@@ -186,6 +218,17 @@ void Nu_AtmosBand(void)
 void atmos_place_bands(const float centre[3], float radius)
 {
 	planet_puts++;
+	if (first_pending < rec.n_bands)
+	{
+		bool ahead = !cockpit_turned_pass();
+		if (ahead || !rec.sky_ahead)
+		{
+			rec.sky = STMemory_ReadWord(FE2_main_pal1_col14) & 0xfff;
+			rec.sky_ahead = ahead;
+			/* set with it (L3da2e); each pass clears it first (Lcockpit_world) */
+			rec.sky_air = (int16_t)STMemory_ReadWord(GAME_A6 + A6_IN_ATMOSPHERE) < 0;
+		}
+	}
 	if (first_pending < rec.n_bands && radius > 0.0f)
 	{
 		/* the same planet seen by an earlier pass has the same radius */
@@ -208,6 +251,16 @@ void atmos_place_bands(const float centre[3], float radius)
 	}
 	first_pending = rec.n_bands;
 	scale_so_far = 1.0f;
+}
+
+int atmos_sky_colour(void)
+{
+	return show.sky;
+}
+
+bool atmos_sky_hides_stars(void)
+{
+	return show.sky >= 0 && show.sky_air;
 }
 
 static void draw_bands(void);

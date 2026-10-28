@@ -841,7 +841,15 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	glDepthMask(GL_TRUE);
 	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	if (scr_show.renderer != R_GLWIRE)
-		clear_rect(rects[GD_VP_GAME], cockpit && scr_show.sub ? world_bg : scr_show.main_rgb[scr_show.bgcol & 0xff]);
+	{
+		unsigned int bg = cockpit && scr_show.sub ? world_bg : scr_show.main_rgb[scr_show.bgcol & 0xff];
+		/* the sky's colour, not the ground's the game fills an all-ground
+		 * view with (gl_atmos.c) */
+		int sky = atmos_sky_colour();
+		if (cockpit && sky >= 0 && (scr_show.sub || (scr_show.bgcol & 0xff) == 0xe))
+			build_rgb_palette(&bg, (const unsigned short[]){(unsigned short)sky}, 1);
+		clear_rect(rects[GD_VP_GAME], bg);
+	}
 
 	gd_begin_frame(rects);
 

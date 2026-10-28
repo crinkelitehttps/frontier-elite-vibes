@@ -2379,7 +2379,10 @@ extern "C" void native_draw_sky(void)
 	gd_push();
 	gd_identity();
 	prepare(false);
-	if (shown->has_sky)
+	/* the cockpit's: not in the air, whatever the game camera's view was
+	 * when it decided (gl_atmos.c) */
+	bool stars = !(cockpit_active() && shown == &shows[0] && atmos_sky_hides_stars());
+	if (shown->has_sky && stars)
 	{
 		Drawn d;
 		run_object(shown->sky, d, false, true);

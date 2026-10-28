@@ -39,6 +39,7 @@ extern "C"
 #define A6_FLIGHT_STATE 704   /* byte: see FlightStatus */
 #define A6_FLIGHT_FLAGS 705   /* byte: bit 0 engines off */
 #define A6_3DVIEW_MODE  706   /* byte: A6_plr_3dview_mode, see FlightView */
+#define A6_IN_ATMOSPHERE 546  /* word: A6_plr_in_atmosphere, negative: no stars */
 #define A6_GAME_DATA    14470 /* long: A6_game_data, ship models etc */
 #define A6_OPT_ELITE_CONTROLS 10445 /* byte: $ff steering x rolls, 0 it yaws */
 #define A6_ICON_POSITIONS     14514 /* the clickable icon rectangles, see game_icon_rects */

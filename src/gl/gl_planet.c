@@ -914,12 +914,26 @@ static void draw_sphere(const SphereIn *in)
 	if (cockpit_active())
 		cockpit_world_split(&lens, &head);
 
+	/* The eye is never inside a planet. Just off the ground the planet's
+	 * distance can come a little short (the game's own, a turned pass's
+	 * rounded camera, a remembered planet), and from inside the sphere
+	 * shows its far side: the other hemisphere's seas on the ground and
+	 * the ground's colours all over the sky. Keep the eye just over it. */
+	double centre[3] = {in->pos[0], in->pos[1], in->pos[2]};
+	double dist = sqrt(centre[0] * centre[0] + centre[1] * centre[1] + centre[2] * centre[2]);
+	double lowest = in->radius * (1.0 + 1e-6);
+	if (dist > 0 && dist < lowest)
+	{
+		for (int k = 0; k < 3; k++)
+			centre[k] *= lowest / dist;
+		dist = lowest;
+	}
+
 	/* flattened: the centre k times as far below the ground under the eye */
-	double flat = flatten(in->pos, in->radius);
-	double dist = sqrt(in->pos[0] * in->pos[0] + in->pos[1] * in->pos[1] + in->pos[2] * in->pos[2]);
+	double flat = flatten(centre, in->radius);
 	double h = dist - in->radius, r = in->radius * flat, pos[3];
 	for (int k = 0; k < 3; k++)
-		pos[k] = flat > 1 ? in->pos[k] * (h + r) / dist : in->pos[k];
+		pos[k] = flat > 1 ? centre[k] * (h + r) / dist : centre[k];
 
 	float rect[4];
 	if (!screen_rect(pos, (float)r, rect))

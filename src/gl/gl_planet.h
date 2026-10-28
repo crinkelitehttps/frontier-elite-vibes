@@ -100,6 +100,12 @@ void planet_use_page(bool page); /* the page's (scene_use_page) */
 /* The atmosphere bands round them (gl_atmos.c), before the planets */
 void atmos_draw_native(void);
 
+/* The shown frame's sky colour in the cockpit (rgb444), -1 for the game's
+ * background colour (gl_atmos.c) */
+int atmos_sky_colour(void);
+/* ... and the stars are hidden, the player being in the air (gl_atmos.c) */
+bool atmos_sky_hides_stars(void);
+
 /* Says which planet the atmosphere bands just made are round (gl_atmos.c) */
 void atmos_place_bands(const float centre[3], float radius);
 
