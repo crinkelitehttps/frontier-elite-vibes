@@ -238,10 +238,42 @@ static bool ctrl_held(const SDL_Event *event)
 	return (event->key.keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)) != 0;
 }
 
+/* The binding editor's key for an SDL key while the clipboard is out, or -1 */
+static int edit_key(SDL_Keycode key, Uint16 mod)
+{
+	switch (key)
+	{
+	case SDLK_UP:
+		return GAMEPAD_EDIT_UP;
+	case SDLK_DOWN:
+		return GAMEPAD_EDIT_DOWN;
+	case SDLK_RETURN:
+	case SDLK_KP_ENTER:
+		return GAMEPAD_EDIT_SELECT;
+	case SDLK_ESCAPE:
+		return GAMEPAD_EDIT_CANCEL;
+	case SDLK_DELETE:
+		return (mod & KMOD_SHIFT) ? GAMEPAD_EDIT_RESET_ALL : GAMEPAD_EDIT_RESET;
+	}
+	return -1;
+}
+
 /* The clipboard (gl_clipboard.h): F11 brings it up or puts it away; while
- * it is out the page keys and the wheel turn its pages, not the game's */
+ * it is out the page keys and the wheel turn its pages, not the game's, and
+ * the binding editor (gamepad.h) takes the mouse on its rows and its keys;
+ * while it edits the game gets no keys */
 static bool clipboard_event(const SDL_Event *event)
 {
+	if ((event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) ||
+		(event->type == SDL_MOUSEMOTION && gamepad_editing()))
+	{
+		bool click = event->type == SDL_MOUSEBUTTONDOWN;
+		int x = click ? event->button.x : event->motion.x, y = click ? event->button.y : event->motion.y;
+		float u, v;
+		if (!clipboard_window_to_page(x, y, screen_w, screen_h, &u, &v))
+			return false;
+		return gamepad_edit_pointer(u, v, click) && click;
+	}
 	if (event->type == SDL_MOUSEWHEEL)
 	{
 		if (!clipboard_out() || event->wheel.y == 0)
@@ -259,6 +291,17 @@ static bool clipboard_event(const SDL_Event *event)
 			clipboard_toggle();
 		return true;
 	}
+	if (clipboard_out() && event->type == SDL_KEYDOWN && !(mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)))
+	{
+		int k = edit_key(key, mod);
+		bool repeat = event->key.repeat && k != GAMEPAD_EDIT_UP && k != GAMEPAD_EDIT_DOWN;
+		if (k >= 0 && (repeat ? gamepad_editing() : gamepad_edit_key(k)))
+			return true;
+	}
+	/* editing: no keys for the game (their releases still go, for keys held) */
+	if (gamepad_editing() && event->type == SDL_KEYDOWN && !(mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) &&
+		!(key == SDLK_PAGEUP || key == SDLK_PAGEDOWN || key == SDLK_HOME || key == SDLK_END))
+		return true;
 	if (!clipboard_out() || !(key == SDLK_PAGEUP || key == SDLK_PAGEDOWN || key == SDLK_HOME || key == SDLK_END))
 		return false;
 	if (event->type == SDL_KEYDOWN)

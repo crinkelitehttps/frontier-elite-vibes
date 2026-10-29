@@ -85,9 +85,14 @@ vibe::Section device_section(bool vr)
 		{
 			vibe::Section out = s;
 			if (vr)
+			{
 				out.lines.insert(out.lines.begin() + 1,
 								 {"Hands: touch the panel with a fingertip; take the clipboard with a grip at it.",
 								  "Both grips held: move the hands forward / back to move the panel."});
+				/* (not rows: the binding editor's ids stay with their lines) */
+				if (!out.rows.empty())
+					out.rows.insert(out.rows.begin() + 1, {-1, -1});
+			}
 			return out;
 		}
 	vibe::Section none;

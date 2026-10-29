@@ -63,6 +63,31 @@ typedef struct
 } GamepadVr;
 void gamepad_set_vr(const GamepadVr *v);
 
+/* The binding editor (vibe/binding_editor.h): on the clipboard's controls
+ * pages, a row is picked and given the next control pressed; gamepad.cfg
+ * is rewritten in place. Ways in: an `edit` binding, Start+Back, Enter, or
+ * a click / VR fingertip and trigger on a row. While it is on, the
+ * bindings and the game's keys are off. Game thread unless said. */
+bool gamepad_editing(void);
+enum
+{
+	GAMEPAD_EDIT_UP,
+	GAMEPAD_EDIT_DOWN,
+	GAMEPAD_EDIT_SELECT,
+	GAMEPAD_EDIT_CANCEL,
+	GAMEPAD_EDIT_RESET,
+	GAMEPAD_EDIT_RESET_ALL
+};
+/* A keyboard key for it; true if it took the key */
+bool gamepad_edit_key(int key);
+/* A pointer at (u, v) across the board's picture (0..1 from the top
+ * left): over a row it picks it (while editing); `click` also asks for its
+ * new control. True if it was over a row. */
+bool gamepad_edit_pointer(float u, float v, bool click);
+/* Any thread (the VR hands): the same, applied at the next update. `on`
+ * false: no hand is at the board. */
+void gamepad_edit_pointer_later(bool on, float u, float v, bool click);
+
 #ifdef __cplusplus
 }
 #endif

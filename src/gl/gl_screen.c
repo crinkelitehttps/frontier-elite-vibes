@@ -841,6 +841,8 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 	Uint64 lap = SDL_GetPerformanceCounter();
 	int rects[GD_VP_COUNT][4];
 	layout_rects(w, h, rects);
+	if (window) /* where a mouse click on the clipboard lands */
+		clipboard_window_view(cockpit);
 	if (cockpit) /* the 3D view fills the window */
 	{
 		memcpy(rects[GD_VP_GAME], rects[GD_VP_WINDOW], sizeof(rects[0]));

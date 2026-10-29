@@ -22,6 +22,11 @@
  *   next; one page a stroke). A hand at, holding or swiping the board
  *   doesn't touch the panel.
  *
+ *   The rows of the controls pages are picked and rebound by the binding
+ *   editor (gamepad.h): a VR fingertip over the board picks the row under
+ *   it while editing, and a trigger pull or a tap there asks for its new
+ *   control; so does a mouse click.
+ *
  *   While it is out of its place (held, left somewhere, or reading) the
  *   `manual` binding layer and the page keys act, and pictures that are
  *   not the cockpit (menus, maps, other views, the VR virtual screen) show
@@ -66,6 +71,13 @@ void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3]);
 bool clipboard_take_cover(float corners[3][3]);
 /* Queues it over a flat picture w x h (GD_VP_WINDOW), while it is out */
 void clipboard_queue_flat(int w, int h);
+
+/* Drawing thread, per window picture: it shows the cockpit (the board in
+ * 3D) or not (the board flat over it) */
+void clipboard_window_view(bool cockpit);
+/* Any thread: window pixel (wx, wy) of a w x h window is on the board as
+ * last drawn there, at (u, v) across its picture (0..1 from the top left) */
+bool clipboard_window_to_page(int wx, int wy, int w, int h, float *u, float *v);
 
 /* With the GL context */
 void clipboard_shutdown(void);

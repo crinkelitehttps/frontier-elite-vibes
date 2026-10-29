@@ -14,6 +14,7 @@
 #include "gamepad.h"
 #include "gamepad_legacy.h"
 #include "manual.h"
+#include "vibe/binding_editor.h"
 #include "vibe/bindings.h"
 
 extern "C"
@@ -103,6 +104,12 @@ static const char DEFAULT_CFG[] = R"cfg(# GLFrontier gamepad bindings (gamepad.c
 #   manual                     the clipboard (controls and the game
 #                              manual): up to read / put away (also F11)
 #   manual-page <n>            turn n pages (-n: back); repeats while held
+#   edit                       change these bindings on the clipboard's
+#                              controls pages: pick a row (d-pad / stick up and
+#                              down), A / trigger / Enter, then press the new
+#                              control; B / menu / Esc ends. Start+Back, Enter
+#                              or a click / fingertip and trigger on a row
+#                              work whatever this file says.
 #   menu                       the emulator menu (the cog) on / off; with a VR
 #                              headset it is a screen in the cockpit: grip it
 #                              to move, turn and size it (it is kept)
@@ -177,6 +184,7 @@ in manual dpleft  manual-page -1     # previous page
 in manual dpright manual-page +1     # next page
 in manual dpup    manual-page -10    # 10 pages back
 in manual dpdown  manual-page +10    # 10 pages on
+in manual x       edit               # change the bindings on these pages
 
 # ---- The galaxy map: the sticks scroll it (the arrow keys) instead of flying.
 # The right one moves the pointer, not the map, while the pointer is out.
@@ -242,6 +250,8 @@ in manual left-trackpad-left manual-page -1 # previous page
 in manual left-trackpad-right manual-page +1 # next page
 in manual left-trackpad-up manual-page -10 # 10 pages back
 in manual left-trackpad-down manual-page +10 # 10 pages on
+in manual left-x  edit               # change the bindings on these pages
+in manual left-trackpad-center edit  # change the bindings on these pages
 
 in map left-thumbstick-x none
 in map left-thumbstick-y none
@@ -279,6 +289,55 @@ bool steering;     /* wrote steering last update */
 int elite_saved = -1; /* the game's Elite controls option while roll / yaw force it, else -1 */
 bool pointer_on;
 Uint64 pointer_ticks;
+
+/* The binding editor, once the clipboard has its pages (manual_init) */
+vibe::BindingEditor *editor;
+/* A VR hand at the board (gamepad_edit_pointer_later), for the next update */
+SDL_SpinLock board_lock;
+struct BoardPointer
+{
+	bool on = false, click = false;
+	float u = 0, v = 0;
+} board_in, board_was;
+
+uint64_t now_ns()
+{
+	return SDL_GetTicks64() * 1000000ull;
+}
+
+vibe::BindingEditor *the_editor()
+{
+	if (!editor && clipboard().started())
+	{
+		editor = new vibe::BindingEditor(clipboard(), bindings);
+		editor->source = GAMEPAD_FILE;
+		editor->save = [](const std::string &text) { return vibe::save_bindings(text, "", GAMEPAD_FILE); };
+		editor->set_hint("Change these bindings: Enter, Start+Back, or X (VR: left X, or trigger at a row)");
+	}
+	return editor;
+}
+
+/* The VR hand at the board: a click asks for the row's control; while
+ * editing, the row under the fingertip is picked */
+void board_pointer()
+{
+	BoardPointer p;
+	SDL_AtomicLock(&board_lock);
+	p = board_in;
+	board_in.click = false;
+	SDL_AtomicUnlock(&board_lock);
+	vibe::BindingEditor *e = the_editor();
+	if (!e || !p.on)
+	{
+		board_was.on = false;
+		return;
+	}
+	if (p.click)
+		e->pointer(p.u, p.v, true, now_ns());
+	else if (e->active() && (!board_was.on || p.u != board_was.u || p.v != board_was.v))
+		e->pointer(p.u, p.v, false, now_ns());
+	board_was = p;
+}
 
 /* ---- keys --------------------------------------------------------------- */
 void send(SDL_Keycode key, Uint16 mod, bool down)
@@ -358,6 +417,7 @@ void load_bindings()
 	std::string text;
 	if (!read_file(GAMEPAD_FILE, &text))
 	{
+		bindings.set_defaults(DEFAULT_CFG);
 		bindings.load(DEFAULT_CFG, "built-in gamepad bindings");
 		if (write_file(GAMEPAD_FILE, DEFAULT_CFG))
 			log_printf("Gamepad: wrote the default bindings to %s\n", GAMEPAD_FILE);
@@ -374,6 +434,7 @@ void load_bindings()
 		if (write_file(GAMEPAD_FILE, text))
 			log_printf("Gamepad: %s converted to the new format (the old one is %s)\n", GAMEPAD_FILE, old.c_str());
 	}
+	bindings.set_defaults(DEFAULT_CFG); /* the editor's reset */
 	if (!bindings.load(text, GAMEPAD_FILE))
 		log_printf("Gamepad: some lines of %s were skipped\n", GAMEPAD_FILE);
 	else
@@ -576,8 +637,12 @@ void gamepad_update(void)
 	float dt = pointer_ticks ? std::min((float)(now - pointer_ticks) / 1000.0f, 0.1f) : 0.0f;
 	pointer_ticks = now;
 	take_vr();
+	board_pointer();
+	vibe::BindingEditor *ed = the_editor();
 	if (!pad && !vr_active)
 	{
+		if (ed) /* the keyboard may be editing: time out a capture */
+			ed->update(vibe::ControllerReading(), now_ns());
 		bindings.release_all();
 		write_steering(0, 0);
 		force_elite_controls(0);
@@ -597,7 +662,14 @@ void gamepad_update(void)
 	ctx.clipboard_out = clipboard_out();
 	ctx.modes = (map ? 1u << mode_map : 0u) | (map && !pointer_on ? 1u << mode_map_nopointer : 0u) |
 				(pointer_on ? 1u << mode_pointer : 0u);
+	ctx.suspended = ed && ed->active();
 	vibe::Bindings::Frame f = bindings.update(reading, ctx);
+	if (ed)
+	{
+		if (f.edit)
+			ed->toggle(ctx.now_ns);
+		ed->update(reading, ctx.now_ns);
+	}
 
 	if (f.recenter)
 	{
@@ -646,4 +718,42 @@ void gamepad_look(float *x, float *y)
 {
 	*x = look[0] * bindings.setting(set_look_yaw) * 0.5f;
 	*y = look[1] * bindings.setting(set_look_pitch) * 0.5f;
+}
+
+/* =========================================================================
+ * The binding editor
+ * ========================================================================= */
+bool gamepad_editing(void)
+{
+	return editor && editor->active();
+}
+
+bool gamepad_edit_key(int key)
+{
+	using K = vibe::BindingEditor::Key;
+	static const K keys[] = {K::Up, K::Down, K::Select, K::Cancel, K::Reset, K::ResetAll};
+	vibe::BindingEditor *e = the_editor();
+	if (!e || key < 0 || key > GAMEPAD_EDIT_RESET_ALL)
+		return false;
+	return e->key(keys[key], now_ns());
+}
+
+bool gamepad_edit_pointer(float u, float v, bool click)
+{
+	vibe::BindingEditor *e = the_editor();
+	return e && e->pointer(u, v, click, now_ns());
+}
+
+void gamepad_edit_pointer_later(bool on, float u, float v, bool click)
+{
+	SDL_AtomicLock(&board_lock);
+	bool clicked = board_in.click; /* not lost before the update takes it */
+	board_in.on = on || clicked;
+	if (on)
+	{
+		board_in.u = u;
+		board_in.v = v;
+	}
+	board_in.click = clicked || (on && click);
+	SDL_AtomicUnlock(&board_lock);
 }

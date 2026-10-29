@@ -18,6 +18,7 @@ extern "C"
 #include "gl_draw.h"
 #include "gl_hands.h"
 }
+#include "gamepad.h"
 #include "manual.h"
 
 #include "vibe/clipboard.h"
@@ -144,6 +145,26 @@ void quad_pass(const void *data)
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+/* Where the window shows the board, for the mouse: in the cockpit (the
+ * board's surface in view space, m) or flat */
+SDL_SpinLock window_lock;
+bool window_cockpit = false, window_board = false;
+vibe::Surface window_surface;
+
+/* The binding editor's hands: a tap (the fingertip in through the board's
+ * face and out again, quickly and not swiped along) or a trigger pull with
+ * the fingertip over it */
+struct Tap
+{
+	bool in = false, turned = false;
+	float u = 0, v = 0;
+	uint64_t t0 = 0;
+	bool trigger = false;
+};
+Tap taps[2];
+constexpr float TAP_NEAR = 3.0f;	   /* cm in front of the face: over it */
+constexpr uint64_t TAP_NS = 600000000; /* in and out within */
+
 /* vibe's frame (cm, +z ahead) <-> view space (m, -z ahead) */
 void to_view(const float a[3], float v[3])
 {
@@ -194,6 +215,43 @@ void clipboard_hands(VrHand hands[2], bool grab, int board[2])
 	/* (a swipe across the board turns the page in there) */
 	vibe::ClipboardHolder::HandState st[2];
 	clip.update(now, h, st);
+	/* the fingertips over the board: the binding editor's pointer */
+	const vibe::Surface face = vibe::board_surface(clip.pose(now), clip.holder.width);
+	bool over = false, click = false;
+	float pu = 0, pv = 0;
+	for (int i = 0; i < 2; i++)
+	{
+		Tap &t = taps[i];
+		const bool trigger = hands[i].trigger > 0.7f;
+		const bool trigger_down = trigger && !t.trigger;
+		t.trigger = trigger;
+		if (!grab || !h[i].valid || st[i].holding || !clip.out())
+		{
+			t.in = false;
+			continue;
+		}
+		const vibe::Vec3 tip = h[i].pos + vibe::normalized(h[i].fwd) * clip.holder.finger;
+		const vibe::Surface::Projection pr = face.project(tip);
+		if (!pr.over || pr.height > TAP_NEAR || pr.height < -clip.holder.swipe_depth)
+		{
+			t.in = false;
+			continue;
+		}
+		if (!over || i == 1) /* both: the right hand's */
+			over = true, pu = pr.u, pv = pr.v;
+		click |= trigger_down;
+		t.turned |= st[i].turn != 0;
+		if (pr.height < 0 && !t.in)
+			t = {true, false, pr.u, pr.v, now, trigger};
+		else if (pr.height > 0 && t.in)
+		{
+			/* out again: a tap, unless it swiped or lingered */
+			if (!t.turned && now - t.t0 < TAP_NS)
+				click = true, pu = t.u, pv = t.v, over = true;
+			t.in = false;
+		}
+	}
+	gamepad_edit_pointer_later(over, pu, pv, click);
 	for (int i = 0; i < 2; i++)
 	{
 		/* holding it, or the fingertip on it or behind it: the hand touches
@@ -215,6 +273,14 @@ void clipboard_queue_cockpit(const mat4 *view_to_clip, const float eye[3])
 	const bool back = vibe::back_facing(b, from_view(eye, 100.0f));
 	float c[4][5];
 	vibe::corners(b, clipboard().holder.width, c);
+	{
+		float tl[3], tr[3], bl[3];
+		to_view(c[0], tl), to_view(c[1], tr), to_view(c[3], bl);
+		SDL_AtomicLock(&window_lock);
+		window_surface = vibe::Surface::from_corners(vibe::Vec3::of(tl), vibe::Vec3::of(tr), vibe::Vec3::of(bl));
+		window_board = !back;
+		SDL_AtomicUnlock(&window_lock);
+	}
 	Quad *q = (Quad *)gd_custom(quad_pass, sizeof(Quad));
 	if (!q)
 		return;
@@ -262,6 +328,38 @@ void clipboard_queue_flat(int w, int h)
 		q->v[j][4] = (k[j][0] + 1) / 2;
 		q->v[j][5] = (1 - k[j][1]) / 2;
 	}
+}
+
+void clipboard_window_view(bool cockpit)
+{
+	SDL_AtomicLock(&window_lock);
+	window_cockpit = cockpit;
+	SDL_AtomicUnlock(&window_lock);
+}
+
+bool clipboard_window_to_page(int wx, int wy, int w, int h, float *u, float *v)
+{
+	if (!clipboard().out() || w <= 0 || h <= 0)
+		return false;
+	SDL_AtomicLock(&window_lock);
+	const bool cockpit = window_cockpit, board = window_board;
+	const vibe::Surface surf = window_surface;
+	SDL_AtomicUnlock(&window_lock);
+	if (cockpit)
+	{
+		float o[3], d[3];
+		if (!board || !cockpit_pixel_ray(wx, wy, o, d))
+			return false;
+		const vibe::Surface::Hit hit = surf.ray(vibe::Vec3::of(o), vibe::Vec3::of(d));
+		*u = hit.u, *v = hit.v;
+		return hit.hit;
+	}
+	float hw, hh;
+	vibe::flat_extent(w, h, &hw, &hh);
+	const float nx = 2.0f * ((float)wx + 0.5f) / (float)w - 1.0f, ny = 1.0f - 2.0f * ((float)wy + 0.5f) / (float)h;
+	*u = (nx + hw) / (2 * hw);
+	*v = (hh - ny) / (2 * hh);
+	return *u >= 0 && *u < 1 && *v >= 0 && *v < 1;
 }
 
 void clipboard_shutdown(void)
