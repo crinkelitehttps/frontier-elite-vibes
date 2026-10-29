@@ -67,8 +67,8 @@ bool gd_wireframe(void);
  * painter's algorithm). Depth is mapped like a perspective projection's
  * between view distances near and far (clip w), onto lo..hi of the NDC
  * range -1..1, minus bias: each group of objects gets its own slice with
- * tight bounds, so depth stays precise at any distance. Linear in clip
- * space, so interpolation and clipping stay exact. Tested (LEQUAL) always;
+ * tight bounds, so depth stays precise at any distance. The depth written
+ * is the fragment's log(w); clipping is at `near` only. Tested (LEQUAL) always;
  * written if `write`; colour drawn unless `depth_only`. */
 typedef struct
 {

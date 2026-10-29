@@ -265,11 +265,13 @@ void gd_set_depth(const GdDepth *d)
 	cur_depth = d ? (uint8_t)(1 | (d->write ? 2 : 0) | (d->depth_only ? 4 : 0)) : 0;
 	if (!d)
 		return;
-	/* ndc(w) = lo + (hi - lo) * far * (w - near) / (w * (far - near)) - bias,
-	 * times w */
-	float k = (d->hi - d->lo) * d->far / (d->far - d->near);
-	depth_a = d->lo - d->bias + k;
-	depth_b = -k * d->near;
+	/* Clip z only cuts at the near plane (z = -w at w = near), never at a
+	 * far one: the slice's own lo + k (w - near) / w form put the far plane
+	 * where float rounding of k ~ 2 left it, well short of `far` when far /
+	 * near is 1e7 (clouds a few km off cut into wedges); the depth itself
+	 * is the fragment's log(w) below */
+	depth_a = 1;
+	depth_b = -2 * d->near;
 	/* What is drawn: window depth (lo..hi -> 0..1) with log(w) instead,
 	 * so the slice is precise all the way out, not only near `near` (a
 	 * slice starting under the ship reaches far over the ground) */
