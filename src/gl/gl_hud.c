@@ -52,9 +52,11 @@ bool hud_orbit_button_press(int x, int y)
 #define NUM_SLOTS      0x73  /* objects 0..$72 (L4477c) */
 #define MAX_LABELS     32
 #define TUNNEL_SQ      200
+#define TUNNEL_STEPS   1024  /* most squares laid out round the orbit */
 #define TUNNEL_GAP     0.15  /* squares this far apart along the orbit, and with half sides this much, in radii from the planet's centre */
 #define TUNNEL_HALF    0.02
-#define TUNNEL_PERIOD  1.5   /* seconds for the squares to flow on by one gap */
+#define TUNNEL_LINE_W  0.3f  /* view pixels: the squares' lines */
+#define APSIS_TEXT     0.7f  /* the orbit readout's and Ap/Pe markers' text, scaled from the game's font */
 #define TUNNEL_MIN_PX  1.5f  /* view pixels: the half side of the last square */
 #define TUNNEL_EDGE    0.1f  /* radians: the longest piece of a square's side */
 #define TEXT_LEN       48
@@ -307,24 +309,24 @@ static bool dir_from_ship(unsigned int ship, const double r[3], const double P[3
 	return true;
 }
 
-/* The tunnel's squares: along the orbit from the ship, half the way round
- * each way (or to the asymptotes), TUNNEL_GAP radii apart, each square
- * TUNNEL_HALF radii to the side of the path, across it (in the orbit's
- * plane and square to it), so that perspective alone makes them shrink and
- * curve away. They flow against the ship's motion, as the orbit passes
- * under it: ahead they grow from nothing as they come on, behind they
- * shrink to nothing as they go. Those behind the planet are left out. */
+/* The tunnel's squares: fixed in space along the orbit, so the ship flies
+ * through them. They are laid out from the periapsis both ways, each the
+ * next TUNNEL_GAP local radii (distance from the planet's centre) along the
+ * path, with half sides TUNNEL_HALF local radii, across the path (in the
+ * orbit's plane and square to it), so that perspective alone makes them
+ * shrink and curve away. Only the orbit's shape decides where they are.
+ * Those behind the planet are left out. */
 typedef struct
 {
 	unsigned int ship;
 	HudOrbit *o;
 	const double *r, *pe, *q, *hn;
-	double p, e, k, half, gap, ns;
+	double p, e, k;
 } TunnelCtx;
 
-/* The square at true anomaly nu, scaled by f (0..1); returns the arc's
- * step in nu for one gap there */
-static double tunnel_square(const TunnelCtx *t, double nu, double f)
+/* The square at true anomaly nu (drawn if draw); returns the step in nu to
+ * the next one */
+static double tunnel_square(const TunnelCtx *t, double nu, bool draw)
 {
 	double c = cos(nu), s = sin(nu), den = 1 + t->e * c, rad = t->p / den, drad = t->p * t->e * s / (den * den);
 	double P[3], T[3], m[3];
@@ -333,22 +335,22 @@ static double tunnel_square(const TunnelCtx *t, double nu, double f)
 		P[i] = rad * (c * t->pe[i] + s * t->q[i]);
 		T[i] = drad * (c * t->pe[i] + s * t->q[i]) + rad * (-s * t->pe[i] + c * t->q[i]);
 	}
-	double tl = sqrt(T[0] * T[0] + T[1] * T[1] + T[2] * T[2]);
-	if (f <= 0 || t->o->n >= TUNNEL_SQ)
-		return t->gap / tl;
+	double tl = sqrt(T[0] * T[0] + T[1] * T[1] + T[2] * T[2]), step = TUNNEL_GAP * rad / tl;
+	if (!draw || t->o->n >= TUNNEL_SQ)
+		return step;
 	for (int i = 0; i < 3; i++)
 		T[i] /= tl;
 	const double *hn = t->hn, *r = t->r;
 	m[0] = hn[1] * T[2] - hn[2] * T[1];
 	m[1] = hn[2] * T[0] - hn[0] * T[2];
 	m[2] = hn[0] * T[1] - hn[1] * T[0];
-	double sz = t->half * f;
+	double sz = TUNNEL_HALF * rad;
 	double d[3] = {P[0] - r[0], P[1] - r[1], P[2] - r[2]};
 	double a = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
 	double b = r[0] * d[0] + r[1] * d[1] + r[2] * d[2];
 	double disc = b * b - a * t->k, u = a > 0 ? (-b - sqrt(fmax(disc, 0))) / a : 2;
 	if ((disc > 0 && u > 0 && u < 1) || !(sz / sqrt(a) > TUNNEL_MIN_PX * view_pixel()))
-		return t->gap / tl;
+		return step;
 	static const int sx[4] = {-1, 1, 1, -1}, sy[4] = {-1, -1, 1, 1};
 	float out[4][3];
 	for (int j = 0; j < 4; j++)
@@ -357,47 +359,62 @@ static double tunnel_square(const TunnelCtx *t, double nu, double f)
 		for (int i = 0; i < 3; i++)
 			C[i] = P[i] + sz * (sx[j] * hn[i] + sy[j] * m[i]);
 		if (!dir_from_ship(t->ship, r, C, out[j]))
-			return t->gap / tl;
+			return step;
 	}
 	memcpy(t->o->sq[t->o->n++], out, sizeof out);
-	return t->gap / tl;
+	return step;
 }
 
 static void tunnel_calc(unsigned int ship, HudOrbit *o, const double r[3], const double pe[3], const double q[3],
 						const double h[3], double hl, double p, double e, double radius, double lim, bool closed,
 						double ns)
 {
-	double rr = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
 	double hn[3] = {h[0] / hl, h[1] / hl, h[2] / hl};
-	TunnelCtx t = {ship, o, r, pe, q, hn, p, e, r[0] * r[0] + r[1] * r[1] + r[2] * r[2] - radius * radius,
-				   TUNNEL_HALF * rr, TUNNEL_GAP * rr, ns};
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	double phase = fmod((double)ts.tv_sec + ts.tv_nsec * 1e-9, TUNNEL_PERIOD) / TUNNEL_PERIOD;
-	o->n = 0;
-	/* dir +1 ahead, -1 behind; dist = arc from the ship, the first square
-	 * a bit short of a gap, moving in on the ship as phase grows */
-	for (int dir = 1; dir >= -1; dir -= 2)
+	TunnelCtx t = {ship, o, r, pe, q, hn, p, e, r[0] * r[0] + r[1] * r[1] + r[2] * r[2] - radius * radius};
+	/* every square's nu, -span..span in order: out from the periapsis each way */
+	static double nus[TUNNEL_STEPS];
+	double half[2][TUNNEL_STEPS / 2];
+	int nh[2] = {0, 0};
+	double span = closed ? GLM_PI : lim;
+	for (int side = 0; side < 2; side++)
 	{
-		double span = closed ? GLM_PI : lim, dist = (dir > 0 ? 1 - phase : phase) * t.gap, nu = ns;
-		/* walk in nu to the first square */
+		double dir = side ? -1 : 1, nu = 0;
+		while (nh[side] < TUNNEL_STEPS / 2 && fabs(nu) < span)
 		{
-			double st = tunnel_square(&t, nu, 0) / t.gap; /* nu per unit arc */
-			nu += dir * dist * st;
+			half[side][nh[side]++] = nu;
+			nu += dir * tunnel_square(&t, nu, false);
+			if (closed && side && fabs(nu) > span - 0.5 * tunnel_square(&t, nu, false))
+				break; /* too close to the last one going the other way */
 		}
-		for (int it = 0; it < TUNNEL_SQ && o->n < TUNNEL_SQ; it++)
-		{
-			double left = span - dir * (nu - ns), f;
-			double st = tunnel_square(&t, nu, 0) / t.gap;
-			if (left <= 0)
-				break;
-			f = fmin(fmin(1.0, dist / t.gap), left / (t.gap * st));
-			if (dir < 0)
-				f = fmin(f, 1.0);
-			tunnel_square(&t, nu, f);
-			nu += dir * t.gap * st;
-			dist += t.gap;
-		}
+	}
+	int n = 0;
+	for (int i = nh[1] - 1; i >= 1; i--)
+		nus[n++] = half[1][i];
+	for (int i = 0; i < nh[0]; i++)
+		nus[n++] = half[0][i];
+	o->n = 0;
+	if (n == 0)
+		return;
+	/* nearest first, from the ship out: ahead (nu rising) and behind in turn,
+	 * all the way round a closed orbit */
+	int first = 0;
+	for (int i = 1; i < n; i++)
+		if (fabs(remainder(nus[i] - ns, 2 * GLM_PI)) < fabs(remainder(nus[first] - ns, 2 * GLM_PI)))
+			first = i;
+	int ahead = first, behind = first - 1, left = n;
+	if (remainder(nus[first] - ns, 2 * GLM_PI) < 0)
+		ahead = first + 1, behind = first;
+	while (left > 0 && o->n < TUNNEL_SQ)
+	{
+		bool any = false;
+		if (closed)
+			ahead = (ahead % n + n) % n, behind = (behind % n + n) % n;
+		if (ahead >= 0 && ahead < n && left > 0)
+			tunnel_square(&t, nus[ahead++], true), left--, any = true;
+		if (behind >= 0 && behind < n && left > 0)
+			tunnel_square(&t, nus[behind--], true), left--, any = true;
+		if (!any)
+			break;
 	}
 }
 
@@ -676,6 +693,14 @@ static void spot_text(const Spot *p, float x, float y, const unsigned char *s)
 	}
 }
 
+/* spot_text at k times the font's size (and stroke), still placed at x, y */
+static void spot_text_scaled(const Spot *p, float x, float y, float k, const unsigned char *s)
+{
+	Spot q = *p;
+	q.s *= k;
+	spot_text(&q, x / k, y / k, s);
+}
+
 /* `a` turned towards `b` by the fraction t of the angle between them */
 static void dir_towards(const float a[3], const float b[3], float t, float out[3])
 {
@@ -750,8 +775,8 @@ static void draw_velocity(const Spot *p, bool retro)
 	}
 }
 
-/* A line LINE_W view pixels wide between two directions, on the sphere
- * of radius DIST */
+/* A line TUNNEL_LINE_W view pixels wide between two directions, on the
+ * sphere of radius DIST */
 static void arc_line(const float a[3], const float b[3])
 {
 	float A[3], B[3], m[3], d[3], n[3];
@@ -761,7 +786,7 @@ static void arc_line(const float a[3], const float b[3])
 	float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
 	if (!(l > 0))
 		return;
-	float w = LINE_W * 0.5f * view_pixel() * DIST / l;
+	float w = TUNNEL_LINE_W * 0.5f * view_pixel() * DIST / l;
 	float p[4][3];
 	for (int i = 0; i < 3; i++)
 	{
@@ -798,7 +823,7 @@ static void draw_conic(const HudOrbit *o)
 		spot_line(&p, 4, -4, 4, 4);
 		spot_line(&p, 4, 4, -4, 4);
 		spot_line(&p, -4, 4, -4, -4);
-		spot_text(&p, 7, 4, (const unsigned char *)"Pe");
+		spot_text_scaled(&p, 7, 4, APSIS_TEXT, (const unsigned char *)"Pe");
 	}
 	if (o->has_ap)
 	{
@@ -807,7 +832,7 @@ static void draw_conic(const HudOrbit *o)
 		spot_line(&p, 4, -4, 4, 4);
 		spot_line(&p, 4, 4, -4, 4);
 		spot_line(&p, -4, 4, -4, -4);
-		spot_text(&p, 7, 4, (const unsigned char *)"Ap");
+		spot_text_scaled(&p, 7, 4, APSIS_TEXT, (const unsigned char *)"Ap");
 	}
 }
 
@@ -850,7 +875,7 @@ void hud_draw(const mat4 *dir_proj)
 			snprintf(ta, sizeof ta, "T-Ap ---");
 		snprintf((char *)text, sizeof text, "%s\r%s\r%s", ap, pe, ta);
 		spot_at(&p, ahead);
-		spot_text(&p, 22, -18, text);
+		spot_text_scaled(&p, 22, -18, APSIS_TEXT, text);
 	}
 	if (show.vel)
 	{
