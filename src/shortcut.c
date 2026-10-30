@@ -39,6 +39,8 @@ void ShortCut_CheckKeys(void)
 	case SDLK_q:
 		bQuitProgram = TRUE;
 		Screen_StopRenderThread();
+		vr_shutdown(); /* ends the OpenXR session; else the headset runtime keeps it */
+		log_printf("quit\n");
 		SDL_Quit();
 		exit(0);
 	case SDLK_d:
