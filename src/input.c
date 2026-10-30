@@ -12,6 +12,7 @@
 #include "gl/gl_mapscreen.h"
 #include "m68000.h"
 #include "main.h"
+#include "quiz_buttons.h"
 #include "renderer.h"
 
 CINPUT input;
@@ -255,7 +256,8 @@ void Call_GetMouseInput(void)
 	int buttons = (on_map ? 0 : input.cur_mousebut_state) | laser_btn;
 	if (!(buttons & 0x2))
 		dash_held = false;
-	else if (!dash_left && got && (hud_orbit_button_press(gx, gy) || mapscreen_dashboard_press(gx, gy)))
+	else if (!dash_left && got &&
+			 (hud_orbit_button_press(gx, gy) || mapscreen_dashboard_press(gx, gy) || quiz_buttons_click(gx, gy)))
 		dash_held = true;
 	dash_left = (buttons & 0x2) != 0;
 	if (dash_held)

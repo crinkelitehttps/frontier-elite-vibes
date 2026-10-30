@@ -44,6 +44,7 @@
 #include "m68000.h"
 #include "netplay.h"
 #include "renderer.h"
+#include "quiz_buttons.h"
 #include "screen_text.h"
 #include "touch_input.h"
 #include "ui/ui.h"
@@ -311,6 +312,7 @@ typedef struct
 	bool sub;  /* one of the game's other screens, for the cockpit's screens */
 	int group; /* ... its group's (COCKPIT_SCREEN_*), -1 if not */
 	bool mouse_shown;
+	bool quiz; /* the station's quiz waits: its buttons go on the screen (quiz_buttons.h) */
 	/* A cockpit frame that carries a new picture for the MAP screen
 	 * (gl_mapscreen.h): that page's screen and palettes; the frame's own are
 	 * the flight view's */
@@ -484,6 +486,7 @@ static void draw_pans(void)
 	}
 }
 
+static bool sub_page; /* draw_sub draws the page beside the screen's frame */
 static bool page_phone; /* the picture is the station's services': the phone icon on it */
 static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
 
@@ -558,6 +561,9 @@ void gl_screen_upload(void)
 			}
 	if (page_buttons)
 		draw_pans();
+	/* (not on a side page: the frame's own screen is the station's) */
+	if (scr_show.quiz && !sub_page)
+		quiz_buttons_draw(framebuf, scr_show.main_rgb);
 	draw_pointer();
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, screen_tex);
@@ -1181,6 +1187,7 @@ static void publish_frame(void)
 	pointer_hold = mouse_shown ? POINTER_HOLD : pointer_hold > 0 ? pointer_hold - 1 : 0;
 	mouse_shown = pointer_hold > 0;
 	scr_pub.mouse_shown = mouse_shown;
+	scr_pub.quiz = game_quiz_waiting();
 
 	if (page && cockpit)
 	{
@@ -1401,7 +1408,6 @@ static GLuint sub_target(int group, GLuint *tex)
 	return *sub_fbo;
 }
 
-static bool sub_page; /* draw_sub draws the page beside the screen's frame */
 
 static void draw_sub(int group)
 {

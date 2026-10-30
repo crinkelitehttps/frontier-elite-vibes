@@ -109,6 +109,15 @@ unsigned int game_player_ship(void)
 	return (ship > 0 && ship + 512 < MEM_SIZE) ? ship : 0;
 }
 
+bool game_quiz_waiting(void)
+{
+#if FE2_USE_MODDED
+	return false; /* fe2_modded.s skips the quiz (l75e16) */
+#endif
+	return game_screen() == SCREEN_STATION && rdbyte(GAME_A6 + 609) != 0 && rdbyte(GAME_A6 + 10427) == 0 &&
+	       (s32)rdlong(GAME_A6 + 722) >= 0;
+}
+
 const char *game_screen_name(GameScreen s)
 {
 	static const char *const names[SCREEN_COUNT] = {"Title",   "Flight",  "Galaxy map", "System map",

@@ -109,6 +109,12 @@ int game_icon_rects(int rects[][4], int max);
 /* The player's ship object, 0 when there is none yet */
 unsigned int game_player_ship(void);
 
+/* The station's copy-protection quiz ("Officer ... the letter at page,
+ * line, word") is up and waiting for its letter: the station screen, the
+ * expected letter set (609(a6)), no key taken yet (10427(a6)) and the
+ * quiz not already passed (722(a6) >= 0, see l75e16). */
+bool game_quiz_waiting(void);
+
 const char *game_screen_name(GameScreen s);
 const char *game_view_name(FlightView v);
 const char *game_status_name(FlightStatus s);
