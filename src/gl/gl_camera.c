@@ -11,6 +11,7 @@
 #include "audio.h" /* Call_PlaySFX */
 #include "galaxy/fe2vm.h"
 #include "game_state.h"
+#include "gl_cockpit.h"
 #include "host.h" /* rdword, wrword, hcalls_count */
 #include "hostcall.h"
 #include "m68000.h"
@@ -20,7 +21,7 @@
 bool cockpit_camera = true;
 int camera_zoom_max = 1024;
 
-#define CAMERA_FPS 50
+#define CAMERA_FPS 20 /* each picture is a run of the game's flight view (2 to 12 ms) */
 
 /* The flight view, as cockpit_capture_world runs it (gl_cockpit.c) */
 #ifdef FE2_SetupPlayerCamera
@@ -834,7 +835,7 @@ void camera_capture(bool screen)
 	if (!lock)
 		return;
 	take_target();
-	if (!cockpit_camera || !game_player_ship())
+	if (!cockpit_camera || !game_player_ship() || !cockpit_camera_seen())
 		return;
 	static Uint64 last;
 	Uint64 now = SDL_GetPerformanceCounter();

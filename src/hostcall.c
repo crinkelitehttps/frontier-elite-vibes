@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "audio.h"
+#include "frame_prof.h"
 #include "freecam.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hud.h"
@@ -74,15 +75,23 @@ volatile unsigned long dbg_host_updates, dbg_idles, dbg_game_starts;
 static void Call_HostUpdate(void)
 {
 	dbg_host_updates++;
+	uint64_t t = PROF_BEGIN();
 	Screen_RefreshVr();
+	PROF_END(PS_VR_REFRESH, t);
+	t = PROF_BEGIN();
 	watch_player();
 	Keymap_DebounceAllKeys();
 	ShortCut_CheckKeys();
+	PROF_END(PS_KEYS, t);
+	t = PROF_BEGIN();
 	Main_EventHandler();
+	PROF_END(PS_EVENTS, t);
+	t = PROF_BEGIN();
 	freecam_update();
 	station_resume_poll();
 	script_poll();
 	time_guard_update();
+	PROF_END(PS_UPDATES, t);
 }
 
 /* The game waiting for its next 20 ms tick: sleep rather than spin (a
@@ -556,7 +565,21 @@ static volatile unsigned trace_pos;
 	X(208) X(209) X(210) X(211) X(212) X(213) X(214) X(215) X(216) X(217) X(218) X(219) X(220) X(221) X(222) X(223) \
 	X(224) X(225) X(226) X(227) X(228) X(229) X(230) X(231) X(232) X(233) X(234) X(235) X(236) X(237) X(238) X(239) \
 	X(240) X(241) X(242) X(243) X(244) X(245) X(246) X(247) X(248) X(249) X(250) X(251) X(252) X(253) X(254) X(255)
-#define X(n) static void trace_w##n(void) { trace_ring[trace_pos++ % TRACE_RING] = n; trace_orig[n](); }
+/* GLF_FRAME_PROF: times the call, and closes the frame at Nu_DrawScreen */
+static void traced_call(int n)
+{
+	if (!prof_on)
+	{
+		trace_orig[n]();
+		return;
+	}
+	uint64_t t0 = prof_call_begin();
+	trace_orig[n]();
+	if (prof_call_end(n, t0))
+		prof_frame_end(GAME_A6 ? rdbyte(GAME_A6 + 704) : 0);
+}
+
+#define X(n) static void trace_w##n(void) { trace_ring[trace_pos++ % TRACE_RING] = n; traced_call(n); }
 ALL_CALLS
 #undef X
 #define X(n) trace_w##n,
@@ -565,6 +588,7 @@ static HOSTCALL trace_wrappers[256] = {ALL_CALLS};
 
 void hostcall_trace_install(void)
 {
+	prof_init();
 	for (int i = 0; i < hcalls_count && i < 256; i++)
 		if (hcalls[i] && hcalls[i] != trace_wrappers[i])
 		{

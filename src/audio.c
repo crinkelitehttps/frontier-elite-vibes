@@ -6,6 +6,7 @@
 #include <SDL.h>
 
 #include "audio.h"
+#include "frame_prof.h"
 #include "m68000.h"
 #include "main.h"
 
@@ -208,6 +209,7 @@ static Sint16 clamp16(int v)
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
 	(void)userdata;
+	uint64_t prof_t0 = PROF_BEGIN();
 	memset(stream, 0, (size_t)len);
 #ifdef OGG_MUSIC
 	mix_music(stream, len);
@@ -247,6 +249,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 		for (int i = 0; i < len / 2; i++)
 			out[i] = (Sint16)((out[i] * gain) >> 8);
 	}
+	if (prof_on)
+		prof_audio_add(prof_t0);
 }
 
 /* Loads an embedded WAV as 22kHz 16 bit signed (8 bit unsigned is

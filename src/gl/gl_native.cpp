@@ -676,46 +676,105 @@ static void turn_towards(const float v[3], const float w[3], float a, float out[
 		out[c] = v[c] * std::cos(a) + p[c] / l * std::sin(a);
 }
 
+/* The planets of the last flight frame published, which the capture passes
+ * are chosen from. Not `pub`: a MAP or SHIP page made after the flight
+ * frame replaces that with the page's own objects (gl_screen.c). */
+struct CaptureSource
+{
+	uint32_t addr;
+	float pos[3];
+	float cols[3][3];
+};
+static std::vector<CaptureSource> capture_sources;
+
+static void note_capture_sources(const Frame &f)
+{
+	capture_sources.clear();
+	for (int i = 0; i < f.n; i++)
+	{
+		const Object &o = f.obj[i];
+		if (!planet_model(o))
+			continue;
+		CaptureSource s;
+		s.addr = o.addr;
+		memcpy(s.pos, o.pos, sizeof s.pos);
+		memcpy(s.cols, o.cols, sizeof s.cols);
+		capture_sources.push_back(s);
+	}
+}
+
+/* Each capture pass is a run of the game's whole 3D engine, 1 to 3 ms (a
+ * planet close by is the dearest thing in it): a frame gets this many. A
+ * planet is captured again no sooner than a number of frames after its
+ * last pass, whether or not that made it seen: sooner for one never seen,
+ * later for one already captured, which keeps its sphere and haze meanwhile,
+ * placed by the current frame's pose. Of those due, the one that has waited
+ * longest goes first; one never tried at all is due at once. And no pass
+ * follows another sooner than CAPTURE_GAP_FRAMES: a system has some 25
+ * bodies, and each one's interval alone leaves a pass in nearly every frame. */
+#define CAPTURE_PASSES_PER_FRAME 1
+#define CAPTURE_GAP_FRAMES 3
+#define CAPTURE_RETRY_FRAMES 6    /* never seen */
+#define CAPTURE_REFRESH_FRAMES 24 /* seen */
+
 extern "C" int native_capture_dirs(float dirs[][3], int max)
 {
 	if (enabled != 2)
 		return 0;
-	static unsigned parity;
+	static unsigned parity, last_any;
+	static std::unordered_map<uint32_t, unsigned> last_pass; /* by object, the frame of its last pass */
 	parity++;
 	const float ahead[3] = {0, 0, -1};
+	if (last_any && parity - last_any < CAPTURE_GAP_FRAMES)
+		return 0;
+	if (max > CAPTURE_PASSES_PER_FRAME)
+		max = CAPTURE_PASSES_PER_FRAME;
 	int n = 0;
-	for (int i = 0; i < pub.n && n < max; i++)
+	while (n < max)
 	{
-		const Object &o = pub.obj[i];
-		if (!planet_model(o))
-			continue;
-		float c[3], radius;
-		bool was_ahead = false;
-		if (planet_native_find(o.addr, o.pos, o.cols, c, &radius, &was_ahead))
+		const CaptureSource *best = nullptr;
+		float best_dir[3];
+		unsigned best_age = 0;
+		for (const CaptureSource &o : capture_sources)
 		{
-			if (was_ahead)
+			float c[3], radius;
+			bool was_ahead = false, fresh = false;
+			if (planet_native_find(o.addr, o.pos, o.cols, c, &radius, &was_ahead))
+			{
+				if (was_ahead)
+					continue;
+			}
+			else
+			{
+				/* not seen yet: its centre, and its size if it was a far body */
+				memcpy(c, o.pos, sizeof c);
+				auto f = far_radius.find(o.addr);
+				radius = f != far_radius.end() ? f->second : 0;
+				fresh = true;
+			}
+			auto t = last_pass.find(o.addr);
+			unsigned age = t == last_pass.end() ? ~0u : parity - t->second;
+			if (age < (fresh ? CAPTURE_RETRY_FRAMES : CAPTURE_REFRESH_FRAMES) || (best && age <= best_age))
 				continue;
+			float dist = std::sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
+			if (dist <= 0)
+				continue;
+			float u[3] = {c[0] / dist, c[1] / dist, c[2] / dist}, g[3];
+			/* its horizon, where it is nearest ahead: the planet's routine
+			 * makes the planet and its haze when that is in view. Size unknown:
+			 * its centre and a right angle off it, a frame each. */
+			float a = radius > 0 ? std::asin(std::min(radius / dist, 1.0f)) : parity & 1 ? 1.5708f : 0.0f;
+			turn_towards(u, ahead, a, g);
+			best = &o;
+			best_age = age;
+			best_dir[0] = g[0];
+			best_dir[1] = g[1];
+			best_dir[2] = -g[2]; /* the game's: z ahead */
 		}
-		else
-		{
-			/* not seen yet: its centre, and its size if it was a far body */
-			memcpy(c, o.pos, sizeof c);
-			auto f = far_radius.find(o.addr);
-			radius = f != far_radius.end() ? f->second : 0;
-		}
-		float dist = std::sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
-		if (dist <= 0)
-			continue;
-		float u[3] = {c[0] / dist, c[1] / dist, c[2] / dist}, g[3];
-		/* its horizon, where it is nearest ahead: the planet's routine
-		 * makes the planet and its haze when that is in view. Size unknown:
-		 * its centre and a right angle off it, a frame each. */
-		float a = radius > 0 ? std::asin(std::min(radius / dist, 1.0f)) : parity & 1 ? 1.5708f : 0.0f;
-		turn_towards(u, ahead, a, g);
-		dirs[n][0] = g[0];
-		dirs[n][1] = g[1];
-		dirs[n][2] = -g[2]; /* the game's: z ahead */
-		n++;
+		if (!best)
+			break;
+		memcpy(dirs[n++], best_dir, sizeof best_dir);
+		last_pass[best->addr] = last_any = parity;
 	}
 	return n;
 }
@@ -929,9 +988,11 @@ static void map_orbit_draw(const Frame &f)
 			gd_line(f.orbit.pt[i], f.orbit.pt[i + 1]);
 }
 
-extern "C" void native_publish(void)
+extern "C" void native_publish(bool screen)
 {
 	map_orbit_build(rec);
+	if (!screen)
+		note_capture_sources(rec);
 	pub = rec;
 	pub.texts = texts_seen;
 	pub.serial = ++publishes;
@@ -940,6 +1001,7 @@ extern "C" void native_publish(void)
 extern "C" void native_publish_world(void)
 {
 	map_orbit_build(rec);
+	note_capture_sources(rec);
 	pub_world = rec;
 	pub_world.texts = texts_seen;
 	pub_world.serial = ++publishes;

@@ -27,8 +27,8 @@ bool cockpit_map_live = true;
 bool cockpit_ship_live = true;
 
 #define IDLE_FPS  2
-#define MAP_IDLE_FPS 20 /* the maps move: the orrery turns, the galaxy map scrolls */
-#define SHIP_IDLE_FPS 30 /* the ship turns */
+#define MAP_IDLE_FPS 10 /* the maps move: the orrery turns, the galaxy map scrolls */
+#define SHIP_IDLE_FPS 15 /* the ship turns */
 #define FOCUS_FPS 50
 #define FOCUS_MS  300 /* the screen counts as in use this long after the pointer left it */
 

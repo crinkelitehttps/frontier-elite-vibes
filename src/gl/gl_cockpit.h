@@ -160,6 +160,13 @@ void cockpit_draw_flat(bool flat);
 bool cockpit_active(void);
 /* Whether the frame last shown is the cockpit; any thread */
 bool cockpit_shown(void);
+/* Whether the camera screen is in or near the view (a moment ago, with a
+ * margin for the head turning): when not, its picture is not made (it
+ * costs a second run of the game's flight view). Never when the cockpit
+ * isn't shown, which has no camera screen. Any thread. (The MAP and SHIP
+ * pages are made whether seen or not: without them the game's own frame
+ * costs more than they do.) */
+bool cockpit_camera_seen(void);
 
 /* A VR headset (vr.h), before cockpit_begin_frame: this frame's head pose
  * is `centre`'s instead of the head tracker's, and the turned passes

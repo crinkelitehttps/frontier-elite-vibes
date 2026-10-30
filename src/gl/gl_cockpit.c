@@ -148,6 +148,7 @@ typedef struct
 	mat4 eye_view[2];
 	float eye_tan[2][4]; /* left, right, down, up */
 	int host_shown; /* host_shown_mask() */
+	bool cam_in_view; /* the camera screen is in or near the view (quad_in_view) */
 } SharedView;
 static SharedView shared = {.head_view = {{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}}, .aspect = 16.0f / 9.0f};
 static SDL_mutex *shared_lock;
@@ -549,6 +550,46 @@ bool cockpit_capture_world(void)
 	return !err;
 }
 
+/* Whether a screen's quad (view space) is in or near a view: eye space axes
+ * (V turns view space into eye space; eye_to_view_of uses its transpose),
+ * frustum edges at distance 1, enlarged by SEEN_MARGIN for the head
+ * turning before the next picture. Conservative: not seen only when all four
+ * corners are past the same edge, so a quad crossing the eye plane is seen. */
+#define SEEN_MARGIN 1.4f
+static bool quad_in_view(const float q[4][3], const float at[3], const mat4 *V, float l, float r, float d, float u)
+{
+	const float *m = V->m;
+	int outside[4] = {0, 0, 0, 0}; /* corners left of, right of, below, above */
+	for (int i = 0; i < 4; i++)
+	{
+		float p[3] = {q[i][0] - at[0], q[i][1] - at[1], q[i][2] - at[2]}, e[3];
+		for (int k = 0; k < 3; k++)
+			e[k] = m[0 + k] * p[0] + m[4 + k] * p[1] + m[8 + k] * p[2];
+		float depth = -e[2];
+		if (depth <= 0.02f)
+			return true;
+		outside[0] += e[0] < l * depth;
+		outside[1] += e[0] > r * depth;
+		outside[2] += e[1] < d * depth;
+		outside[3] += e[1] > u * depth;
+	}
+	return !(outside[0] == 4 || outside[1] == 4 || outside[2] == 4 || outside[3] == 4);
+}
+
+/* ... in the window's view or either of a headset's eyes */
+static bool seen_by_any(const float q[4][3], const SharedView *v, float t)
+{
+	if (quad_in_view(q, v->eye, &v->head_view, -v->aspect * t * SEEN_MARGIN, v->aspect * t * SEEN_MARGIN, -t * SEEN_MARGIN, t * SEEN_MARGIN))
+		return true;
+	for (int i = 0; i < v->n_eyes; i++)
+	{
+		const float *e = v->eye_tan[i];
+		if (quad_in_view(q, v->eye, &v->eye_view[i], e[0] * SEEN_MARGIN, e[1] * SEEN_MARGIN, e[2] * SEEN_MARGIN, e[3] * SEEN_MARGIN))
+			return true;
+	}
+	return false;
+}
+
 static void publish_view(void)
 {
 	SharedView v;
@@ -566,11 +607,27 @@ static void publish_view(void)
 		v.eye_tan[i][2] = hs_eyes[i].tan_down;
 		v.eye_tan[i][3] = hs_eyes[i].tan_up;
 	}
+	float fov_tan = tanf((float)cockpit_fov * GLM_PI / 360.0f);
+	v.cam_in_view = seen_by_any((const float(*)[3])cam, &v, fov_tan);
 	if (shared_lock)
 		SDL_LockMutex(shared_lock);
 	shared = v;
 	if (shared_lock)
 		SDL_UnlockMutex(shared_lock);
+}
+
+/* Seen lately: the camera screen that leaves the view is still made for a
+ * moment, so a quick turn back finds a picture */
+#define SEEN_HOLD_MS 300
+bool cockpit_camera_seen(void)
+{
+	static Uint32 last;
+	SharedView v;
+	get_shared(&v);
+	Uint32 t = SDL_GetTicks();
+	if (v.active && v.cam_in_view)
+		last = t ? t : 1;
+	return last && t - last < SEEN_HOLD_MS;
 }
 
 bool cockpit_shown(void)

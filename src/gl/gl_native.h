@@ -67,7 +67,8 @@ float native_frame_shrink(uint32_t a6);
  * screen (gl_cockpit.h), kept apart from the world: the last cockpit
  * frame's, or the one captured under the screen. */
 void native_reset(void);
-void native_publish(void);
+/* (`screen`: not the flight frame, so not what the capture passes look at) */
+void native_publish(bool screen);
 /* (game thread) the world captured under a screen (scene_publish_world);
  * `world`: one was published since the last acquire */
 void native_publish_world(void);
@@ -91,7 +92,10 @@ void native_draw_sky(void);
  * directions (game view, z ahead) of planets the game's own view did not
  * draw last frame, at their horizon. The game is to draw a pass that way
  * too (a capture pass, not shown), so the planet's routine gives the
- * planet's sphere and its atmosphere. Returns how many, up to `max`. */
+ * planet's sphere and its atmosphere. Returns how many, up to `max` and a
+ * few a frame: the ones never seen first, else the planets in turn. They
+ * are the planets of the last flight frame published, whatever else (a
+ * MAP page) was published since. */
 int native_capture_dirs(float dirs[][3], int max);
 
 /* Game thread, after the game's 3D view this frame (its HUD): where the

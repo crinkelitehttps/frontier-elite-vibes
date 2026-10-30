@@ -37,6 +37,7 @@
 #include "gl_prims.h"
 #include "gl_scene.h"
 
+#include "frame_prof.h"
 #include "game_state.h"
 #include "input.h"
 #include "main.h"
@@ -980,6 +981,52 @@ static GLuint draw_menu_vr(void)
 /* The frame for the headset, if it wants one: the cockpit per eye, or
  * the classic picture on the virtual screen. Before the window's: the
  * window's cockpit is turned by the same head pose. */
+/* GLF_FRAME_PROF: the GPU time of the headset's eyes, from timer queries read
+ * a few pictures late so as never to wait for them */
+#define VR_GPU_QUERIES 6
+static GLuint vr_gpu_q[VR_GPU_QUERIES];
+static bool vr_gpu_issued[VR_GPU_QUERIES];
+static int vr_gpu_next;
+static bool vr_gpu_open;
+
+static void vr_gpu_begin(void)
+{
+#if !GL_IS_GLES
+	if (!prof_on)
+		return;
+	if (!vr_gpu_q[0])
+		glGenQueries(VR_GPU_QUERIES, vr_gpu_q);
+	/* (a query still unread when its turn comes round is dropped) */
+	glBeginQuery(GL_TIME_ELAPSED, vr_gpu_q[vr_gpu_next]);
+	vr_gpu_open = true;
+#endif
+}
+
+static void vr_gpu_end(void)
+{
+#if !GL_IS_GLES
+	if (!vr_gpu_open)
+		return;
+	glEndQuery(GL_TIME_ELAPSED);
+	vr_gpu_issued[vr_gpu_next] = true;
+	vr_gpu_next = (vr_gpu_next + 1) % VR_GPU_QUERIES;
+	vr_gpu_open = false;
+	for (int i = 0; i < VR_GPU_QUERIES; i++)
+	{
+		GLuint ready = 0;
+		if (!vr_gpu_issued[i])
+			continue;
+		glGetQueryObjectuiv(vr_gpu_q[i], GL_QUERY_RESULT_AVAILABLE, &ready);
+		if (!ready)
+			continue;
+		GLuint64 ns = 0;
+		glGetQueryObjectui64v(vr_gpu_q[i], GL_QUERY_RESULT, &ns);
+		prof_vr_gpu((unsigned)ns);
+		vr_gpu_issued[i] = false;
+	}
+#endif
+}
+
 static bool draw_vr(bool with_menu)
 {
 	vr_update();
@@ -993,7 +1040,9 @@ static bool draw_vr(bool with_menu)
 		return cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub ? scr_show.group : -1);
 	}
 
+	uint64_t prof_t0 = PROF_BEGIN();
 	bool render = vr_begin_frame();
+	uint64_t prof_t1 = PROF_BEGIN();
 	VrView eyes[2], centre;
 	bool tracked = render && vr_tracking();
 	if (tracked)
@@ -1020,6 +1069,7 @@ static bool draw_vr(bool with_menu)
 	if (render)
 	{
 		vr_pointer = true;
+		vr_gpu_begin();
 		if (cockpit && tracked)
 		{
 			for (int i = 0; i < 2; i++)
@@ -1048,10 +1098,14 @@ static bool draw_vr(bool with_menu)
 				vr_release_overlay_eye(i);
 			}
 		}
+		vr_gpu_end();
 		vr_pointer = false;
 	}
+	uint64_t prof_t2 = PROF_BEGIN();
 	vr_end_frame();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	if (prof_on)
+		prof_vr_add(prof_t1 - prof_t0, prof_t2 - prof_t1, prof_now() - prof_t2);
 	return cockpit;
 }
 
@@ -1109,7 +1163,10 @@ static void publish_frame(void)
 	int page_group = (cockpit || beside) ? mapscreen_due() : -1;
 	bool page = page_group >= 0;
 
+	uint64_t t = PROF_BEGIN();
 	SDL_LockMutex(frame_lock);
+	PROF_END(PS_PUB_LOCK, t);
+	t = PROF_BEGIN();
 	scr_pub.cockpit = cockpit;
 	scr_pub.group = group;
 	scr_pub.sub = group >= 0;
@@ -1130,7 +1187,11 @@ static void publish_frame(void)
 		/* the flight frame is the world, as a captured one is, and the page
 		 * is made next; the frame is published after it */
 		scene_publish_world();
+		PROF_END(PS_PUB_SCENE, t);
+		t = PROF_BEGIN();
 		hud_publish(false);
+		PROF_END(PS_PUB_HUD, t);
+		t = PROF_BEGIN();
 		/* the frame before, if the drawing hasn't taken it, is dropped: it
 		 * would be taken with this one half made, and a page's scene (the
 		 * published one) as the world's */
@@ -1141,8 +1202,14 @@ static void publish_frame(void)
 	else
 	{
 		memcpy(scr_pub.screen, VideoRaster, sizeof scr_pub.screen);
+		PROF_END(PS_PUB_REST, t);
+		t = PROF_BEGIN();
 		scene_publish(scr_pub.sub);
+		PROF_END(PS_PUB_SCENE, t);
+		t = PROF_BEGIN();
 		hud_publish(scr_pub.sub);
+		PROF_END(PS_PUB_HUD, t);
+		t = PROF_BEGIN();
 		frame_new = true;
 	}
 	if (scr_pub.cockpit)
@@ -1153,7 +1220,9 @@ static void publish_frame(void)
 		lab_new = true;
 	}
 	SDL_UnlockMutex(frame_lock);
+	PROF_END(PS_PUB_REST, t);
 
+	t = PROF_BEGIN();
 	if (page)
 	{
 		bool ok = mapscreen_page(page_group, &map_page);
@@ -1182,10 +1251,16 @@ static void publish_frame(void)
 		frame_new = true;
 		SDL_UnlockMutex(frame_lock);
 	}
+	PROF_END(PS_PUB_PAGE, t);
 
 	/* the world round the cockpit's screen, live, with its labels */
 	if (scr_pub.sub)
+	{
+		uint64_t t = PROF_BEGIN();
 		pace_screen_frames();
+		PROF_END(PS_PACE, t);
+	}
+	t = PROF_BEGIN();
 	bool world = scr_pub.sub && cockpit_capture_world();
 	if (world)
 	{
@@ -1197,11 +1272,14 @@ static void publish_frame(void)
 		SDL_UnlockMutex(frame_lock);
 	}
 	screen_text_clear_queue();
+	PROF_END(PS_PUB_WORLD, t);
 	/* the camera screen's picture, the game's own (gl_camera.h) */
+	t = PROF_BEGIN();
 	if (scr_pub.cockpit || scr_pub.sub)
 		camera_capture(scr_pub.sub);
 	if (world)
 		camera_shots_drawn();
+	PROF_END(PS_PUB_CAMERA, t);
 	hud_frame_end();
 	SDL_AtomicIncRef(&published);
 }
@@ -1209,6 +1287,7 @@ static void publish_frame(void)
 /* Whoever draws: takes the latest frame, if there is a new one */
 static bool acquire_frame(void)
 {
+	uint64_t prof_t0 = PROF_BEGIN();
 	SDL_LockMutex(frame_lock);
 	bool got = frame_new;
 	if (frame_new)
@@ -1229,6 +1308,8 @@ static bool acquire_frame(void)
 		lab_uploaded = false;
 	}
 	SDL_UnlockMutex(frame_lock);
+	if (prof_on)
+		prof_render_acquire(prof_t0);
 	return got;
 }
 
@@ -1459,7 +1540,7 @@ static Uint32 last_draw_ticks;
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
-	Uint64 lap = SDL_GetPerformanceCounter();
+	Uint64 lap = SDL_GetPerformanceCounter(), pic0 = lap;
 	bool new_frame = acquire_frame();
 	log_rates(new_frame);
 	stage_ms[0] += stage_lap(&lap);
@@ -1490,9 +1571,12 @@ static void draw_picture(bool with_menu)
 	stage_ms[4] += stage_lap(&lap);
 	dbg_frames++;
 	last_draw_ticks = SDL_GetTicks();
+	Uint64 swap0 = SDL_GetPerformanceCounter();
 	if (window_seen)
 		SDL_GL_SwapWindow(window);
 	stage_ms[5] += stage_lap(&lap);
+	if (prof_on)
+		prof_render_add(pic0, swap0, SDL_GetPerformanceCounter());
 }
 
 static int render_main(void *arg)
@@ -1615,21 +1699,33 @@ void Screen_RefreshVr(void)
 
 void Nu_DrawScreen(void)
 {
+	uint64_t t = PROF_BEGIN();
 	netplay_tick(); /* game thread: the other player's ghost ship */
+	PROF_END(PS_NETPLAY, t);
 
 	Screen_SyncSize(); /* a DPI change (browser zoom, other monitor) may come without a resize event */
 
 	/* the text the game queued during the frame, into the emulated screen */
+	t = PROF_BEGIN();
 	screen_text_draw_queue();
+	PROF_END(PS_TEXT, t);
 
+	t = PROF_BEGIN();
 	publish_frame();
 	update_cursor();
+	PROF_END(PS_PUBLISH, t);
 
 	if (render_thread_enabled && !ui_visible())
 	{
+		t = PROF_BEGIN();
 		context_to_render();
+		PROF_END(PS_HANDOFF, t);
 		return;
 	}
+	t = PROF_BEGIN();
 	context_to_main();
+	PROF_END(PS_HANDOFF, t);
+	t = PROF_BEGIN();
 	draw_picture(true);
+	PROF_END(PS_INLINE, t);
 }

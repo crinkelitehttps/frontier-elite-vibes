@@ -349,7 +349,7 @@ void scene_publish(bool screen)
 	}
 	else
 		planet_screen_publish();
-	native_publish();
+	native_publish(screen);
 }
 
 void scene_publish_page(void)
