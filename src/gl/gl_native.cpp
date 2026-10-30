@@ -356,6 +356,7 @@ struct Far
 	int colour;   /* the model's word at +18: bit 15 twinkly, then 444 + flags */
 	float light[3];
 	uint16_t tint[8];
+	bool planet; /* a planet's model: the game runs it whole (Nu_NativeFar), the disc only stands in when tiny */
 };
 
 /* The orbit in the system map (map_orbit_build): points in the map's view
@@ -554,8 +555,15 @@ extern "C" void Nu_NativeFar(void)
 	if ((int16_t)GetReg(REG_D7) < (int16_t)rdword(m + 20) || (int32_t)rdlong(a6 - 8) < 0x40)
 		return;
 	uint32_t addr = (uint32_t)rdlong(a6 - 212);
-	far_a6 = a6;
-	far_addr = addr;
+	/* A planet is not turned into a disc: the game runs its model (the
+	 * planet command) at any distance, with d7 under the disc limit for
+	 * the compare after this hook. A twinkly one (a sun) stays a disc. */
+	const Code *pc = code_for(table_of(addr), (uint16_t)rdword(addr + 90) / 2);
+	bool planet = pc && pc->planet && !((uint16_t)rdword(m + 18) & 0x8000);
+	if (planet)
+		SetReg(REG_D7, (uint32_t)(int32_t)((int16_t)rdword(m + 20) - 1));
+	far_a6 = planet ? 0 : a6;
+	far_addr = planet ? 0 : addr;
 	bool have = false;
 	for (int i = 0; i < rec.nfar && !have; i++)
 		have = rec.far[i].addr == addr;
@@ -569,9 +577,10 @@ extern "C" void Nu_NativeFar(void)
 		f.radius = std::ldexp((float)(int16_t)rdword(m + 14), (int16_t)rdword(a6 - 208) + 1);
 		f.colour = (uint16_t)rdword(m + 18);
 		f.shrink = native_frame_shrink(a6);
+		f.planet = planet;
 		capture_light(a6, f.light, f.tint);
 	}
-	SetReg(REG_D0, enabled == 2 ? 1 : 0);
+	SetReg(REG_D0, enabled == 2 && !planet ? 1 : 0);
 }
 
 /* The sky model, drawn by L44200_DrawBGStars through L39426 in every pass:
@@ -2491,11 +2500,30 @@ void draw_fars()
 	};
 	std::vector<Item> order;
 	auto dist = [](const float *p) { return std::sqrt((double)p[0] * p[0] + (double)p[1] * p[1] + (double)p[2] * p[2]); };
+	/* A planet is its model, however far; only when it is a few pixels
+	 * wide (or its sphere hasn't been seen) the disc or dot stands in */
+	auto tiny = [](const Far &f) { return f.radius / px_at(f.pos) < 3.0f; };
+	auto has_sphere = [&](const Far &f) {
+		for (int i = 0; i < planet_native_count(); i++)
+			if (planet_native_object_addr(i) == f.addr)
+				return true;
+		return false;
+	};
+	std::vector<uint32_t> dotted; /* planet objects drawn as a dot */
 	for (int i = 0; i < shown->nfar; i++)
-		order.push_back({dist(shown->far[i].pos) * shown->far[i].shrink, i, -1, nullptr});
+	{
+		const Far &f = shown->far[i];
+		if (f.planet && !tiny(f) && has_sphere(f))
+			continue;
+		if (f.planet)
+			dotted.push_back(f.addr);
+		order.push_back({dist(f.pos) * f.shrink, i, -1, nullptr});
+	}
 	double nearest_planet = 1e300;
 	for (int i = 0; i < planet_native_count(); i++)
 	{
+		if (std::find(dotted.begin(), dotted.end(), planet_native_object_addr(i)) != dotted.end())
+			continue;
 		order.push_back({planet_native_dist(i) * planet_native_shrink(i), -1, i, nullptr});
 		nearest_planet = std::min(nearest_planet, order.back().d);
 	}
