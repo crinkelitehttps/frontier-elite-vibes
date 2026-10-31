@@ -54808,7 +54808,7 @@ L7822c:
 		movem.l	11746(a6),d1-5/a2-3
 		btst	#$d,d4
 		bne.s	l78258
-* Lseats_free: free cabins plus Passenger Seats (same size)
+* Lseats_free: free cabins plus Sleeper Berths (same size)
 		jsr	Lseats_free
 		nop
 		ext.w	d4
@@ -55183,7 +55183,7 @@ L78668:
 L786c2:
 		move.w	#$98d1,d0
 		move.l	734(a6),d1
-* Lseats_figures: the cabin figure counts Passenger Seats too (same size)
+* Lseats_figures: the cabin figure counts Sleeper Berths too (same size)
 		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
@@ -59102,7 +59102,7 @@ L7f54a:
 L7f55c:
 		move.w	#$9c38,d0
 		move.l	734(a6),d1
-* Lseats_figures: the cabin figure counts Passenger Seats too (same size)
+* Lseats_figures: the cabin figure counts Sleeper Berths too (same size)
 		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
@@ -67759,7 +67759,7 @@ Lcam_relvec:
 *    $60 Mars, $6f for Ross 154; Earth is object $6e).
 *  - Lstart_ship replaces cmp.w #$1,d0 / bne.w l616f0 in L61666; the Earth
 *    case is the Mars one (L61666 code 1) with the shuttle (model 10, d1 =
-*    $14), Atmospheric Shielding (bit 14) and Passenger Seats (bit 20):
+*    $14), Atmospheric Shielding (bit 14) and Sleeper Berths (bit 20):
 *    1 + 2 t, the whole 3 t left beside the built-in interplanetary drive
 *    (drive word $8001: grade 1, 4 t, taken off the capacity of 7 t when
 *    the object is made). No gun mountings. Earth's surface bases are
@@ -67813,7 +67813,7 @@ lstart_earth:
 		jmp	L617ea
 
 ******************************************************************************
-* Passenger Seats: equipment, 2 t, sold at every station (tech level 0), one
+* Sleeper Berths: equipment, 2 t, sold at every station (tech level 0), one
 * per ship. Equipment flag bit 20 (the random damage routine L44fd6 picks
 * bits 0-18 and the station repair list knows 0-17, so it never breaks).
 * Four seats for in-system passenger jobs; small ships such as the
@@ -67834,11 +67834,12 @@ Lseats_equipment:
 * ^^ kind 0 (flag bit), flags, bit 20, tech level 0
 
 lseats_s_name:
-		dc.b	"Passenger Seats"
-		dc.b	$0
+		dc.b	"Sleeper Berths"
+		dc.b	$0,$0
+* ^^ two zeros: the same length as the old name, so nothing after it moves
 
 ******************************************************************************
-* Passenger Seats hooks (original build; the modded build adds the seats to
+* Sleeper Berths hooks (original build; the modded build adds the seats to
 * its Lafmu_ hooks instead). Each replaces code of the same size:
 *   L76a76 shop list (lea L7655c(pc),a1 / moveq #0,d0)      -> Lseats_shop_row
 *   L76b0e buy/sell (subi.w #$9873,d6 / mulu / lea L7655c)   -> Lseats_find_item
@@ -67925,7 +67926,7 @@ lseats_flag_ours:
 *  - station strings (fn 40): Lshuttle_strings, ids SH_STR_BASE and up;
 *  - L7ee5e (passengers leaving at a landing): Lshuttle_match, a shuttle
 *    passenger only leaves at the starport it booked.
-* Seats and cabins: Passenger Seats (SEATS_BIT) give 4 places on top of the
+* Seats and cabins: Sleeper Berths (SEATS_BIT) give 4 places on top of the
 * cabins (740(a6)), for these jobs and the game's passenger adverts alike.
 ******************************************************************************
 SH_STR_AD		equ	$99d5
@@ -68269,7 +68270,7 @@ lsh_s_thanks:
 lsh_s_none:
 		dc.b	$0
 lsh_s_room:
-		dc.b	"You do not have enough free seats or cabins.",$0
+		dc.b	"You do not have enough free berths or cabins.",$0
 lsh_s_one:
 		dc.b	"a seat",$0
 lsh_s_two:
@@ -68282,8 +68283,6 @@ lsh_s_soon:
 		dc.b	"two days",$0
 lsh_s_later:
 		dc.b	"two weeks",$0
-* pad: the code after needs an even address
-		ds.b	1
 
 
 * Not a shuttle item: the game's own click table

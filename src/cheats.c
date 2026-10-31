@@ -221,7 +221,7 @@ static const char *const equip_names[] = {
 	"Auto Field-Maintenance Unit (Game Mod)",
 #endif
 	/* added to both builds (Lseats_equipment) */
-	"Passenger Seats",
+	"Sleeper Berths",
 };
 #define EQUIP_COUNT ((int)(sizeof(equip_names) / sizeof(equip_names[0])))
 

@@ -9,11 +9,11 @@ bug fixes. Job data lives in the game's own memory (the passenger list), so it i
 ## 1. Earth start (title key 4)
 
 Start code 3 (unused by the game). Landed at London in an Interplanetary Shuttle (model 10) with Atmospheric
-Shielding and Passenger Seats, 100 credits. Keys 5 and 6 are now "last saved position" and "load from disc".
+Shielding and Sleeper Berths, 100 credits. Keys 5 and 6 are now "last saved position" and "load from disc".
 Hooks `Lstart_keys`, `Lstart_body`, `Lstart_ship`. The shuttle's data was changed: capacity 4 t -> 7 t (the
 built-in drive takes 4 t) and reverse/vertical thrust -1635 -> -2500 (it could not lift off from Earth).
 
-## 2. Passenger Seats
+## 2. Sleeper Berths
 
 Equipment flag bit 20 of the ship's equipment long (`158(ship)`), 2 t, 100 credits, sold everywhere.
 Four places for passengers, on top of cabins (`740(a6)`), for shuttle runs and the game's own passenger

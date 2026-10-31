@@ -35386,12 +35386,12 @@ extern void __Fa9e1a ();
 #define __Dlsh_s_thanks (0xa9d68)
 #define __Dlsh_s_none (0xa9d9a)
 #define __Dlsh_s_room (0xa9d9b)
-#define __Dlsh_s_one (0xa9dc8)
-#define __Dlsh_s_two (0xa9dcf)
-#define __Dlsh_s_three (0xa9dd9)
-#define __Dlsh_s_four (0xa9de5)
-#define __Dlsh_s_soon (0xa9df0)
-#define __Dlsh_s_later (0xa9df9)
+#define __Dlsh_s_one (0xa9dc9)
+#define __Dlsh_s_two (0xa9dd0)
+#define __Dlsh_s_three (0xa9dda)
+#define __Dlsh_s_four (0xa9de6)
+#define __Dlsh_s_soon (0xa9df1)
+#define __Dlsh_s_later (0xa9dfa)
 #define __DLshuttle_click_game (0xa9e04)
 #define __DLshuttle_modstr (0xa9e0a)
 #define __Dlshuttle_modstr_afmu (0xa9e16)
@@ -484287,11 +484287,11 @@ __NLbuildtag_marker:
 __NLmdlmod_lookup:
 	case (0x8339a):
 	#ifdef M68K_DEBUG
-		line_no = 66989;
+		line_no = 66990;
 	#endif
 	__F833a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 66990;
+		line_no = 66991;
 	#endif
 	if (nZ)
 	{
@@ -484302,19 +484302,19 @@ __NLmdlmod_lookup:
 		goto __Nlmdlmod_table;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 66991;
+		line_no = 66992;
 	#endif
 	__F833a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 66992;
+		line_no = 66993;
 	#endif
 	__F833a6 ();
 	#ifdef M68K_DEBUG
-		line_no = 66993;
+		line_no = 66994;
 	#endif
 	__F833aa ();
 	#ifdef M68K_DEBUG
-		line_no = 66994;
+		line_no = 66995;
 	#endif
 	if ((!C))
 	{
@@ -484325,23 +484325,23 @@ __NLmdlmod_lookup:
 		goto __Nlmdlmod_table;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 66995;
+		line_no = 66996;
 	#endif
 	__F833ae ();
 	#ifdef M68K_DEBUG
-		line_no = 66996;
+		line_no = 66997;
 	#endif
 	Regs[9]._u32 = (__DLmdlmod_ptrs);
 	#ifdef M68K_DEBUG
-		line_no = 66997;
+		line_no = 66998;
 	#endif
 	Regs[9]._u32 = Regs[9]._s32 + (s32)Regs[1]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 66998;
+		line_no = 66999;
 	#endif
 	__F833b8 ();
 	#ifdef M68K_DEBUG
-		line_no = 66999;
+		line_no = 67000;
 	#endif
 	if ((!nZ))
 	{
@@ -484352,19 +484352,19 @@ __NLmdlmod_lookup:
 		goto __Nlmdlmod_table;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67000;
+		line_no = 67001;
 	#endif
 	__F833bc ();
 	#ifdef M68K_DEBUG
-		line_no = 67001;
+		line_no = 67002;
 	#endif
 	__F833be ();
 	#ifdef M68K_DEBUG
-		line_no = 67002;
+		line_no = 67003;
 	#endif
 	Regs[8]._s32 = Regs[1]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67003;
+		line_no = 67004;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484372,23 +484372,23 @@ __NLmdlmod_lookup:
 __Nlmdlmod_table:
 	case (0x833c2):
 	#ifdef M68K_DEBUG
-		line_no = 67005;
+		line_no = 67006;
 	#endif
 	__F833c4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67006;
+		line_no = 67007;
 	#endif
 	__F833c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67007;
+		line_no = 67008;
 	#endif
 	__F833ca ();
 	#ifdef M68K_DEBUG
-		line_no = 67008;
+		line_no = 67009;
 	#endif
 	Regs[8]._u32 = Regs[8]._s32 + (s32)Regs[1]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67009;
+		line_no = 67010;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484396,15 +484396,15 @@ __Nlmdlmod_table:
 __Nlmdlmod_a1_d0_d0:
 	case (0x833ce):
 	#ifdef M68K_DEBUG
-		line_no = 67012;
+		line_no = 67013;
 	#endif
 	__F833d2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67013;
+		line_no = 67014;
 	#endif
 	Regs[8]._s32 = Regs[9]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67014;
+		line_no = 67015;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D833d8);
@@ -484413,19 +484413,19 @@ __Nlmdlmod_a1_d0_d0:
 	}
 	case (0x833d8):
 	#ifdef M68K_DEBUG
-		line_no = 67015;
+		line_no = 67016;
 	#endif
 	__F833dc ();
 	#ifdef M68K_DEBUG
-		line_no = 67016;
+		line_no = 67017;
 	#endif
 	__F833e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67017;
+		line_no = 67018;
 	#endif
 	__F833e4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67018;
+		line_no = 67019;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484433,15 +484433,15 @@ __Nlmdlmod_a1_d0_d0:
 __Nlmdlmod_a2_d0_d0:
 	case (0x833e6):
 	#ifdef M68K_DEBUG
-		line_no = 67021;
+		line_no = 67022;
 	#endif
 	__F833ea ();
 	#ifdef M68K_DEBUG
-		line_no = 67022;
+		line_no = 67023;
 	#endif
 	Regs[8]._s32 = Regs[10]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67023;
+		line_no = 67024;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D833f0);
@@ -484450,19 +484450,19 @@ __Nlmdlmod_a2_d0_d0:
 	}
 	case (0x833f0):
 	#ifdef M68K_DEBUG
-		line_no = 67024;
+		line_no = 67025;
 	#endif
 	Regs[10]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67025;
+		line_no = 67026;
 	#endif
 	__F833f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67026;
+		line_no = 67027;
 	#endif
 	__F833fa ();
 	#ifdef M68K_DEBUG
-		line_no = 67027;
+		line_no = 67028;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484470,19 +484470,19 @@ __Nlmdlmod_a2_d0_d0:
 __Nlmdlmod_a2_d1_d1:
 	case (0x833fc):
 	#ifdef M68K_DEBUG
-		line_no = 67030;
+		line_no = 67031;
 	#endif
 	__F83400 ();
 	#ifdef M68K_DEBUG
-		line_no = 67031;
+		line_no = 67032;
 	#endif
 	__F83402 ();
 	#ifdef M68K_DEBUG
-		line_no = 67032;
+		line_no = 67033;
 	#endif
 	Regs[8]._s32 = Regs[10]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67033;
+		line_no = 67034;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83408);
@@ -484491,19 +484491,19 @@ __Nlmdlmod_a2_d1_d1:
 	}
 	case (0x83408):
 	#ifdef M68K_DEBUG
-		line_no = 67034;
+		line_no = 67035;
 	#endif
 	Regs[10]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67035;
+		line_no = 67036;
 	#endif
 	__F8340e ();
 	#ifdef M68K_DEBUG
-		line_no = 67036;
+		line_no = 67037;
 	#endif
 	__F83412 ();
 	#ifdef M68K_DEBUG
-		line_no = 67037;
+		line_no = 67038;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484511,19 +484511,19 @@ __Nlmdlmod_a2_d1_d1:
 __Nlmdlmod_a2_d3_d3:
 	case (0x83414):
 	#ifdef M68K_DEBUG
-		line_no = 67040;
+		line_no = 67041;
 	#endif
 	__F83418 ();
 	#ifdef M68K_DEBUG
-		line_no = 67041;
+		line_no = 67042;
 	#endif
 	__F8341a ();
 	#ifdef M68K_DEBUG
-		line_no = 67042;
+		line_no = 67043;
 	#endif
 	Regs[8]._s32 = Regs[10]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67043;
+		line_no = 67044;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83420);
@@ -484532,19 +484532,19 @@ __Nlmdlmod_a2_d3_d3:
 	}
 	case (0x83420):
 	#ifdef M68K_DEBUG
-		line_no = 67044;
+		line_no = 67045;
 	#endif
 	Regs[10]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67045;
+		line_no = 67046;
 	#endif
 	__F83424 ();
 	#ifdef M68K_DEBUG
-		line_no = 67046;
+		line_no = 67047;
 	#endif
 	__F83428 ();
 	#ifdef M68K_DEBUG
-		line_no = 67047;
+		line_no = 67048;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484552,19 +484552,19 @@ __Nlmdlmod_a2_d3_d3:
 __Nlmdlmod_a2_d6_d6:
 	case (0x8342a):
 	#ifdef M68K_DEBUG
-		line_no = 67050;
+		line_no = 67051;
 	#endif
 	__F8342e ();
 	#ifdef M68K_DEBUG
-		line_no = 67051;
+		line_no = 67052;
 	#endif
 	__F83430 ();
 	#ifdef M68K_DEBUG
-		line_no = 67052;
+		line_no = 67053;
 	#endif
 	Regs[8]._s32 = Regs[10]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67053;
+		line_no = 67054;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83436);
@@ -484573,19 +484573,19 @@ __Nlmdlmod_a2_d6_d6:
 	}
 	case (0x83436):
 	#ifdef M68K_DEBUG
-		line_no = 67054;
+		line_no = 67055;
 	#endif
 	Regs[10]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67055;
+		line_no = 67056;
 	#endif
 	__F8343a ();
 	#ifdef M68K_DEBUG
-		line_no = 67056;
+		line_no = 67057;
 	#endif
 	__F8343e ();
 	#ifdef M68K_DEBUG
-		line_no = 67057;
+		line_no = 67058;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484593,19 +484593,19 @@ __Nlmdlmod_a2_d6_d6:
 __Nlmdlmod_a2_d7_d7:
 	case (0x83440):
 	#ifdef M68K_DEBUG
-		line_no = 67060;
+		line_no = 67061;
 	#endif
 	__F83444 ();
 	#ifdef M68K_DEBUG
-		line_no = 67061;
+		line_no = 67062;
 	#endif
 	__F83446 ();
 	#ifdef M68K_DEBUG
-		line_no = 67062;
+		line_no = 67063;
 	#endif
 	Regs[8]._s32 = Regs[10]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67063;
+		line_no = 67064;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D8344c);
@@ -484614,19 +484614,19 @@ __Nlmdlmod_a2_d7_d7:
 	}
 	case (0x8344c):
 	#ifdef M68K_DEBUG
-		line_no = 67064;
+		line_no = 67065;
 	#endif
 	Regs[10]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67065;
+		line_no = 67066;
 	#endif
 	__F83450 ();
 	#ifdef M68K_DEBUG
-		line_no = 67066;
+		line_no = 67067;
 	#endif
 	__F83454 ();
 	#ifdef M68K_DEBUG
-		line_no = 67067;
+		line_no = 67068;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484634,15 +484634,15 @@ __Nlmdlmod_a2_d7_d7:
 __Nlmdlmod_a3_d0_d0:
 	case (0x83456):
 	#ifdef M68K_DEBUG
-		line_no = 67070;
+		line_no = 67071;
 	#endif
 	__F8345a ();
 	#ifdef M68K_DEBUG
-		line_no = 67071;
+		line_no = 67072;
 	#endif
 	Regs[8]._s32 = Regs[11]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67072;
+		line_no = 67073;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83460);
@@ -484651,19 +484651,19 @@ __Nlmdlmod_a3_d0_d0:
 	}
 	case (0x83460):
 	#ifdef M68K_DEBUG
-		line_no = 67073;
+		line_no = 67074;
 	#endif
 	Regs[11]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67074;
+		line_no = 67075;
 	#endif
 	__F83466 ();
 	#ifdef M68K_DEBUG
-		line_no = 67075;
+		line_no = 67076;
 	#endif
 	__F8346a ();
 	#ifdef M68K_DEBUG
-		line_no = 67076;
+		line_no = 67077;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484671,19 +484671,19 @@ __Nlmdlmod_a3_d0_d0:
 __Nlmdlmod_a3_d6_d3:
 	case (0x8346c):
 	#ifdef M68K_DEBUG
-		line_no = 67079;
+		line_no = 67080;
 	#endif
 	__F83470 ();
 	#ifdef M68K_DEBUG
-		line_no = 67080;
+		line_no = 67081;
 	#endif
 	__F83472 ();
 	#ifdef M68K_DEBUG
-		line_no = 67081;
+		line_no = 67082;
 	#endif
 	Regs[8]._s32 = Regs[11]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67082;
+		line_no = 67083;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D83478);
@@ -484692,19 +484692,19 @@ __Nlmdlmod_a3_d6_d3:
 	}
 	case (0x83478):
 	#ifdef M68K_DEBUG
-		line_no = 67083;
+		line_no = 67084;
 	#endif
 	Regs[11]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67084;
+		line_no = 67085;
 	#endif
 	__F8347c ();
 	#ifdef M68K_DEBUG
-		line_no = 67085;
+		line_no = 67086;
 	#endif
 	__F83480 ();
 	#ifdef M68K_DEBUG
-		line_no = 67086;
+		line_no = 67087;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484712,19 +484712,19 @@ __Nlmdlmod_a3_d6_d3:
 __Nlmdlmod_a3_d6_d6:
 	case (0x83482):
 	#ifdef M68K_DEBUG
-		line_no = 67089;
+		line_no = 67090;
 	#endif
 	__F83486 ();
 	#ifdef M68K_DEBUG
-		line_no = 67090;
+		line_no = 67091;
 	#endif
 	__F83488 ();
 	#ifdef M68K_DEBUG
-		line_no = 67091;
+		line_no = 67092;
 	#endif
 	Regs[8]._s32 = Regs[11]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67092;
+		line_no = 67093;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D8348e);
@@ -484733,19 +484733,19 @@ __Nlmdlmod_a3_d6_d6:
 	}
 	case (0x8348e):
 	#ifdef M68K_DEBUG
-		line_no = 67093;
+		line_no = 67094;
 	#endif
 	Regs[11]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67094;
+		line_no = 67095;
 	#endif
 	__F83492 ();
 	#ifdef M68K_DEBUG
-		line_no = 67095;
+		line_no = 67096;
 	#endif
 	__F83496 ();
 	#ifdef M68K_DEBUG
-		line_no = 67096;
+		line_no = 67097;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484753,15 +484753,15 @@ __Nlmdlmod_a3_d6_d6:
 __Nlmdlmod_a4_d0_d0:
 	case (0x83498):
 	#ifdef M68K_DEBUG
-		line_no = 67099;
+		line_no = 67100;
 	#endif
 	__F8349c ();
 	#ifdef M68K_DEBUG
-		line_no = 67100;
+		line_no = 67101;
 	#endif
 	Regs[8]._s32 = Regs[12]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67101;
+		line_no = 67102;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D834a2);
@@ -484770,19 +484770,19 @@ __Nlmdlmod_a4_d0_d0:
 	}
 	case (0x834a2):
 	#ifdef M68K_DEBUG
-		line_no = 67102;
+		line_no = 67103;
 	#endif
 	Regs[12]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67103;
+		line_no = 67104;
 	#endif
 	__F834a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67104;
+		line_no = 67105;
 	#endif
 	__F834ac ();
 	#ifdef M68K_DEBUG
-		line_no = 67105;
+		line_no = 67106;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484790,15 +484790,15 @@ __Nlmdlmod_a4_d0_d0:
 __Nlmdlmod_a5_d0_d1:
 	case (0x834ae):
 	#ifdef M68K_DEBUG
-		line_no = 67108;
+		line_no = 67109;
 	#endif
 	__F834b2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67109;
+		line_no = 67110;
 	#endif
 	Regs[8]._s32 = Regs[13]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67110;
+		line_no = 67111;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D834b8);
@@ -484807,19 +484807,19 @@ __Nlmdlmod_a5_d0_d1:
 	}
 	case (0x834b8):
 	#ifdef M68K_DEBUG
-		line_no = 67111;
+		line_no = 67112;
 	#endif
 	Regs[13]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67112;
+		line_no = 67113;
 	#endif
 	__F834be ();
 	#ifdef M68K_DEBUG
-		line_no = 67113;
+		line_no = 67114;
 	#endif
 	__F834c2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67114;
+		line_no = 67115;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484827,19 +484827,19 @@ __Nlmdlmod_a5_d0_d1:
 __Nlmdlmod_a5_d6_d0:
 	case (0x834c4):
 	#ifdef M68K_DEBUG
-		line_no = 67117;
+		line_no = 67118;
 	#endif
 	__F834c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67118;
+		line_no = 67119;
 	#endif
 	__F834ca ();
 	#ifdef M68K_DEBUG
-		line_no = 67119;
+		line_no = 67120;
 	#endif
 	Regs[8]._s32 = Regs[13]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67120;
+		line_no = 67121;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D834d0);
@@ -484848,19 +484848,19 @@ __Nlmdlmod_a5_d6_d0:
 	}
 	case (0x834d0):
 	#ifdef M68K_DEBUG
-		line_no = 67121;
+		line_no = 67122;
 	#endif
 	Regs[13]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67122;
+		line_no = 67123;
 	#endif
 	__F834d6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67123;
+		line_no = 67124;
 	#endif
 	__F834da ();
 	#ifdef M68K_DEBUG
-		line_no = 67124;
+		line_no = 67125;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484868,19 +484868,19 @@ __Nlmdlmod_a5_d6_d0:
 __Nlmdlmod_a5_d6_d6:
 	case (0x834dc):
 	#ifdef M68K_DEBUG
-		line_no = 67127;
+		line_no = 67128;
 	#endif
 	__F834e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67128;
+		line_no = 67129;
 	#endif
 	__F834e2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67129;
+		line_no = 67130;
 	#endif
 	Regs[8]._s32 = Regs[13]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67130;
+		line_no = 67131;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __D834e8);
@@ -484889,19 +484889,19 @@ __Nlmdlmod_a5_d6_d6:
 	}
 	case (0x834e8):
 	#ifdef M68K_DEBUG
-		line_no = 67131;
+		line_no = 67132;
 	#endif
 	Regs[13]._s32 = Regs[8]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 67132;
+		line_no = 67133;
 	#endif
 	__F834ec ();
 	#ifdef M68K_DEBUG
-		line_no = 67133;
+		line_no = 67134;
 	#endif
 	__F834f0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67134;
+		line_no = 67135;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484912,11 +484912,11 @@ __NLmdlmod_pool_end:
 __NLmdlmod_class:
 	case (0xa3cf4):
 	#ifdef M68K_DEBUG
-		line_no = 67174;
+		line_no = 67175;
 	#endif
 	__Fa3cf8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67175;
+		line_no = 67176;
 	#endif
 	if (C)
 	{
@@ -484927,11 +484927,11 @@ __NLmdlmod_class:
 		goto __Nlmdlmod_class_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67176;
+		line_no = 67177;
 	#endif
 	__Fa3cfe ();
 	#ifdef M68K_DEBUG
-		line_no = 67177;
+		line_no = 67178;
 	#endif
 	if ((!C))
 	{
@@ -484942,19 +484942,19 @@ __NLmdlmod_class:
 		goto __Nlmdlmod_class_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67178;
+		line_no = 67179;
 	#endif
 	Regs[9]._u32 = (__DLmdlmod_like);
 	#ifdef M68K_DEBUG
-		line_no = 67179;
+		line_no = 67180;
 	#endif
 	Regs[9]._u32 = Regs[9]._s32 + (s16)Regs[0]._s16;
 	#ifdef M68K_DEBUG
-		line_no = 67180;
+		line_no = 67181;
 	#endif
 	__Fa3d0c ();
 	#ifdef M68K_DEBUG
-		line_no = 67181;
+		line_no = 67182;
 	#endif
 	if ((!nZ))
 	{
@@ -484965,13 +484965,13 @@ __NLmdlmod_class:
 		goto __Nlmdlmod_class_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67182;
+		line_no = 67183;
 	#endif
 	__Fa3d12 ();
 __Nlmdlmod_class_own:
 	case (0xa3d12):
 	#ifdef M68K_DEBUG
-		line_no = 67184;
+		line_no = 67185;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -484979,15 +484979,15 @@ __Nlmdlmod_class_own:
 __Nlmdlmod_cmp_30_a0:
 	case (0xa3d14):
 	#ifdef M68K_DEBUG
-		line_no = 67187;
+		line_no = 67188;
 	#endif
 	__Fa3d18 ();
 	#ifdef M68K_DEBUG
-		line_no = 67188;
+		line_no = 67189;
 	#endif
 	__Fa3d1c ();
 	#ifdef M68K_DEBUG
-		line_no = 67189;
+		line_no = 67190;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da3d20);
@@ -484996,15 +484996,15 @@ __Nlmdlmod_cmp_30_a0:
 	}
 	case (0xa3d20):
 	#ifdef M68K_DEBUG
-		line_no = 67190;
+		line_no = 67191;
 	#endif
 	__Fa3d24 ();
 	#ifdef M68K_DEBUG
-		line_no = 67191;
+		line_no = 67192;
 	#endif
 	__Fa3d28 ();
 	#ifdef M68K_DEBUG
-		line_no = 67192;
+		line_no = 67193;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485012,15 +485012,15 @@ __Nlmdlmod_cmp_30_a0:
 __Nlmdlmod_cmp_3a_a0:
 	case (0xa3d2a):
 	#ifdef M68K_DEBUG
-		line_no = 67194;
+		line_no = 67195;
 	#endif
 	__Fa3d2e ();
 	#ifdef M68K_DEBUG
-		line_no = 67195;
+		line_no = 67196;
 	#endif
 	__Fa3d32 ();
 	#ifdef M68K_DEBUG
-		line_no = 67196;
+		line_no = 67197;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da3d36);
@@ -485029,15 +485029,15 @@ __Nlmdlmod_cmp_3a_a0:
 	}
 	case (0xa3d36):
 	#ifdef M68K_DEBUG
-		line_no = 67197;
+		line_no = 67198;
 	#endif
 	__Fa3d3a ();
 	#ifdef M68K_DEBUG
-		line_no = 67198;
+		line_no = 67199;
 	#endif
 	__Fa3d3e ();
 	#ifdef M68K_DEBUG
-		line_no = 67199;
+		line_no = 67200;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485045,15 +485045,15 @@ __Nlmdlmod_cmp_3a_a0:
 __Nlmdlmod_cmp_46_a0:
 	case (0xa3d40):
 	#ifdef M68K_DEBUG
-		line_no = 67201;
+		line_no = 67202;
 	#endif
 	__Fa3d44 ();
 	#ifdef M68K_DEBUG
-		line_no = 67202;
+		line_no = 67203;
 	#endif
 	__Fa3d48 ();
 	#ifdef M68K_DEBUG
-		line_no = 67203;
+		line_no = 67204;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da3d4c);
@@ -485062,15 +485062,15 @@ __Nlmdlmod_cmp_46_a0:
 	}
 	case (0xa3d4c):
 	#ifdef M68K_DEBUG
-		line_no = 67204;
+		line_no = 67205;
 	#endif
 	__Fa3d50 ();
 	#ifdef M68K_DEBUG
-		line_no = 67205;
+		line_no = 67206;
 	#endif
 	__Fa3d54 ();
 	#ifdef M68K_DEBUG
-		line_no = 67206;
+		line_no = 67207;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485078,15 +485078,15 @@ __Nlmdlmod_cmp_46_a0:
 __Nlmdlmod_cmp_4e_a0:
 	case (0xa3d56):
 	#ifdef M68K_DEBUG
-		line_no = 67208;
+		line_no = 67209;
 	#endif
 	__Fa3d5a ();
 	#ifdef M68K_DEBUG
-		line_no = 67209;
+		line_no = 67210;
 	#endif
 	__Fa3d5e ();
 	#ifdef M68K_DEBUG
-		line_no = 67210;
+		line_no = 67211;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da3d62);
@@ -485095,15 +485095,15 @@ __Nlmdlmod_cmp_4e_a0:
 	}
 	case (0xa3d62):
 	#ifdef M68K_DEBUG
-		line_no = 67211;
+		line_no = 67212;
 	#endif
 	__Fa3d66 ();
 	#ifdef M68K_DEBUG
-		line_no = 67212;
+		line_no = 67213;
 	#endif
 	__Fa3d6a ();
 	#ifdef M68K_DEBUG
-		line_no = 67213;
+		line_no = 67214;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485111,15 +485111,15 @@ __Nlmdlmod_cmp_4e_a0:
 __Nlmdlmod_hail_class:
 	case (0xa3d6c):
 	#ifdef M68K_DEBUG
-		line_no = 67218;
+		line_no = 67219;
 	#endif
 	__Fa3d6e ();
 	#ifdef M68K_DEBUG
-		line_no = 67219;
+		line_no = 67220;
 	#endif
 	__Fa3d72 ();
 	#ifdef M68K_DEBUG
-		line_no = 67220;
+		line_no = 67221;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da3d76);
@@ -485128,16 +485128,16 @@ __Nlmdlmod_hail_class:
 	}
 	case (0xa3d76):
 	#ifdef M68K_DEBUG
-		line_no = 67221;
+		line_no = 67222;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 67222;
+		line_no = 67223;
 	#endif
 	__Fa3d7c ();
 	#ifdef M68K_DEBUG
-		line_no = 67223;
+		line_no = 67224;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485145,15 +485145,15 @@ __Nlmdlmod_hail_class:
 __Nlmdlmod_pick:
 	case (0xa3d7e):
 	#ifdef M68K_DEBUG
-		line_no = 67227;
+		line_no = 67228;
 	#endif
 	Regs[10]._u32 = (__DL5fac2_ship_picks);
 	#ifdef M68K_DEBUG
-		line_no = 67228;
+		line_no = 67229;
 	#endif
 	__Fa3d8a ();
 	#ifdef M68K_DEBUG
-		line_no = 67229;
+		line_no = 67230;
 	#endif
 	if ((!nZ))
 	{
@@ -485164,21 +485164,21 @@ __Nlmdlmod_pick:
 		goto __Nlmdlmod_pick_tab;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67230;
+		line_no = 67231;
 	#endif
 	Regs[10]._u32 = (__DLmdlmod_picks);
 __Nlmdlmod_pick_tab:
 	case (0xa3d92):
 	#ifdef M68K_DEBUG
-		line_no = 67232;
+		line_no = 67233;
 	#endif
 	__Fa3d96 ();
 	#ifdef M68K_DEBUG
-		line_no = 67233;
+		line_no = 67234;
 	#endif
 	Regs[10]._u32 = Regs[10]._s32 + (s16)rdword(Regs[10]._s32+((s16)Regs[2]._s32)+2);
 	#ifdef M68K_DEBUG
-		line_no = 67234;
+		line_no = 67235;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485186,19 +485186,19 @@ __Nlmdlmod_pick_tab:
 __Nlmdlmod_string:
 	case (0xa3d9c):
 	#ifdef M68K_DEBUG
-		line_no = 67238;
+		line_no = 67239;
 	#endif
 	__Fa3da0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67239;
+		line_no = 67240;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+14474);
 	#ifdef M68K_DEBUG
-		line_no = 67240;
+		line_no = 67241;
 	#endif
 	__Fa3daa ();
 	#ifdef M68K_DEBUG
-		line_no = 67241;
+		line_no = 67242;
 	#endif
 	if (nZ)
 	{
@@ -485209,11 +485209,11 @@ __Nlmdlmod_string:
 		goto __Nlmdlmod_string_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67242;
+		line_no = 67243;
 	#endif
 	__Fa3db0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67243;
+		line_no = 67244;
 	#endif
 	if (C)
 	{
@@ -485224,17 +485224,17 @@ __Nlmdlmod_string:
 		goto __Nlmdlmod_string_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67244;
+		line_no = 67245;
 	#endif
 	__Fa3db6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67245;
+		line_no = 67246;
 	#endif
 	Regs[9]._u32 = (__DLmdlmod_strings);
 __Nlmdlmod_string_done:
 	case (0xa3dbc):
 	#ifdef M68K_DEBUG
-		line_no = 67247;
+		line_no = 67248;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485246,29 +485246,29 @@ __NLmdlmod_strings:
 __NLcockpit_world:
 	case (0xa8fe0):
 	#ifdef M68K_DEBUG
-		line_no = 67283;
+		line_no = 67284;
 	#endif
 	__Fa8fe4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67284;
+		line_no = 67285;
 	#endif
 	__Fa8fe6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67285;
+		line_no = 67286;
 	#endif
 	__Fa8fe8 ();
 __Nlcockpit_pass:
 	case (0xa8fe8):
 	#ifdef M68K_DEBUG
-		line_no = 67287;
+		line_no = 67288;
 	#endif
 	(* hcalls[122]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67288;
+		line_no = 67289;
 	#endif
 	__Fa8fee ();
 	#ifdef M68K_DEBUG
-		line_no = 67289;
+		line_no = 67290;
 	#endif
 	if ((!nZ))
 	{
@@ -485279,19 +485279,19 @@ __Nlcockpit_pass:
 		goto __Nlcockpit_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67290;
+		line_no = 67291;
 	#endif
 	__Fa8ff6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67291;
+		line_no = 67292;
 	#endif
 	__Fa8ff8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67293;
+		line_no = 67294;
 	#endif
 	__Fa8ffc ();
 	#ifdef M68K_DEBUG
-		line_no = 67294;
+		line_no = 67295;
 	#endif
 	if ((!nZ))
 	{
@@ -485302,11 +485302,11 @@ __Nlcockpit_pass:
 		goto __Nlcockpit_objects;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67295;
+		line_no = 67296;
 	#endif
 	__Fa9002 ();
 	#ifdef M68K_DEBUG
-		line_no = 67296;
+		line_no = 67297;
 	#endif
 	if (N)
 	{
@@ -485317,7 +485317,7 @@ __Nlcockpit_pass:
 		goto __Nlcockpit_nostars;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67297;
+		line_no = 67298;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9008);
@@ -485328,21 +485328,21 @@ __Nlcockpit_pass:
 __Nlcockpit_nostars:
 	case (0xa9008):
 	#ifdef M68K_DEBUG
-		line_no = 67299;
+		line_no = 67300;
 	#endif
 	__Fa900c ();
 __Nlcockpit_objects:
 	case (0xa900c):
 	#ifdef M68K_DEBUG
-		line_no = 67301;
+		line_no = 67302;
 	#endif
 	(* hcalls[125]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67302;
+		line_no = 67303;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 67303;
+		line_no = 67304;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9018);
@@ -485352,24 +485352,24 @@ __Nlcockpit_objects:
 	}
 	case (0xa9018):
 	#ifdef M68K_DEBUG
-		line_no = 67304;
+		line_no = 67305;
 	#endif
 	Regs[11]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 67305;
+		line_no = 67306;
 	#endif
 	__Fa901e ();
 	#ifdef M68K_DEBUG
-		line_no = 67306;
+		line_no = 67307;
 	#endif
 	__Fa9020 ();
 	#ifdef M68K_DEBUG
-		line_no = 67307;
+		line_no = 67308;
 	#endif
 	__Fa9022 ();
 	#ifdef M68K_DEBUG
-		line_no = 67308;
+		line_no = 67309;
 	#endif
 	{
 		goto __Nlcockpit_pass;
@@ -485377,15 +485377,15 @@ __Nlcockpit_objects:
 __Nlcockpit_done:
 	case (0xa9024):
 	#ifdef M68K_DEBUG
-		line_no = 67310;
+		line_no = 67311;
 	#endif
 	__Fa9028 ();
 	#ifdef M68K_DEBUG
-		line_no = 67311;
+		line_no = 67312;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)2;
 	#ifdef M68K_DEBUG
-		line_no = 67312;
+		line_no = 67313;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485393,7 +485393,7 @@ __Nlcockpit_done:
 __NLcockpit_band:
 	case (0xa902c):
 	#ifdef M68K_DEBUG
-		line_no = 67323;
+		line_no = 67324;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9032);
@@ -485402,11 +485402,11 @@ __NLcockpit_band:
 	}
 	case (0xa9032):
 	#ifdef M68K_DEBUG
-		line_no = 67324;
+		line_no = 67325;
 	#endif
 	(* hcalls[123]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67325;
+		line_no = 67326;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485415,15 +485415,15 @@ __NLcockpit_passes:
 __NLcockpit_curve:
 	case (0xa903a):
 	#ifdef M68K_DEBUG
-		line_no = 67353;
+		line_no = 67354;
 	#endif
 	__Fa903c ();
 	#ifdef M68K_DEBUG
-		line_no = 67354;
+		line_no = 67355;
 	#endif
 	__Fa9040 ();
 	#ifdef M68K_DEBUG
-		line_no = 67355;
+		line_no = 67356;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -485433,42 +485433,42 @@ __NLcockpit_curve:
 	} else {
 		goto __Nlcockpit_curve_near;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 67356;
-	#endif
-	__Fa9046 ();
 	#ifdef M68K_DEBUG
 		line_no = 67357;
 	#endif
-	if ((nZ && (!(N ^ V))))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlcockpit_curve_near;
-		goto handle_exception;
-	} else {
-		goto __Nlcockpit_curve_near;
-	}}
+	__Fa9046 ();
 	#ifdef M68K_DEBUG
 		line_no = 67358;
 	#endif
-	__Fa904c ();
+	if ((nZ && (!(N ^ V))))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlcockpit_curve_near;
+		goto handle_exception;
+	} else {
+		goto __Nlcockpit_curve_near;
+	}}
 	#ifdef M68K_DEBUG
 		line_no = 67359;
 	#endif
-	if ((nZ && (!(N ^ V))))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlcockpit_curve_near;
-		goto handle_exception;
-	} else {
-		goto __Nlcockpit_curve_near;
-	}}
+	__Fa904c ();
 	#ifdef M68K_DEBUG
 		line_no = 67360;
 	#endif
-	__Fa9052 ();
+	if ((nZ && (!(N ^ V))))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlcockpit_curve_near;
+		goto handle_exception;
+	} else {
+		goto __Nlcockpit_curve_near;
+	}}
 	#ifdef M68K_DEBUG
 		line_no = 67361;
+	#endif
+	__Fa9052 ();
+	#ifdef M68K_DEBUG
+		line_no = 67362;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -485479,11 +485479,11 @@ __NLcockpit_curve:
 		goto __Nlcockpit_curve_near;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67362;
+		line_no = 67363;
 	#endif
 	__Fa9056 ();
 	#ifdef M68K_DEBUG
-		line_no = 67363;
+		line_no = 67364;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485491,11 +485491,11 @@ __NLcockpit_curve:
 __Nlcockpit_curve_near:
 	case (0xa9058):
 	#ifdef M68K_DEBUG
-		line_no = 67365;
+		line_no = 67366;
 	#endif
 	__Fa905e ();
 	#ifdef M68K_DEBUG
-		line_no = 67366;
+		line_no = 67367;
 	#endif
 	if ((!nZ))
 	{
@@ -485506,41 +485506,41 @@ __Nlcockpit_curve_near:
 		goto __Nlcockpit_curve_line;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67367;
+		line_no = 67368;
 	#endif
 	__Fa9064 ();
 	#ifdef M68K_DEBUG
-		line_no = 67368;
+		line_no = 67369;
 	#endif
 	__Fa9066 ();
 	#ifdef M68K_DEBUG
-		line_no = 67369;
+		line_no = 67370;
 	#endif
 	__Fa9068 ();
 	#ifdef M68K_DEBUG
-		line_no = 67370;
+		line_no = 67371;
 	#endif
 	__Fa906a ();
 	#ifdef M68K_DEBUG
-		line_no = 67371;
+		line_no = 67372;
 	#endif
 	__Fa906e ();
 	#ifdef M68K_DEBUG
-		line_no = 67372;
+		line_no = 67373;
 	#endif
 	(* hcalls[124]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67373;
+		line_no = 67374;
 	#endif
 	__Fa9076 ();
 __Nlcockpit_curve_line:
 	case (0xa9076):
 	#ifdef M68K_DEBUG
-		line_no = 67375;
+		line_no = 67376;
 	#endif
 	__Fa9078 ();
 	#ifdef M68K_DEBUG
-		line_no = 67376;
+		line_no = 67377;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485548,11 +485548,11 @@ __Nlcockpit_curve_line:
 __NLcockpit_curve_from:
 	case (0xa907a):
 	#ifdef M68K_DEBUG
-		line_no = 67379;
+		line_no = 67380;
 	#endif
 	__Fa9080 ();
 	#ifdef M68K_DEBUG
-		line_no = 67380;
+		line_no = 67381;
 	#endif
 	if (nZ)
 	{
@@ -485563,11 +485563,11 @@ __NLcockpit_curve_from:
 		goto __Nlcockpit_curve_from_yes;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67381;
+		line_no = 67382;
 	#endif
 	__Fa908a ();
 	#ifdef M68K_DEBUG
-		line_no = 67382;
+		line_no = 67383;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -485578,11 +485578,11 @@ __NLcockpit_curve_from:
 		goto __Nlcockpit_curve_from_yes;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67383;
+		line_no = 67384;
 	#endif
 	__Fa908e ();
 	#ifdef M68K_DEBUG
-		line_no = 67384;
+		line_no = 67385;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485590,11 +485590,11 @@ __NLcockpit_curve_from:
 __Nlcockpit_curve_from_yes:
 	case (0xa9090):
 	#ifdef M68K_DEBUG
-		line_no = 67386;
+		line_no = 67387;
 	#endif
 	__Fa9092 ();
 	#ifdef M68K_DEBUG
-		line_no = 67387;
+		line_no = 67388;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485602,11 +485602,11 @@ __Nlcockpit_curve_from_yes:
 __NLcockpit_discard:
 	case (0xa9094):
 	#ifdef M68K_DEBUG
-		line_no = 67403;
+		line_no = 67404;
 	#endif
 	__Fa909a ();
 	#ifdef M68K_DEBUG
-		line_no = 67404;
+		line_no = 67405;
 	#endif
 	if (nZ)
 	{
@@ -485617,11 +485617,11 @@ __NLcockpit_discard:
 		goto __Nlcockpit_discard_keep;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67405;
+		line_no = 67406;
 	#endif
 	__Fa90a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67406;
+		line_no = 67407;
 	#endif
 	if ((!N))
 	{
@@ -485632,11 +485632,11 @@ __NLcockpit_discard:
 		goto __Nlcockpit_discard_keep;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67407;
+		line_no = 67408;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 67408;
+		line_no = 67409;
 	#endif
 	{
 		goto __NL3b78e;
@@ -485644,7 +485644,7 @@ __NLcockpit_discard:
 __Nlcockpit_discard_keep:
 	case (0xa90aa):
 	#ifdef M68K_DEBUG
-		line_no = 67410;
+		line_no = 67411;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485652,11 +485652,11 @@ __Nlcockpit_discard_keep:
 __NLstrafe_speed:
 	case (0xa90ac):
 	#ifdef M68K_DEBUG
-		line_no = 67428;
+		line_no = 67429;
 	#endif
 	__Fa90b0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67429;
+		line_no = 67430;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da90b4);
@@ -485666,11 +485666,11 @@ __NLstrafe_speed:
 	}
 	case (0xa90b4):
 	#ifdef M68K_DEBUG
-		line_no = 67430;
+		line_no = 67431;
 	#endif
 	(* hcalls[126]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67431;
+		line_no = 67432;
 	#endif
 	{
 		jdest = (Regs[13]._s32+726);
@@ -485679,15 +485679,15 @@ __NLstrafe_speed:
 __NLstrafe_manual:
 	case (0xa90bc):
 	#ifdef M68K_DEBUG
-		line_no = 67437;
+		line_no = 67438;
 	#endif
 	__Fa90be ();
 	#ifdef M68K_DEBUG
-		line_no = 67438;
+		line_no = 67439;
 	#endif
 	__Fa90c2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67439;
+		line_no = 67440;
 	#endif
 	if (nZ)
 	{
@@ -485698,11 +485698,11 @@ __NLstrafe_manual:
 		goto __Nlstrafe_main;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67440;
+		line_no = 67441;
 	#endif
 	__Fa90c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67441;
+		line_no = 67442;
 	#endif
 	if ((!nZ))
 	{
@@ -485713,11 +485713,11 @@ __NLstrafe_manual:
 		goto __Nlstrafe_set;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67442;
+		line_no = 67443;
 	#endif
 	__Fa90d0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67443;
+		line_no = 67444;
 	#endif
 	{
 		goto __Nlstrafe_set;
@@ -485725,25 +485725,25 @@ __NLstrafe_manual:
 __Nlstrafe_main:
 	case (0xa90d2):
 	#ifdef M68K_DEBUG
-		line_no = 67445;
+		line_no = 67446;
 	#endif
 	__Fa90d6 ();
 __Nlstrafe_set:
 	case (0xa90d6):
 	#ifdef M68K_DEBUG
-		line_no = 67447;
+		line_no = 67448;
 	#endif
 	__Fa90d8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67448;
+		line_no = 67449;
 	#endif
 	__Fa90da ();
 	#ifdef M68K_DEBUG
-		line_no = 67449;
+		line_no = 67450;
 	#endif
 	(* hcalls[126]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67450;
+		line_no = 67451;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da90e2);
@@ -485753,19 +485753,19 @@ __Nlstrafe_set:
 	}
 	case (0xa90e2):
 	#ifdef M68K_DEBUG
-		line_no = 67451;
+		line_no = 67452;
 	#endif
 	__Fa90e8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67452;
+		line_no = 67453;
 	#endif
 	__Fa90ea ();
 	#ifdef M68K_DEBUG
-		line_no = 67453;
+		line_no = 67454;
 	#endif
 	__Fa90ec ();
 	#ifdef M68K_DEBUG
-		line_no = 67454;
+		line_no = 67455;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485773,23 +485773,23 @@ __Nlstrafe_set:
 __NLcockpit_sky:
 	case (0xa90ee):
 	#ifdef M68K_DEBUG
-		line_no = 67467;
+		line_no = 67468;
 	#endif
 	__Fa90f2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67468;
+		line_no = 67469;
 	#endif
 	__Fa90f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67469;
+		line_no = 67470;
 	#endif
 	__Fa90fe ();
 	#ifdef M68K_DEBUG
-		line_no = 67470;
+		line_no = 67471;
 	#endif
 	__Fa9104 ();
 	#ifdef M68K_DEBUG
-		line_no = 67471;
+		line_no = 67472;
 	#endif
 	if ((!nZ))
 	{
@@ -485800,13 +485800,13 @@ __NLcockpit_sky:
 		goto __Nlcockpit_sky_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67472;
+		line_no = 67473;
 	#endif
 	(* hcalls[127]) ();
 __Nlcockpit_sky_done:
 	case (0xa910a):
 	#ifdef M68K_DEBUG
-		line_no = 67474;
+		line_no = 67475;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485814,15 +485814,15 @@ __Nlcockpit_sky_done:
 __NLcockpit_vertex_d:
 	case (0xa910c):
 	#ifdef M68K_DEBUG
-		line_no = 67492;
+		line_no = 67493;
 	#endif
 	__Fa9110 ();
 	#ifdef M68K_DEBUG
-		line_no = 67493;
+		line_no = 67494;
 	#endif
 	__Fa9112 ();
 	#ifdef M68K_DEBUG
-		line_no = 67494;
+		line_no = 67495;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -485833,17 +485833,17 @@ __NLcockpit_vertex_d:
 		goto __Nlcockpit_vertex_d_min;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67495;
+		line_no = 67496;
 	#endif
 	__Fa9116 ();
 __Nlcockpit_vertex_d_min:
 	case (0xa9116):
 	#ifdef M68K_DEBUG
-		line_no = 67497;
+		line_no = 67498;
 	#endif
 	__Fa911c ();
 	#ifdef M68K_DEBUG
-		line_no = 67498;
+		line_no = 67499;
 	#endif
 	if ((!nZ))
 	{
@@ -485854,13 +485854,13 @@ __Nlcockpit_vertex_d_min:
 		goto __Nlcockpit_vertex_d_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67499;
+		line_no = 67500;
 	#endif
 	(* hcalls[128]) ();
 __Nlcockpit_vertex_d_done:
 	case (0xa9122):
 	#ifdef M68K_DEBUG
-		line_no = 67501;
+		line_no = 67502;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485868,19 +485868,19 @@ __Nlcockpit_vertex_d_done:
 __NLnative_object:
 	case (0xa9124):
 	#ifdef M68K_DEBUG
-		line_no = 67512;
+		line_no = 67513;
 	#endif
 	__Fa9128 ();
 	#ifdef M68K_DEBUG
-		line_no = 67513;
+		line_no = 67514;
 	#endif
 	(* hcalls[129]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67514;
+		line_no = 67515;
 	#endif
 	__Fa9132 ();
 	#ifdef M68K_DEBUG
-		line_no = 67515;
+		line_no = 67516;
 	#endif
 	if (nZ)
 	{
@@ -485891,7 +485891,7 @@ __NLnative_object:
 		goto __Nlnative_object_culled;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67516;
+		line_no = 67517;
 	#endif
 	{
 		goto __NL39546_CalcRotViewNLight;
@@ -485899,23 +485899,23 @@ __NLnative_object:
 __Nlnative_object_culled:
 	case (0xa913a):
 	#ifdef M68K_DEBUG
-		line_no = 67520;
+		line_no = 67521;
 	#endif
 	__Fa9140 ();
 	#ifdef M68K_DEBUG
-		line_no = 67521;
-	#endif
-	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
-	#ifdef M68K_DEBUG
 		line_no = 67522;
 	#endif
-	__Fa9146 ();
+	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
 		line_no = 67523;
 	#endif
-	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
+	__Fa9146 ();
 	#ifdef M68K_DEBUG
 		line_no = 67524;
+	#endif
+	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
+	#ifdef M68K_DEBUG
+		line_no = 67525;
 	#endif
 	{
 		goto __Nl390e6;
@@ -485923,15 +485923,15 @@ __Nlnative_object_culled:
 __NLnative_clip:
 	case (0xa914e):
 	#ifdef M68K_DEBUG
-		line_no = 67536;
+		line_no = 67537;
 	#endif
 	(* hcalls[131]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67537;
+		line_no = 67538;
 	#endif
 	__Fa9154 ();
 	#ifdef M68K_DEBUG
-		line_no = 67538;
+		line_no = 67539;
 	#endif
 	if (nZ)
 	{
@@ -485942,7 +485942,7 @@ __NLnative_clip:
 		goto __Nlnative_clip_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67539;
+		line_no = 67540;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da915c);
@@ -485951,7 +485951,7 @@ __NLnative_clip:
 	}
 	case (0xa915c):
 	#ifdef M68K_DEBUG
-		line_no = 67540;
+		line_no = 67541;
 	#endif
 	if (nZ)
 	{
@@ -485962,7 +485962,7 @@ __NLnative_clip:
 		goto __Nlnative_clip_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67541;
+		line_no = 67542;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -485970,15 +485970,15 @@ __NLnative_clip:
 __Nlnative_clip_off:
 	case (0xa9160):
 	#ifdef M68K_DEBUG
-		line_no = 67543;
+		line_no = 67544;
 	#endif
 	(* hcalls[130]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67544;
+		line_no = 67545;
 	#endif
 	__Fa9166 ();
 	#ifdef M68K_DEBUG
-		line_no = 67545;
+		line_no = 67546;
 	#endif
 	if (nZ)
 	{
@@ -485989,11 +485989,11 @@ __Nlnative_clip_off:
 		goto __Nlnative_clip_keep;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67546;
+		line_no = 67547;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 67547;
+		line_no = 67548;
 	#endif
 	{
 		goto __Nl390e6;
@@ -486001,15 +486001,15 @@ __Nlnative_clip_off:
 __Nlnative_clip_keep:
 	case (0xa9170):
 	#ifdef M68K_DEBUG
-		line_no = 67549;
+		line_no = 67550;
 	#endif
 	__Fa9174 ();
 	#ifdef M68K_DEBUG
-		line_no = 67550;
+		line_no = 67551;
 	#endif
 	__Fa917c ();
 	#ifdef M68K_DEBUG
-		line_no = 67551;
+		line_no = 67552;
 	#endif
 	{
 		goto __NL39290;
@@ -486017,11 +486017,11 @@ __Nlnative_clip_keep:
 __Nlnative_clip_far:
 	case (0xa9182):
 	#ifdef M68K_DEBUG
-		line_no = 67561;
+		line_no = 67562;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 67562;
+		line_no = 67563;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da918a);
@@ -486030,7 +486030,7 @@ __Nlnative_clip_far:
 	}
 	case (0xa918a):
 	#ifdef M68K_DEBUG
-		line_no = 67563;
+		line_no = 67564;
 	#endif
 	if (nZ)
 	{
@@ -486041,11 +486041,11 @@ __Nlnative_clip_far:
 		goto __Nlnative_clip_far_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67564;
+		line_no = 67565;
 	#endif
 	__Fa9192 ();
 	#ifdef M68K_DEBUG
-		line_no = 67565;
+		line_no = 67566;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9198);
@@ -486054,27 +486054,27 @@ __Nlnative_clip_far:
 	}
 	case (0xa9198):
 	#ifdef M68K_DEBUG
-		line_no = 67566;
+		line_no = 67567;
 	#endif
 	__Fa919c ();
 	#ifdef M68K_DEBUG
-		line_no = 67567;
+		line_no = 67568;
 	#endif
 	__Fa91a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67568;
+		line_no = 67569;
 	#endif
 	__Fa91a2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67569;
+		line_no = 67570;
 	#endif
 	__Fa91a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67570;
+		line_no = 67571;
 	#endif
 	__Fa91aa ();
 	#ifdef M68K_DEBUG
-		line_no = 67571;
+		line_no = 67572;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486082,7 +486082,7 @@ __Nlnative_clip_far:
 __Nlnative_clip_far_off:
 	case (0xa91ac):
 	#ifdef M68K_DEBUG
-		line_no = 67573;
+		line_no = 67574;
 	#endif
 	{
 		goto __Nl390e6;
@@ -486091,7 +486091,7 @@ __NLnative_culled:
 __NLnative_text:
 	case (0xa91b4):
 	#ifdef M68K_DEBUG
-		line_no = 67586;
+		line_no = 67587;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da91ba);
@@ -486100,23 +486100,23 @@ __NLnative_text:
 	}
 	case (0xa91ba):
 	#ifdef M68K_DEBUG
-		line_no = 67587;
+		line_no = 67588;
 	#endif
 	__Fa91c0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67588;
+		line_no = 67589;
 	#endif
 	(* hcalls[132]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67589;
+		line_no = 67590;
 	#endif
 	__Fa91c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67590;
+		line_no = 67591;
 	#endif
 	Regs[15]._u32 = (Regs[15]._s32+12);
 	#ifdef M68K_DEBUG
-		line_no = 67591;
+		line_no = 67592;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486124,11 +486124,11 @@ __NLnative_text:
 __NLscreen_controls:
 	case (0xa91ce):
 	#ifdef M68K_DEBUG
-		line_no = 67601;
+		line_no = 67602;
 	#endif
 	__Fa91d2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67602;
+		line_no = 67603;
 	#endif
 	if (N)
 	{
@@ -486139,23 +486139,23 @@ __NLscreen_controls:
 		goto __Nlscreen_controls_on;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67603;
+		line_no = 67604;
 	#endif
 	__Fa91d6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67604;
+		line_no = 67605;
 	#endif
 	(* hcalls[133]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67605;
+		line_no = 67606;
 	#endif
 	__Fa91dc ();
 	#ifdef M68K_DEBUG
-		line_no = 67606;
+		line_no = 67607;
 	#endif
 	__Fa91e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67607;
+		line_no = 67608;
 	#endif
 	if (nZ)
 	{
@@ -486166,11 +486166,11 @@ __NLscreen_controls:
 		goto __Nlscreen_controls_fire;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67608;
+		line_no = 67609;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 67609;
+		line_no = 67610;
 	#endif
 	{
 		goto __Nl62752;
@@ -486178,11 +486178,11 @@ __NLscreen_controls:
 __Nlscreen_controls_fire:
 	case (0xa91ea):
 	#ifdef M68K_DEBUG
-		line_no = 67613;
+		line_no = 67614;
 	#endif
 	__Fa91f0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67614;
+		line_no = 67615;
 	#endif
 	if (nZ)
 	{
@@ -486193,11 +486193,11 @@ __Nlscreen_controls_fire:
 		goto __Nlscreen_controls_on;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67615;
+		line_no = 67616;
 	#endif
 	__Fa91f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67616;
+		line_no = 67617;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da91fc);
@@ -486206,13 +486206,13 @@ __Nlscreen_controls_fire:
 	}
 	case (0xa91fc):
 	#ifdef M68K_DEBUG
-		line_no = 67617;
+		line_no = 67618;
 	#endif
 	__Fa9200 ();
 __Nlscreen_controls_on:
 	case (0xa9200):
 	#ifdef M68K_DEBUG
-		line_no = 67619;
+		line_no = 67620;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486220,15 +486220,15 @@ __Nlscreen_controls_on:
 __NLhud_cross:
 	case (0xa9202):
 	#ifdef M68K_DEBUG
-		line_no = 67630;
+		line_no = 67631;
 	#endif
 	(* hcalls[134]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67631;
+		line_no = 67632;
 	#endif
 	__Fa9208 ();
 	#ifdef M68K_DEBUG
-		line_no = 67632;
+		line_no = 67633;
 	#endif
 	if (nZ)
 	{
@@ -486239,11 +486239,11 @@ __NLhud_cross:
 		goto __Nlhud_cross_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67633;
+		line_no = 67634;
 	#endif
 	__Fa9212 ();
 	#ifdef M68K_DEBUG
-		line_no = 67634;
+		line_no = 67635;
 	#endif
 	{
 		goto __Nlhud_cross_back;
@@ -486251,7 +486251,7 @@ __NLhud_cross:
 __Nlhud_cross_own:
 	case (0xa9218):
 	#ifdef M68K_DEBUG
-		line_no = 67636;
+		line_no = 67637;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486259,23 +486259,23 @@ __Nlhud_cross_own:
 __NLhud_velocity:
 	case (0xa921a):
 	#ifdef M68K_DEBUG
-		line_no = 67639;
+		line_no = 67640;
 	#endif
 	__Fa921c ();
 	#ifdef M68K_DEBUG
-		line_no = 67640;
+		line_no = 67641;
 	#endif
 	(* hcalls[135]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67641;
+		line_no = 67642;
 	#endif
 	__Fa9222 ();
 	#ifdef M68K_DEBUG
-		line_no = 67642;
+		line_no = 67643;
 	#endif
 	__Fa9226 ();
 	#ifdef M68K_DEBUG
-		line_no = 67643;
+		line_no = 67644;
 	#endif
 	if (nZ)
 	{
@@ -486286,15 +486286,15 @@ __NLhud_velocity:
 		goto __Nlhud_velocity_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67644;
+		line_no = 67645;
 	#endif
 	__Fa922c ();
 	#ifdef M68K_DEBUG
-		line_no = 67645;
+		line_no = 67646;
 	#endif
 	__Fa9230 ();
 	#ifdef M68K_DEBUG
-		line_no = 67646;
+		line_no = 67647;
 	#endif
 	{
 		goto __Nlhud_velocity_back;
@@ -486302,7 +486302,7 @@ __NLhud_velocity:
 __Nlhud_velocity_own:
 	case (0xa9236):
 	#ifdef M68K_DEBUG
-		line_no = 67648;
+		line_no = 67649;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486310,35 +486310,35 @@ __Nlhud_velocity_own:
 __NLhud_target:
 	case (0xa9238):
 	#ifdef M68K_DEBUG
-		line_no = 67664;
+		line_no = 67665;
 	#endif
 	__Fa923c ();
 	#ifdef M68K_DEBUG
-		line_no = 67665;
+		line_no = 67666;
 	#endif
 	__Fa9242 ();
 	#ifdef M68K_DEBUG
-		line_no = 67666;
+		line_no = 67667;
 	#endif
 	__Fa9244 ();
 	#ifdef M68K_DEBUG
-		line_no = 67667;
+		line_no = 67668;
 	#endif
 	__Fa9246 ();
 	#ifdef M68K_DEBUG
-		line_no = 67668;
+		line_no = 67669;
 	#endif
 	__Fa924a ();
 	#ifdef M68K_DEBUG
-		line_no = 67669;
+		line_no = 67670;
 	#endif
 	__Fa924e ();
 	#ifdef M68K_DEBUG
-		line_no = 67670;
+		line_no = 67671;
 	#endif
 	__Fa9250 ();
 	#ifdef M68K_DEBUG
-		line_no = 67671;
+		line_no = 67672;
 	#endif
 	if (N)
 	{
@@ -486349,15 +486349,15 @@ __NLhud_target:
 		goto __Nlhud_target_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67672;
+		line_no = 67673;
 	#endif
 	__Fa9256 ();
 	#ifdef M68K_DEBUG
-		line_no = 67673;
+		line_no = 67674;
 	#endif
 	__Fa9258 ();
 	#ifdef M68K_DEBUG
-		line_no = 67674;
+		line_no = 67675;
 	#endif
 	{
 		goto __Nlhud_target_fmt;
@@ -486365,41 +486365,41 @@ __NLhud_target:
 __Nlhud_target_far:
 	case (0xa925a):
 	#ifdef M68K_DEBUG
-		line_no = 67676;
+		line_no = 67677;
 	#endif
 	__Fa925c ();
 	#ifdef M68K_DEBUG
-		line_no = 67677;
+		line_no = 67678;
 	#endif
 	__Fa9260 ();
 	#ifdef M68K_DEBUG
-		line_no = 67678;
+		line_no = 67679;
 	#endif
 	__Fa9264 ();
 	#ifdef M68K_DEBUG
-		line_no = 67679;
+		line_no = 67680;
 	#endif
 	__Fa9266 ();
 __Nlhud_target_fmt:
 	case (0xa9266):
 	#ifdef M68K_DEBUG
-		line_no = 67681;
+		line_no = 67682;
 	#endif
 	__Fa9268 ();
 	#ifdef M68K_DEBUG
-		line_no = 67682;
+		line_no = 67683;
 	#endif
 	__Fa926a ();
 	#ifdef M68K_DEBUG
-		line_no = 67683;
+		line_no = 67684;
 	#endif
 	__Fa926c ();
 	#ifdef M68K_DEBUG
-		line_no = 67684;
+		line_no = 67685;
 	#endif
 	Regs[8]._u32 = (Regs[14]._s32+16832);
 	#ifdef M68K_DEBUG
-		line_no = 67685;
+		line_no = 67686;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9276);
@@ -486408,19 +486408,19 @@ __Nlhud_target_fmt:
 	}
 	case (0xa9276):
 	#ifdef M68K_DEBUG
-		line_no = 67687;
+		line_no = 67688;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32+32);
 	#ifdef M68K_DEBUG
-		line_no = 67688;
+		line_no = 67689;
 	#endif
 	__Fa927c ();
 	#ifdef M68K_DEBUG
-		line_no = 67689;
+		line_no = 67690;
 	#endif
 	__Fa9282 ();
 	#ifdef M68K_DEBUG
-		line_no = 67690;
+		line_no = 67691;
 	#endif
 	if ((!nZ))
 	{
@@ -486430,13 +486430,13 @@ __Nlhud_target_fmt:
 	} else {
 		goto __Nlhud_target_call;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 67691;
-	#endif
-	__Fa9288 ();
 	#ifdef M68K_DEBUG
 		line_no = 67692;
 	#endif
+	__Fa9288 ();
+	#ifdef M68K_DEBUG
+		line_no = 67693;
+	#endif
 	if ((!nZ))
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
@@ -486446,11 +486446,11 @@ __Nlhud_target_fmt:
 		goto __Nlhud_target_call;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67693;
+		line_no = 67694;
 	#endif
 	__Fa928e ();
 	#ifdef M68K_DEBUG
-		line_no = 67694;
+		line_no = 67695;
 	#endif
 	if (nZ)
 	{
@@ -486461,11 +486461,11 @@ __Nlhud_target_fmt:
 		goto __Nlhud_target_tunnel;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67695;
+		line_no = 67696;
 	#endif
 	__Fa9294 ();
 	#ifdef M68K_DEBUG
-		line_no = 67696;
+		line_no = 67697;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9298);
@@ -486475,15 +486475,15 @@ __Nlhud_target_fmt:
 	}
 	case (0xa9298):
 	#ifdef M68K_DEBUG
-		line_no = 67697;
+		line_no = 67698;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32+32);
 	#ifdef M68K_DEBUG
-		line_no = 67698;
+		line_no = 67699;
 	#endif
 	__Fa92a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67699;
+		line_no = 67700;
 	#endif
 	if (nZ)
 	{
@@ -486496,25 +486496,25 @@ __Nlhud_target_fmt:
 __Nlhud_target_tunnel:
 	case (0xa92a2):
 	#ifdef M68K_DEBUG
-		line_no = 67701;
+		line_no = 67702;
 	#endif
 	__Fa92a4 ();
 __Nlhud_target_call:
 	case (0xa92a4):
 	#ifdef M68K_DEBUG
-		line_no = 67703;
+		line_no = 67704;
 	#endif
 	(* hcalls[136]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67704;
+		line_no = 67705;
 	#endif
 	__Fa92aa ();
 	#ifdef M68K_DEBUG
-		line_no = 67705;
+		line_no = 67706;
 	#endif
 	__Fa92ae ();
 	#ifdef M68K_DEBUG
-		line_no = 67706;
+		line_no = 67707;
 	#endif
 	if (nZ)
 	{
@@ -486525,11 +486525,11 @@ __Nlhud_target_call:
 		goto __Nlhud_target_own;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67707;
+		line_no = 67708;
 	#endif
 	__Fa92b6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67708;
+		line_no = 67709;
 	#endif
 	{
 		goto __Nlhud_target_back;
@@ -486537,7 +486537,7 @@ __Nlhud_target_call:
 __Nlhud_target_own:
 	case (0xa92bc):
 	#ifdef M68K_DEBUG
-		line_no = 67710;
+		line_no = 67711;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486545,31 +486545,31 @@ __Nlhud_target_own:
 __NLhud_labels:
 	case (0xa92be):
 	#ifdef M68K_DEBUG
-		line_no = 67713;
+		line_no = 67714;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 67714;
+		line_no = 67715;
 	#endif
 	Regs[11]._u32 = (__DL6393c);
 	#ifdef M68K_DEBUG
-		line_no = 67715;
+		line_no = 67716;
 	#endif
 	__Fa92ca ();
 	#ifdef M68K_DEBUG
-		line_no = 67716;
+		line_no = 67717;
 	#endif
 	(* hcalls[137]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67717;
+		line_no = 67718;
 	#endif
 	__Fa92d0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67718;
+		line_no = 67719;
 	#endif
 	__Fa92d4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67719;
+		line_no = 67720;
 	#endif
 	if ((!nZ))
 	{
@@ -486580,13 +486580,13 @@ __NLhud_labels:
 		goto __Nlhud_labels_game;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67720;
+		line_no = 67721;
 	#endif
 	Regs[11]._u32 = (__Dlhud_labels_none);
 __Nlhud_labels_game:
 	case (0xa92dc):
 	#ifdef M68K_DEBUG
-		line_no = 67722;
+		line_no = 67723;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486594,7 +486594,7 @@ __Nlhud_labels_game:
 __Nlhud_labels_none:
 	case (0xa92de):
 	#ifdef M68K_DEBUG
-		line_no = 67724;
+		line_no = 67725;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486602,7 +486602,7 @@ __Nlhud_labels_none:
 __NLcam_hud:
 	case (0xa92e0):
 	#ifdef M68K_DEBUG
-		line_no = 67732;
+		line_no = 67733;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da92e6);
@@ -486611,11 +486611,11 @@ __NLcam_hud:
 	}
 	case (0xa92e6):
 	#ifdef M68K_DEBUG
-		line_no = 67733;
+		line_no = 67734;
 	#endif
 	__Fa92ec ();
 	#ifdef M68K_DEBUG
-		line_no = 67734;
+		line_no = 67735;
 	#endif
 	if ((!nZ))
 	{
@@ -486626,15 +486626,15 @@ __NLcam_hud:
 		goto __Nlcam_hud_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67735;
+		line_no = 67736;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 67736;
+		line_no = 67737;
 	#endif
 	Regs[11]._u32 = (__DL6393c);
 	#ifdef M68K_DEBUG
-		line_no = 67737;
+		line_no = 67738;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da92fc);
@@ -486645,7 +486645,7 @@ __NLcam_hud:
 __Nlcam_hud_done:
 	case (0xa92fc):
 	#ifdef M68K_DEBUG
-		line_no = 67739;
+		line_no = 67740;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486653,23 +486653,23 @@ __Nlcam_hud_done:
 __NLscreen_leave:
 	case (0xa92fe):
 	#ifdef M68K_DEBUG
-		line_no = 67752;
+		line_no = 67753;
 	#endif
 	__Fa9302 ();
 	#ifdef M68K_DEBUG
-		line_no = 67753;
+		line_no = 67754;
 	#endif
 	(* hcalls[138]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67754;
+		line_no = 67755;
 	#endif
 	__Fa930a ();
 	#ifdef M68K_DEBUG
-		line_no = 67755;
+		line_no = 67756;
 	#endif
 	__Fa930c ();
 	#ifdef M68K_DEBUG
-		line_no = 67756;
+		line_no = 67757;
 	#endif
 	{
 		jdest = (Regs[8]._s32+36);
@@ -486678,27 +486678,27 @@ __NLscreen_leave:
 __NLstation_enter:
 	case (0xa9310):
 	#ifdef M68K_DEBUG
-		line_no = 67759;
+		line_no = 67760;
 	#endif
 	__Fa9312 ();
 	#ifdef M68K_DEBUG
-		line_no = 67760;
+		line_no = 67761;
 	#endif
 	__Fa9314 ();
 	#ifdef M68K_DEBUG
-		line_no = 67761;
+		line_no = 67762;
 	#endif
 	(* hcalls[139]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67762;
+		line_no = 67763;
 	#endif
 	__Fa931a ();
 	#ifdef M68K_DEBUG
-		line_no = 67763;
+		line_no = 67764;
 	#endif
 	__Fa931e ();
 	#ifdef M68K_DEBUG
-		line_no = 67764;
+		line_no = 67765;
 	#endif
 	if (nZ)
 	{
@@ -486709,11 +486709,11 @@ __NLstation_enter:
 		goto __Nlstation_resume;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67765;
+		line_no = 67766;
 	#endif
 	__Fa9326 ();
 	#ifdef M68K_DEBUG
-		line_no = 67766;
+		line_no = 67767;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486721,19 +486721,19 @@ __NLstation_enter:
 __Nlstation_resume:
 	case (0xa9328):
 	#ifdef M68K_DEBUG
-		line_no = 67768;
+		line_no = 67769;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 67769;
+		line_no = 67770;
 	#endif
 	__Fa932e ();
 	#ifdef M68K_DEBUG
-		line_no = 67770;
+		line_no = 67771;
 	#endif
 	__Fa9330 ();
 	#ifdef M68K_DEBUG
-		line_no = 67771;
+		line_no = 67772;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9334);
@@ -486743,19 +486743,19 @@ __Nlstation_resume:
 	}
 	case (0xa9334):
 	#ifdef M68K_DEBUG
-		line_no = 67772;
+		line_no = 67773;
 	#endif
 	__Fa9338 ();
 	#ifdef M68K_DEBUG
-		line_no = 67773;
+		line_no = 67774;
 	#endif
 	__Fa933a ();
 	#ifdef M68K_DEBUG
-		line_no = 67774;
+		line_no = 67775;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+44);
 	#ifdef M68K_DEBUG
-		line_no = 67775;
+		line_no = 67776;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9342);
@@ -486765,15 +486765,15 @@ __Nlstation_resume:
 	}
 	case (0xa9342):
 	#ifdef M68K_DEBUG
-		line_no = 67776;
+		line_no = 67777;
 	#endif
 	__Fa9344 ();
 	#ifdef M68K_DEBUG
-		line_no = 67777;
+		line_no = 67778;
 	#endif
 	(* hcalls[139]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67778;
+		line_no = 67779;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da934e);
@@ -486782,7 +486782,7 @@ __Nlstation_resume:
 	}
 	case (0xa934e):
 	#ifdef M68K_DEBUG
-		line_no = 67779;
+		line_no = 67780;
 	#endif
 	{
 		goto __NL760ba;
@@ -486790,11 +486790,11 @@ __Nlstation_resume:
 __NLdust_gate:
 	case (0xa9354):
 	#ifdef M68K_DEBUG
-		line_no = 67790;
+		line_no = 67791;
 	#endif
 	__Fa9358 ();
 	#ifdef M68K_DEBUG
-		line_no = 67791;
+		line_no = 67792;
 	#endif
 	if (N)
 	{
@@ -486805,23 +486805,23 @@ __NLdust_gate:
 		goto __Nldust_gate_on;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67792;
+		line_no = 67793;
 	#endif
 	__Fa935c ();
 	#ifdef M68K_DEBUG
-		line_no = 67793;
+		line_no = 67794;
 	#endif
 	(* hcalls[140]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67794;
+		line_no = 67795;
 	#endif
 	__Fa9362 ();
 	#ifdef M68K_DEBUG
-		line_no = 67795;
+		line_no = 67796;
 	#endif
 	__Fa9366 ();
 	#ifdef M68K_DEBUG
-		line_no = 67796;
+		line_no = 67797;
 	#endif
 	if (nZ)
 	{
@@ -486832,13 +486832,13 @@ __NLdust_gate:
 		goto __Nldust_gate_on;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67797;
+		line_no = 67798;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 __Nldust_gate_on:
 	case (0xa936a):
 	#ifdef M68K_DEBUG
-		line_no = 67799;
+		line_no = 67800;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486846,19 +486846,19 @@ __Nldust_gate_on:
 __NLgame_start:
 	case (0xa936c):
 	#ifdef M68K_DEBUG
-		line_no = 67807;
+		line_no = 67808;
 	#endif
 	(* hcalls[42]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67808;
+		line_no = 67809;
 	#endif
 	Regs[15]._s32 = rdlong(Regs[14]._s32+14478);
 	#ifdef M68K_DEBUG
-		line_no = 67809;
+		line_no = 67810;
 	#endif
 	Regs[9]._u32 = (Regs[14]._s32+15876);
 	#ifdef M68K_DEBUG
-		line_no = 67810;
+		line_no = 67811;
 	#endif
 	{
 		goto __NL42542_after;
@@ -486866,23 +486866,23 @@ __NLgame_start:
 __NLorbit_align:
 	case (0xa937e):
 	#ifdef M68K_DEBUG
-		line_no = 67819;
+		line_no = 67820;
 	#endif
 	__Fa9380 ();
 	#ifdef M68K_DEBUG
-		line_no = 67820;
+		line_no = 67821;
 	#endif
 	(* hcalls[141]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67821;
+		line_no = 67822;
 	#endif
 	__Fa9386 ();
 	#ifdef M68K_DEBUG
-		line_no = 67822;
+		line_no = 67823;
 	#endif
 	__Fa938a ();
 	#ifdef M68K_DEBUG
-		line_no = 67823;
+		line_no = 67824;
 	#endif
 	if ((!nZ))
 	{
@@ -486893,7 +486893,7 @@ __NLorbit_align:
 		goto __Nlorbit_align_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67824;
+		line_no = 67825;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9390);
@@ -486903,13 +486903,13 @@ __NLorbit_align:
 	}
 	case (0xa9390):
 	#ifdef M68K_DEBUG
-		line_no = 67825;
+		line_no = 67826;
 	#endif
 	__Fa9396 ();
 __Nlorbit_align_off:
 	case (0xa9396):
 	#ifdef M68K_DEBUG
-		line_no = 67827;
+		line_no = 67828;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486917,23 +486917,23 @@ __Nlorbit_align_off:
 __NLland_cmp:
 	case (0xa9398):
 	#ifdef M68K_DEBUG
-		line_no = 67837;
+		line_no = 67838;
 	#endif
 	__Fa939a ();
 	#ifdef M68K_DEBUG
-		line_no = 67838;
+		line_no = 67839;
 	#endif
 	(* hcalls[141]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67839;
+		line_no = 67840;
 	#endif
 	__Fa93a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67840;
+		line_no = 67841;
 	#endif
 	__Fa93a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67841;
+		line_no = 67842;
 	#endif
 	if (nZ)
 	{
@@ -486944,11 +486944,11 @@ __NLland_cmp:
 		goto __Nlland_cmp_on;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67845;
+		line_no = 67846;
 	#endif
 	__Fa93aa ();
 	#ifdef M68K_DEBUG
-		line_no = 67846;
+		line_no = 67847;
 	#endif
 	if (nZ)
 	{
@@ -486959,11 +486959,11 @@ __NLland_cmp:
 		goto __Nlland_cmp_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67847;
+		line_no = 67848;
 	#endif
 	__Fa93b2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67848;
+		line_no = 67849;
 	#endif
 	if ((!nZ))
 	{
@@ -486976,17 +486976,17 @@ __NLland_cmp:
 __Nlland_cmp_off:
 	case (0xa93b4):
 	#ifdef M68K_DEBUG
-		line_no = 67850;
+		line_no = 67851;
 	#endif
 	__Fa93b6 ();
 __Nlland_cmp_on:
 	case (0xa93b6):
 	#ifdef M68K_DEBUG
-		line_no = 67852;
+		line_no = 67853;
 	#endif
 	__Fa93bc ();
 	#ifdef M68K_DEBUG
-		line_no = 67853;
+		line_no = 67854;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -486994,15 +486994,15 @@ __Nlland_cmp_on:
 __NLflight_log:
 	case (0xa93be):
 	#ifdef M68K_DEBUG
-		line_no = 67860;
+		line_no = 67861;
 	#endif
 	(* hcalls[142]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67861;
+		line_no = 67862;
 	#endif
 	__Fa93c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67862;
+		line_no = 67863;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487010,23 +487010,23 @@ __NLflight_log:
 __NLkill_log:
 	case (0xa93ca):
 	#ifdef M68K_DEBUG
-		line_no = 67865;
+		line_no = 67866;
 	#endif
 	(* hcalls[143]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67866;
+		line_no = 67867;
 	#endif
 	__Fa93d0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67867;
+		line_no = 67868;
 	#endif
 	__Fa93d2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67868;
+		line_no = 67869;
 	#endif
 	__Fa93d4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67869;
+		line_no = 67870;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487034,15 +487034,15 @@ __NLkill_log:
 __NLpos_dt:
 	case (0xa93d6):
 	#ifdef M68K_DEBUG
-		line_no = 67883;
+		line_no = 67884;
 	#endif
 	(* hcalls[144]) ();
 	#ifdef M68K_DEBUG
-		line_no = 67884;
+		line_no = 67885;
 	#endif
 	__Fa93dc ();
 	#ifdef M68K_DEBUG
-		line_no = 67885;
+		line_no = 67886;
 	#endif
 	if (nZ)
 	{
@@ -487053,15 +487053,15 @@ __NLpos_dt:
 		goto __Nlpos_exact;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67886;
+		line_no = 67887;
 	#endif
 	__Fa93e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67887;
+		line_no = 67888;
 	#endif
 	__Fa93e6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67888;
+		line_no = 67889;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -487072,7 +487072,7 @@ __NLpos_dt:
 		goto __Nlpos_big;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67889;
+		line_no = 67890;
 	#endif
 	{
 		goto __Nlpos_mul;
@@ -487080,25 +487080,25 @@ __NLpos_dt:
 __Nlpos_big:
 	case (0xa93ea):
 	#ifdef M68K_DEBUG
-		line_no = 67891;
+		line_no = 67892;
 	#endif
 	__Fa93ec ();
 __Nlpos_big1:
 	case (0xa93ec):
 	#ifdef M68K_DEBUG
-		line_no = 67893;
+		line_no = 67894;
 	#endif
 	__Fa93ee ();
 	#ifdef M68K_DEBUG
-		line_no = 67894;
+		line_no = 67895;
 	#endif
 	__Fa93f0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67895;
+		line_no = 67896;
 	#endif
 	__Fa93f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67896;
+		line_no = 67897;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -487109,11 +487109,11 @@ __Nlpos_big1:
 		goto __Nlpos_big1;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67897;
+		line_no = 67898;
 	#endif
 	__Fa93fa ();
 	#ifdef M68K_DEBUG
-		line_no = 67898;
+		line_no = 67899;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da93fc);
@@ -487122,41 +487122,41 @@ __Nlpos_big1:
 	}
 	case (0xa93fc):
 	#ifdef M68K_DEBUG
-		line_no = 67899;
+		line_no = 67900;
 	#endif
 	__Fa93fe ();
 __Nlpos_shl:
 	case (0xa93fe):
 	#ifdef M68K_DEBUG
-		line_no = 67901;
+		line_no = 67902;
 	#endif
 	__Fa9400 ();
 	#ifdef M68K_DEBUG
-		line_no = 67902;
+		line_no = 67903;
 	#endif
 	__Fa9402 ();
 	#ifdef M68K_DEBUG
-		line_no = 67903;
+		line_no = 67904;
 	#endif
 	__Fa9404 ();
 	#ifdef M68K_DEBUG
-		line_no = 67904;
+		line_no = 67905;
 	#endif
 	__Fa9406 ();
 	#ifdef M68K_DEBUG
-		line_no = 67905;
+		line_no = 67906;
 	#endif
 	__Fa9408 ();
 	#ifdef M68K_DEBUG
-		line_no = 67906;
+		line_no = 67907;
 	#endif
 	__Fa940a ();
 	#ifdef M68K_DEBUG
-		line_no = 67907;
+		line_no = 67908;
 	#endif
 	if ((!0) && (--Regs[6]._s16 != -1)) goto __Nlpos_shl;
 	#ifdef M68K_DEBUG
-		line_no = 67908;
+		line_no = 67909;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487164,17 +487164,17 @@ __Nlpos_shl:
 __Nlpos_exact:
 	case (0xa9410):
 	#ifdef M68K_DEBUG
-		line_no = 67910;
+		line_no = 67911;
 	#endif
 	__Fa9412 ();
 __Nlpos_e1:
 	case (0xa9412):
 	#ifdef M68K_DEBUG
-		line_no = 67912;
+		line_no = 67913;
 	#endif
 	__Fa9418 ();
 	#ifdef M68K_DEBUG
-		line_no = 67913;
+		line_no = 67914;
 	#endif
 	if ((C || (!nZ)))
 	{
@@ -487185,15 +487185,15 @@ __Nlpos_e1:
 		goto __Nlpos_e2;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67914;
+		line_no = 67915;
 	#endif
 	__Fa941c ();
 	#ifdef M68K_DEBUG
-		line_no = 67915;
+		line_no = 67916;
 	#endif
 	__Fa941e ();
 	#ifdef M68K_DEBUG
-		line_no = 67916;
+		line_no = 67917;
 	#endif
 	{
 		goto __Nlpos_e1;
@@ -487201,11 +487201,11 @@ __Nlpos_e1:
 __Nlpos_e2:
 	case (0xa9420):
 	#ifdef M68K_DEBUG
-		line_no = 67918;
+		line_no = 67919;
 	#endif
 	__Fa9422 ();
 	#ifdef M68K_DEBUG
-		line_no = 67919;
+		line_no = 67920;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9424);
@@ -487214,15 +487214,15 @@ __Nlpos_e2:
 	}
 	case (0xa9424):
 	#ifdef M68K_DEBUG
-		line_no = 67920;
+		line_no = 67921;
 	#endif
 	__Fa9426 ();
 	#ifdef M68K_DEBUG
-		line_no = 67921;
+		line_no = 67922;
 	#endif
 	__Fa9428 ();
 	#ifdef M68K_DEBUG
-		line_no = 67922;
+		line_no = 67923;
 	#endif
 	if ((!nZ))
 	{
@@ -487233,7 +487233,7 @@ __Nlpos_e2:
 		goto __Nlpos_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67923;
+		line_no = 67924;
 	#endif
 	if (N)
 	{
@@ -487246,35 +487246,35 @@ __Nlpos_e2:
 __Nlpos_shl2:
 	case (0xa942c):
 	#ifdef M68K_DEBUG
-		line_no = 67925;
+		line_no = 67926;
 	#endif
 	__Fa942e ();
 	#ifdef M68K_DEBUG
-		line_no = 67926;
+		line_no = 67927;
 	#endif
 	__Fa9430 ();
 	#ifdef M68K_DEBUG
-		line_no = 67927;
+		line_no = 67928;
 	#endif
 	__Fa9432 ();
 	#ifdef M68K_DEBUG
-		line_no = 67928;
+		line_no = 67929;
 	#endif
 	__Fa9434 ();
 	#ifdef M68K_DEBUG
-		line_no = 67929;
+		line_no = 67930;
 	#endif
 	__Fa9436 ();
 	#ifdef M68K_DEBUG
-		line_no = 67930;
+		line_no = 67931;
 	#endif
 	__Fa9438 ();
 	#ifdef M68K_DEBUG
-		line_no = 67931;
+		line_no = 67932;
 	#endif
 	__Fa943a ();
 	#ifdef M68K_DEBUG
-		line_no = 67932;
+		line_no = 67933;
 	#endif
 	if (nZ)
 	{
@@ -487285,7 +487285,7 @@ __Nlpos_shl2:
 		goto __Nlpos_shl2;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 67933;
+		line_no = 67934;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487293,41 +487293,41 @@ __Nlpos_shl2:
 __Nlpos_shr:
 	case (0xa943e):
 	#ifdef M68K_DEBUG
-		line_no = 67935;
+		line_no = 67936;
 	#endif
 	__Fa9440 ();
 __Nlpos_shr1:
 	case (0xa9440):
 	#ifdef M68K_DEBUG
-		line_no = 67937;
+		line_no = 67938;
 	#endif
 	__Fa9442 ();
 	#ifdef M68K_DEBUG
-		line_no = 67938;
+		line_no = 67939;
 	#endif
 	__Fa9444 ();
 	#ifdef M68K_DEBUG
-		line_no = 67939;
+		line_no = 67940;
 	#endif
 	__Fa9446 ();
 	#ifdef M68K_DEBUG
-		line_no = 67940;
+		line_no = 67941;
 	#endif
 	__Fa9448 ();
 	#ifdef M68K_DEBUG
-		line_no = 67941;
+		line_no = 67942;
 	#endif
 	__Fa944a ();
 	#ifdef M68K_DEBUG
-		line_no = 67942;
+		line_no = 67943;
 	#endif
 	__Fa944c ();
 	#ifdef M68K_DEBUG
-		line_no = 67943;
+		line_no = 67944;
 	#endif
 	__Fa944e ();
 	#ifdef M68K_DEBUG
-		line_no = 67944;
+		line_no = 67945;
 	#endif
 	if (nZ)
 	{
@@ -487340,7 +487340,7 @@ __Nlpos_shr1:
 __Nlpos_done:
 	case (0xa9450):
 	#ifdef M68K_DEBUG
-		line_no = 67946;
+		line_no = 67947;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487348,191 +487348,191 @@ __Nlpos_done:
 __Nlpos_mul:
 	case (0xa9452):
 	#ifdef M68K_DEBUG
-		line_no = 67949;
+		line_no = 67950;
 	#endif
 	__Fa9454 ();
 	#ifdef M68K_DEBUG
-		line_no = 67950;
+		line_no = 67951;
 	#endif
 	__Fa9456 ();
 	#ifdef M68K_DEBUG
-		line_no = 67951;
+		line_no = 67952;
 	#endif
 	__Fa9458 ();
 	#ifdef M68K_DEBUG
-		line_no = 67952;
+		line_no = 67953;
 	#endif
 	__Fa945a ();
 	#ifdef M68K_DEBUG
-		line_no = 67953;
+		line_no = 67954;
 	#endif
 	__Fa945c ();
 	#ifdef M68K_DEBUG
-		line_no = 67954;
+		line_no = 67955;
 	#endif
 	__Fa945e ();
 	#ifdef M68K_DEBUG
-		line_no = 67955;
+		line_no = 67956;
 	#endif
 	__Fa9460 ();
 	#ifdef M68K_DEBUG
-		line_no = 67956;
+		line_no = 67957;
 	#endif
 	__Fa9462 ();
 	#ifdef M68K_DEBUG
-		line_no = 67957;
+		line_no = 67958;
 	#endif
 	__Fa9464 ();
 	#ifdef M68K_DEBUG
-		line_no = 67958;
+		line_no = 67959;
 	#endif
 	__Fa9466 ();
 	#ifdef M68K_DEBUG
-		line_no = 67959;
+		line_no = 67960;
 	#endif
 	__Fa9468 ();
 	#ifdef M68K_DEBUG
-		line_no = 67960;
+		line_no = 67961;
 	#endif
 	__Fa946a ();
 	#ifdef M68K_DEBUG
-		line_no = 67961;
+		line_no = 67962;
 	#endif
 	__Fa946c ();
 	#ifdef M68K_DEBUG
-		line_no = 67962;
+		line_no = 67963;
 	#endif
 	__Fa946e ();
 	#ifdef M68K_DEBUG
-		line_no = 67963;
+		line_no = 67964;
 	#endif
 	__Fa9470 ();
 	#ifdef M68K_DEBUG
-		line_no = 67964;
+		line_no = 67965;
 	#endif
 	__Fa9472 ();
 	#ifdef M68K_DEBUG
-		line_no = 67965;
+		line_no = 67966;
 	#endif
 	__Fa9474 ();
 	#ifdef M68K_DEBUG
-		line_no = 67966;
+		line_no = 67967;
 	#endif
 	__Fa9476 ();
 	#ifdef M68K_DEBUG
-		line_no = 67967;
+		line_no = 67968;
 	#endif
 	__Fa9478 ();
 	#ifdef M68K_DEBUG
-		line_no = 67968;
+		line_no = 67969;
 	#endif
 	__Fa947a ();
 	#ifdef M68K_DEBUG
-		line_no = 67969;
+		line_no = 67970;
 	#endif
 	__Fa947c ();
 	#ifdef M68K_DEBUG
-		line_no = 67970;
+		line_no = 67971;
 	#endif
 	__Fa947e ();
 	#ifdef M68K_DEBUG
-		line_no = 67971;
+		line_no = 67972;
 	#endif
 	__Fa9480 ();
 	#ifdef M68K_DEBUG
-		line_no = 67972;
+		line_no = 67973;
 	#endif
 	__Fa9482 ();
 	#ifdef M68K_DEBUG
-		line_no = 67973;
+		line_no = 67974;
 	#endif
 	__Fa9484 ();
 	#ifdef M68K_DEBUG
-		line_no = 67974;
+		line_no = 67975;
 	#endif
 	__Fa9486 ();
 	#ifdef M68K_DEBUG
-		line_no = 67975;
+		line_no = 67976;
 	#endif
 	__Fa9488 ();
 	#ifdef M68K_DEBUG
-		line_no = 67976;
+		line_no = 67977;
 	#endif
 	__Fa948a ();
 	#ifdef M68K_DEBUG
-		line_no = 67977;
+		line_no = 67978;
 	#endif
 	__Fa948c ();
 	#ifdef M68K_DEBUG
-		line_no = 67978;
+		line_no = 67979;
 	#endif
 	__Fa948e ();
 	#ifdef M68K_DEBUG
-		line_no = 67979;
+		line_no = 67980;
 	#endif
 	__Fa9490 ();
 	#ifdef M68K_DEBUG
-		line_no = 67980;
+		line_no = 67981;
 	#endif
 	__Fa9492 ();
 	#ifdef M68K_DEBUG
-		line_no = 67981;
+		line_no = 67982;
 	#endif
 	__Fa9494 ();
 	#ifdef M68K_DEBUG
-		line_no = 67982;
+		line_no = 67983;
 	#endif
 	__Fa9496 ();
 	#ifdef M68K_DEBUG
-		line_no = 67983;
+		line_no = 67984;
 	#endif
 	__Fa9498 ();
 	#ifdef M68K_DEBUG
-		line_no = 67984;
+		line_no = 67985;
 	#endif
 	__Fa949a ();
 	#ifdef M68K_DEBUG
-		line_no = 67985;
+		line_no = 67986;
 	#endif
 	__Fa949c ();
 	#ifdef M68K_DEBUG
-		line_no = 67986;
+		line_no = 67987;
 	#endif
 	__Fa949e ();
 	#ifdef M68K_DEBUG
-		line_no = 67987;
+		line_no = 67988;
 	#endif
 	__Fa94a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 67988;
+		line_no = 67989;
 	#endif
 	__Fa94a2 ();
 	#ifdef M68K_DEBUG
-		line_no = 67989;
+		line_no = 67990;
 	#endif
 	__Fa94a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 67990;
+		line_no = 67991;
 	#endif
 	__Fa94a6 ();
 	#ifdef M68K_DEBUG
-		line_no = 67991;
+		line_no = 67992;
 	#endif
 	__Fa94a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 67992;
+		line_no = 67993;
 	#endif
 	__Fa94aa ();
 	#ifdef M68K_DEBUG
-		line_no = 67993;
+		line_no = 67994;
 	#endif
 	__Fa94ac ();
 	#ifdef M68K_DEBUG
-		line_no = 67994;
+		line_no = 67995;
 	#endif
 	__Fa94ae ();
 	#ifdef M68K_DEBUG
-		line_no = 67995;
+		line_no = 67996;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487540,15 +487540,15 @@ __Nlpos_mul:
 __NLgrav_step:
 	case (0xa94b0):
 	#ifdef M68K_DEBUG
-		line_no = 68008;
+		line_no = 68009;
 	#endif
 	(* hcalls[145]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68009;
+		line_no = 68010;
 	#endif
 	__Fa94b6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68010;
+		line_no = 68011;
 	#endif
 	if (nZ)
 	{
@@ -487559,11 +487559,11 @@ __NLgrav_step:
 		goto __Nlgrav_sub;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68011;
+		line_no = 68012;
 	#endif
 	__Fa94bc ();
 	#ifdef M68K_DEBUG
-		line_no = 68012;
+		line_no = 68013;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da94c0);
@@ -487573,7 +487573,7 @@ __NLgrav_step:
 	}
 	case (0xa94c0):
 	#ifdef M68K_DEBUG
-		line_no = 68013;
+		line_no = 68014;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487581,45 +487581,45 @@ __NLgrav_step:
 __Nlgrav_sub:
 	case (0xa94c2):
 	#ifdef M68K_DEBUG
-		line_no = 68015;
+		line_no = 68016;
 	#endif
 	__Fa94c4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68016;
+		line_no = 68017;
 	#endif
 	__Fa94c6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68017;
+		line_no = 68018;
 	#endif
 	__Fa94c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68018;
+		line_no = 68019;
 	#endif
 	__Fa94ca ();
 	#ifdef M68K_DEBUG
-		line_no = 68019;
+		line_no = 68020;
 	#endif
 	__Fa94cc ();
 __Nlgrav_loop:
 	case (0xa94cc):
 	#ifdef M68K_DEBUG
-		line_no = 68021;
+		line_no = 68022;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32+4);
 	#ifdef M68K_DEBUG
-		line_no = 68022;
+		line_no = 68023;
 	#endif
 	__Fa94d4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68023;
+		line_no = 68024;
 	#endif
 	__Fa94d8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68024;
+		line_no = 68025;
 	#endif
 	__Fa94da ();
 	#ifdef M68K_DEBUG
-		line_no = 68025;
+		line_no = 68026;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da94de);
@@ -487629,25 +487629,25 @@ __Nlgrav_loop:
 	}
 	case (0xa94de):
 	#ifdef M68K_DEBUG
-		line_no = 68026;
+		line_no = 68027;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32+4);
 	#ifdef M68K_DEBUG
-		line_no = 68027;
+		line_no = 68028;
 	#endif
 	__Fa94e6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68028;
+		line_no = 68029;
 	#endif
 	__Fa94ec ();
 __Nlgrav_sh:
 	case (0xa94ec):
 	#ifdef M68K_DEBUG
-		line_no = 68030;
+		line_no = 68031;
 	#endif
 	__Fa94ee ();
 	#ifdef M68K_DEBUG
-		line_no = 68031;
+		line_no = 68032;
 	#endif
 	if ((!nZ))
 	{
@@ -487658,19 +487658,19 @@ __Nlgrav_sh:
 		goto __Nlgrav_mv;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68032;
+		line_no = 68033;
 	#endif
 	__Fa94f2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68033;
+		line_no = 68034;
 	#endif
 	__Fa94f4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68034;
+		line_no = 68035;
 	#endif
 	__Fa94f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68035;
+		line_no = 68036;
 	#endif
 	{
 		goto __Nlgrav_sh;
@@ -487678,7 +487678,7 @@ __Nlgrav_sh:
 __Nlgrav_mv:
 	case (0xa94f8):
 	#ifdef M68K_DEBUG
-		line_no = 68037;
+		line_no = 68038;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da94fc);
@@ -487688,11 +487688,11 @@ __Nlgrav_mv:
 	}
 	case (0xa94fc):
 	#ifdef M68K_DEBUG
-		line_no = 68038;
+		line_no = 68039;
 	#endif
 	__Fa94fe ();
 	#ifdef M68K_DEBUG
-		line_no = 68039;
+		line_no = 68040;
 	#endif
 	if (nZ)
 	{
@@ -487703,15 +487703,15 @@ __Nlgrav_mv:
 		goto __Nlgrav_loop;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68040;
+		line_no = 68041;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32+4);
 	#ifdef M68K_DEBUG
-		line_no = 68041;
+		line_no = 68042;
 	#endif
 	Regs[15]._u32 = (Regs[15]._s32+8);
 	#ifdef M68K_DEBUG
-		line_no = 68042;
+		line_no = 68043;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487719,15 +487719,15 @@ __Nlgrav_mv:
 __NLpos_player:
 	case (0xa950a):
 	#ifdef M68K_DEBUG
-		line_no = 68045;
+		line_no = 68046;
 	#endif
 	(* hcalls[146]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68046;
+		line_no = 68047;
 	#endif
 	__Fa9510 ();
 	#ifdef M68K_DEBUG
-		line_no = 68047;
+		line_no = 68048;
 	#endif
 	if (nZ)
 	{
@@ -487738,11 +487738,11 @@ __NLpos_player:
 		goto __Nlpos_player_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68048;
+		line_no = 68049;
 	#endif
 	__Fa9518 ();
 	#ifdef M68K_DEBUG
-		line_no = 68049;
+		line_no = 68050;
 	#endif
 	{
 		jdest = (Regs[13]._s32+570);
@@ -487751,7 +487751,7 @@ __NLpos_player:
 __Nlpos_player_done:
 	case (0xa951c):
 	#ifdef M68K_DEBUG
-		line_no = 68051;
+		line_no = 68052;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487759,31 +487759,31 @@ __Nlpos_player_done:
 __NLgrav_norm:
 	case (0xa951e):
 	#ifdef M68K_DEBUG
-		line_no = 68060;
+		line_no = 68061;
 	#endif
 	__Fa9520 ();
 	#ifdef M68K_DEBUG
-		line_no = 68061;
+		line_no = 68062;
 	#endif
 	__Fa9522 ();
 	#ifdef M68K_DEBUG
-		line_no = 68062;
+		line_no = 68063;
 	#endif
 	__Fa9524 ();
 	#ifdef M68K_DEBUG
-		line_no = 68063;
+		line_no = 68064;
 	#endif
 	__Fa9526 ();
 	#ifdef M68K_DEBUG
-		line_no = 68064;
+		line_no = 68065;
 	#endif
 	__Fa9528 ();
 	#ifdef M68K_DEBUG
-		line_no = 68065;
+		line_no = 68066;
 	#endif
 	__Fa952a ();
 	#ifdef M68K_DEBUG
-		line_no = 68066;
+		line_no = 68067;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487791,15 +487791,15 @@ __NLgrav_norm:
 __NLgrav_mass:
 	case (0xa952c):
 	#ifdef M68K_DEBUG
-		line_no = 68068;
+		line_no = 68069;
 	#endif
 	__Fa9532 ();
 	#ifdef M68K_DEBUG
-		line_no = 68069;
+		line_no = 68070;
 	#endif
 	__Fa9534 ();
 	#ifdef M68K_DEBUG
-		line_no = 68070;
+		line_no = 68071;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487807,15 +487807,15 @@ __NLgrav_mass:
 __NLcool_dec:
 	case (0xa9536):
 	#ifdef M68K_DEBUG
-		line_no = 68078;
+		line_no = 68079;
 	#endif
 	__Fa9538 ();
 	#ifdef M68K_DEBUG
-		line_no = 68079;
+		line_no = 68080;
 	#endif
 	__Fa953e ();
 	#ifdef M68K_DEBUG
-		line_no = 68080;
+		line_no = 68081;
 	#endif
 	if ((C || (!nZ)))
 	{
@@ -487826,17 +487826,17 @@ __NLcool_dec:
 		goto __Nlcool_ok;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68081;
+		line_no = 68082;
 	#endif
 	__Fa9546 ();
 __Nlcool_ok:
 	case (0xa9546):
 	#ifdef M68K_DEBUG
-		line_no = 68082;
+		line_no = 68083;
 	#endif
 	__Fa954a ();
 	#ifdef M68K_DEBUG
-		line_no = 68083;
+		line_no = 68084;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487844,19 +487844,19 @@ __Nlcool_ok:
 __NLprox_log:
 	case (0xa954c):
 	#ifdef M68K_DEBUG
-		line_no = 68094;
+		line_no = 68095;
 	#endif
 	__Fa954e ();
 	#ifdef M68K_DEBUG
-		line_no = 68095;
+		line_no = 68096;
 	#endif
 	__Fa9550 ();
 	#ifdef M68K_DEBUG
-		line_no = 68096;
+		line_no = 68097;
 	#endif
 	__Fa9556 ();
 	#ifdef M68K_DEBUG
-		line_no = 68097;
+		line_no = 68098;
 	#endif
 	if (C)
 	{
@@ -487867,11 +487867,11 @@ __NLprox_log:
 		goto __Nlprox_ok;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68098;
+		line_no = 68099;
 	#endif
 	__Fa955e ();
 	#ifdef M68K_DEBUG
-		line_no = 68099;
+		line_no = 68100;
 	#endif
 	if ((!C))
 	{
@@ -487882,21 +487882,21 @@ __NLprox_log:
 		goto __Nlprox_ok;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68100;
+		line_no = 68101;
 	#endif
 	(* hcalls[147]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68101;
+		line_no = 68102;
 	#endif
 	__Fa956a ();
 __Nlprox_ok:
 	case (0xa956a):
 	#ifdef M68K_DEBUG
-		line_no = 68102;
+		line_no = 68103;
 	#endif
 	__Fa956c ();
 	#ifdef M68K_DEBUG
-		line_no = 68103;
+		line_no = 68104;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487904,11 +487904,11 @@ __Nlprox_ok:
 __NLframe_cand:
 	case (0xa956e):
 	#ifdef M68K_DEBUG
-		line_no = 68111;
+		line_no = 68112;
 	#endif
 	__Fa9574 ();
 	#ifdef M68K_DEBUG
-		line_no = 68112;
+		line_no = 68113;
 	#endif
 	if (nZ)
 	{
@@ -487919,11 +487919,11 @@ __NLframe_cand:
 		goto __Nlframe_cand_ret;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68113;
+		line_no = 68114;
 	#endif
 	__Fa957a ();
 	#ifdef M68K_DEBUG
-		line_no = 68114;
+		line_no = 68115;
 	#endif
 	if ((!nZ))
 	{
@@ -487934,11 +487934,11 @@ __NLframe_cand:
 		goto __Nlframe_cand_no;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68115;
+		line_no = 68116;
 	#endif
 	__Fa9580 ();
 	#ifdef M68K_DEBUG
-		line_no = 68116;
+		line_no = 68117;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9586);
@@ -487947,11 +487947,11 @@ __NLframe_cand:
 	}
 	case (0xa9586):
 	#ifdef M68K_DEBUG
-		line_no = 68117;
+		line_no = 68118;
 	#endif
 	__Fa958c ();
 	#ifdef M68K_DEBUG
-		line_no = 68118;
+		line_no = 68119;
 	#endif
 	if (nZ)
 	{
@@ -487962,17 +487962,17 @@ __NLframe_cand:
 		goto __Nlframe_cand_no2;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68119;
+		line_no = 68120;
 	#endif
 	__Fa9594 ();
 	#ifdef M68K_DEBUG
-		line_no = 68120;
+		line_no = 68121;
 	#endif
 	__Fa9598 ();
 __Nlframe_cand_ret:
 	case (0xa9598):
 	#ifdef M68K_DEBUG
-		line_no = 68121;
+		line_no = 68122;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487980,17 +487980,17 @@ __Nlframe_cand_ret:
 __Nlframe_cand_no2:
 	case (0xa959a):
 	#ifdef M68K_DEBUG
-		line_no = 68122;
+		line_no = 68123;
 	#endif
 	__Fa959e ();
 __Nlframe_cand_no:
 	case (0xa959e):
 	#ifdef M68K_DEBUG
-		line_no = 68123;
+		line_no = 68124;
 	#endif
 	__Fa95a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68124;
+		line_no = 68125;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -487998,67 +487998,67 @@ __Nlframe_cand_no:
 __NLalt_hud:
 	case (0xa95a2):
 	#ifdef M68K_DEBUG
-		line_no = 68138;
+		line_no = 68139;
 	#endif
 	__Fa95a6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68139;
+		line_no = 68140;
 	#endif
 	__Fa95a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68140;
+		line_no = 68141;
 	#endif
 	__Fa95aa ();
 	#ifdef M68K_DEBUG
-		line_no = 68141;
+		line_no = 68142;
 	#endif
 	__Fa95b0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68142;
+		line_no = 68143;
 	#endif
 	__Fa95b4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68143;
+		line_no = 68144;
 	#endif
 	__Fa95b6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68144;
+		line_no = 68145;
 	#endif
 	__Fa95b8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68145;
+		line_no = 68146;
 	#endif
 	__Fa95bc ();
 	#ifdef M68K_DEBUG
-		line_no = 68146;
+		line_no = 68147;
 	#endif
 	__Fa95c2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68147;
+		line_no = 68148;
 	#endif
 	__Fa95c4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68148;
+		line_no = 68149;
 	#endif
 	__Fa95c6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68149;
+		line_no = 68150;
 	#endif
 	__Fa95c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68150;
+		line_no = 68151;
 	#endif
 	__Fa95ca ();
 	#ifdef M68K_DEBUG
-		line_no = 68151;
+		line_no = 68152;
 	#endif
 	__Fa95d0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68152;
+		line_no = 68153;
 	#endif
 	__Fa95d6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68153;
+		line_no = 68154;
 	#endif
 	if ((!nZ))
 	{
@@ -488069,19 +488069,19 @@ __NLalt_hud:
 		goto __Nlalt_hud_cmp;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68154;
+		line_no = 68155;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+16024);
 	#ifdef M68K_DEBUG
-		line_no = 68155;
+		line_no = 68156;
 	#endif
 	__Fa95e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68156;
+		line_no = 68157;
 	#endif
 	__Fa95e4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68157;
+		line_no = 68158;
 	#endif
 	if (C)
 	{
@@ -488092,11 +488092,11 @@ __NLalt_hud:
 		goto __Nlalt_hud_cmp;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68158;
+		line_no = 68159;
 	#endif
 	__Fa95ea ();
 	#ifdef M68K_DEBUG
-		line_no = 68159;
+		line_no = 68160;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -488107,21 +488107,21 @@ __NLalt_hud:
 		goto __Nlalt_hud_cmp;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68160;
+		line_no = 68161;
 	#endif
 	__Fa95f2 ();
 __Nlalt_hud_cmp:
 	case (0xa95f2):
 	#ifdef M68K_DEBUG
-		line_no = 68161;
+		line_no = 68162;
 	#endif
 	__Fa95f4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68162;
+		line_no = 68163;
 	#endif
 	__Fa95f8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68163;
+		line_no = 68164;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488129,15 +488129,15 @@ __Nlalt_hud_cmp:
 __NLsmoke_vel:
 	case (0xa95fa):
 	#ifdef M68K_DEBUG
-		line_no = 68172;
+		line_no = 68173;
 	#endif
 	__Fa9600 ();
 	#ifdef M68K_DEBUG
-		line_no = 68173;
+		line_no = 68174;
 	#endif
 	(* hcalls[150]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68174;
+		line_no = 68175;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488145,11 +488145,11 @@ __NLsmoke_vel:
 __NLpax_late:
 	case (0xa9606):
 	#ifdef M68K_DEBUG
-		line_no = 68187;
+		line_no = 68188;
 	#endif
 	__Fa960a ();
 	#ifdef M68K_DEBUG
-		line_no = 68188;
+		line_no = 68189;
 	#endif
 	if (nZ)
 	{
@@ -488160,11 +488160,11 @@ __NLpax_late:
 		goto __Nlpax_late_dest;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68189;
+		line_no = 68190;
 	#endif
 	__Fa9612 ();
 	#ifdef M68K_DEBUG
-		line_no = 68190;
+		line_no = 68191;
 	#endif
 	if ((!nZ))
 	{
@@ -488175,7 +488175,7 @@ __NLpax_late:
 		goto __Nlpax_late_dest;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68191;
+		line_no = 68192;
 	#endif
 	{
 		goto __Nl7ee06;
@@ -488183,11 +488183,11 @@ __NLpax_late:
 __Nlpax_late_dest:
 	case (0xa961a):
 	#ifdef M68K_DEBUG
-		line_no = 68193;
+		line_no = 68194;
 	#endif
 	__Fa961e ();
 	#ifdef M68K_DEBUG
-		line_no = 68194;
+		line_no = 68195;
 	#endif
 	if ((!nZ))
 	{
@@ -488198,13 +488198,13 @@ __Nlpax_late_dest:
 		goto __Nlpax_late_here;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68195;
+		line_no = 68196;
 	#endif
 	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlpax_late_next;
 __Nlpax_late_here:
 	case (0xa9624):
 	#ifdef M68K_DEBUG
-		line_no = 68197;
+		line_no = 68198;
 	#endif
 	{
 		goto __Nl7edb4;
@@ -488212,7 +488212,7 @@ __Nlpax_late_here:
 __Nlpax_late_next:
 	case (0xa962a):
 	#ifdef M68K_DEBUG
-		line_no = 68199;
+		line_no = 68200;
 	#endif
 	{
 		goto __Nl7ee7e;
@@ -488220,19 +488220,19 @@ __Nlpax_late_next:
 __NLpol_slot:
 	case (0xa9630):
 	#ifdef M68K_DEBUG
-		line_no = 68234;
+		line_no = 68235;
 	#endif
 	__Fa9632 ();
 	#ifdef M68K_DEBUG
-		line_no = 68235;
+		line_no = 68236;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+68);
 	#ifdef M68K_DEBUG
-		line_no = 68236;
+		line_no = 68237;
 	#endif
 	__Fa963c ();
 	#ifdef M68K_DEBUG
-		line_no = 68237;
+		line_no = 68238;
 	#endif
 	if (nZ)
 	{
@@ -488243,13 +488243,13 @@ __NLpol_slot:
 		goto __Nlpol_slot_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68238;
+		line_no = 68239;
 	#endif
 	__Fa9642 ();
 __Nlpol_slot_done:
 	case (0xa9642):
 	#ifdef M68K_DEBUG
-		line_no = 68240;
+		line_no = 68241;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488257,15 +488257,15 @@ __Nlpol_slot_done:
 __NLpol_spawn:
 	case (0xa9644):
 	#ifdef M68K_DEBUG
-		line_no = 68243;
+		line_no = 68244;
 	#endif
 	__Fa9648 ();
 	#ifdef M68K_DEBUG
-		line_no = 68244;
+		line_no = 68245;
 	#endif
 	__Fa964c ();
 	#ifdef M68K_DEBUG
-		line_no = 68245;
+		line_no = 68246;
 	#endif
 	if (nZ)
 	{
@@ -488275,16 +488275,16 @@ __NLpol_spawn:
 	} else {
 		goto __Nlpol_spawn_done;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 68246;
-	#endif
-	__Fa9652 ();
 	#ifdef M68K_DEBUG
 		line_no = 68247;
 	#endif
-	__Fa9658 ();
+	__Fa9652 ();
 	#ifdef M68K_DEBUG
 		line_no = 68248;
+	#endif
+	__Fa9658 ();
+	#ifdef M68K_DEBUG
+		line_no = 68249;
 	#endif
 	if (nZ)
 	{
@@ -488295,11 +488295,11 @@ __NLpol_spawn:
 		goto __Nlpol_spawn_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68249;
+		line_no = 68250;
 	#endif
 	__Fa9660 ();
 	#ifdef M68K_DEBUG
-		line_no = 68250;
+		line_no = 68251;
 	#endif
 	if ((C || (!nZ)))
 	{
@@ -488310,17 +488310,17 @@ __NLpol_spawn:
 		goto __Nlpol_spawn_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68251;
+		line_no = 68252;
 	#endif
 	__Fa9668 ();
 __Nlpol_spawn_done:
 	case (0xa9668):
 	#ifdef M68K_DEBUG
-		line_no = 68253;
+		line_no = 68254;
 	#endif
 	__Fa966e ();
 	#ifdef M68K_DEBUG
-		line_no = 68254;
+		line_no = 68255;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488328,11 +488328,11 @@ __Nlpol_spawn_done:
 __NLpol_release:
 	case (0xa9670):
 	#ifdef M68K_DEBUG
-		line_no = 68257;
+		line_no = 68258;
 	#endif
 	__Fa9676 ();
 	#ifdef M68K_DEBUG
-		line_no = 68258;
+		line_no = 68259;
 	#endif
 	if (nZ)
 	{
@@ -488343,27 +488343,27 @@ __NLpol_release:
 		goto __Nlpol_release_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68259;
+		line_no = 68260;
 	#endif
 	__Fa967c ();
 	#ifdef M68K_DEBUG
-		line_no = 68260;
+		line_no = 68261;
 	#endif
 	__Fa9680 ();
 	#ifdef M68K_DEBUG
-		line_no = 68261;
+		line_no = 68262;
 	#endif
 	__Fa9686 ();
 	#ifdef M68K_DEBUG
-		line_no = 68262;
+		line_no = 68263;
 	#endif
 	__Fa9688 ();
 	#ifdef M68K_DEBUG
-		line_no = 68263;
+		line_no = 68264;
 	#endif
 	__Fa968e ();
 	#ifdef M68K_DEBUG
-		line_no = 68264;
+		line_no = 68265;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -488374,11 +488374,11 @@ __NLpol_release:
 		goto __Nlpol_release_now;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68265;
+		line_no = 68266;
 	#endif
 	__Fa9692 ();
 	#ifdef M68K_DEBUG
-		line_no = 68266;
+		line_no = 68267;
 	#endif
 	{
 		goto __Nlpol_release_set;
@@ -488386,39 +488386,39 @@ __NLpol_release:
 __Nlpol_release_now:
 	case (0xa9694):
 	#ifdef M68K_DEBUG
-		line_no = 68268;
+		line_no = 68269;
 	#endif
 	__Fa9696 ();
 __Nlpol_release_set:
 	case (0xa9696):
 	#ifdef M68K_DEBUG
-		line_no = 68270;
+		line_no = 68271;
 	#endif
 	__Fa9698 ();
 	#ifdef M68K_DEBUG
-		line_no = 68271;
+		line_no = 68272;
 	#endif
 	__Fa969e ();
 	#ifdef M68K_DEBUG
-		line_no = 68272;
+		line_no = 68273;
 	#endif
 	__Fa96a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68273;
+		line_no = 68274;
 	#endif
 	__Fa96a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68274;
+		line_no = 68275;
 	#endif
 	__Fa96ac ();
 	#ifdef M68K_DEBUG
-		line_no = 68275;
+		line_no = 68276;
 	#endif
 	__Fa96b0 ();
 __Nlpol_release_done:
 	case (0xa96b0):
 	#ifdef M68K_DEBUG
-		line_no = 68277;
+		line_no = 68278;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488426,11 +488426,11 @@ __Nlpol_release_done:
 __NLpol_phys:
 	case (0xa96b2):
 	#ifdef M68K_DEBUG
-		line_no = 68280;
+		line_no = 68281;
 	#endif
 	__Fa96b8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68281;
+		line_no = 68282;
 	#endif
 	if (nZ)
 	{
@@ -488441,11 +488441,11 @@ __NLpol_phys:
 		goto __Nlpol_phys_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68282;
+		line_no = 68283;
 	#endif
 	__Fa96c0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68283;
+		line_no = 68284;
 	#endif
 	if ((!nZ))
 	{
@@ -488456,19 +488456,19 @@ __NLpol_phys:
 		goto __Nlpol_phys_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68284;
+		line_no = 68285;
 	#endif
 	__Fa96c4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68285;
+		line_no = 68286;
 	#endif
 	__Fa96c8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68286;
+		line_no = 68287;
 	#endif
 	__Fa96cc ();
 	#ifdef M68K_DEBUG
-		line_no = 68287;
+		line_no = 68288;
 	#endif
 	if (N)
 	{
@@ -488479,11 +488479,11 @@ __NLpol_phys:
 		goto __Nlpol_phys_wait;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68288;
+		line_no = 68289;
 	#endif
 	__Fa96d4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68289;
+		line_no = 68290;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -488494,15 +488494,15 @@ __NLpol_phys:
 		goto __Nlpol_phys_attack;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68290;
+		line_no = 68291;
 	#endif
 	__Fa96d8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68291;
+		line_no = 68292;
 	#endif
 	__Fa96da ();
 	#ifdef M68K_DEBUG
-		line_no = 68292;
+		line_no = 68293;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488510,27 +488510,27 @@ __NLpol_phys:
 __Nlpol_phys_attack:
 	case (0xa96dc):
 	#ifdef M68K_DEBUG
-		line_no = 68294;
+		line_no = 68295;
 	#endif
 	__Fa96e2 ();
 __Nlpol_phys_wait:
 	case (0xa96e2):
 	#ifdef M68K_DEBUG
-		line_no = 68296;
+		line_no = 68297;
 	#endif
 	__Fa96e4 ();
 __Nlpol_phys_done:
 	case (0xa96e4):
 	#ifdef M68K_DEBUG
-		line_no = 68298;
+		line_no = 68299;
 	#endif
 	__Fa96e6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68299;
+		line_no = 68300;
 	#endif
 	__Fa96ea ();
 	#ifdef M68K_DEBUG
-		line_no = 68300;
+		line_no = 68301;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488538,11 +488538,11 @@ __Nlpol_phys_done:
 __NLpol_grace:
 	case (0xa96ec):
 	#ifdef M68K_DEBUG
-		line_no = 68304;
+		line_no = 68305;
 	#endif
 	__Fa96f2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68305;
+		line_no = 68306;
 	#endif
 	if (nZ)
 	{
@@ -488553,11 +488553,11 @@ __NLpol_grace:
 		goto __Nlpol_grace_no;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68306;
+		line_no = 68307;
 	#endif
 	__Fa96fa ();
 	#ifdef M68K_DEBUG
-		line_no = 68307;
+		line_no = 68308;
 	#endif
 	if ((!nZ))
 	{
@@ -488568,11 +488568,11 @@ __NLpol_grace:
 		goto __Nlpol_grace_held;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68308;
+		line_no = 68309;
 	#endif
 	__Fa9702 ();
 	#ifdef M68K_DEBUG
-		line_no = 68309;
+		line_no = 68310;
 	#endif
 	if ((!nZ))
 	{
@@ -488583,27 +488583,27 @@ __NLpol_grace:
 		goto __Nlpol_grace_no;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68310;
+		line_no = 68311;
 	#endif
 	__Fa9708 ();
 	#ifdef M68K_DEBUG
-		line_no = 68311;
+		line_no = 68312;
 	#endif
 	__Fa970c ();
 	#ifdef M68K_DEBUG
-		line_no = 68312;
+		line_no = 68313;
 	#endif
 	__Fa9710 ();
 	#ifdef M68K_DEBUG
-		line_no = 68313;
+		line_no = 68314;
 	#endif
 	__Fa9716 ();
 	#ifdef M68K_DEBUG
-		line_no = 68314;
+		line_no = 68315;
 	#endif
 	__Fa971a ();
 	#ifdef M68K_DEBUG
-		line_no = 68315;
+		line_no = 68316;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488611,23 +488611,23 @@ __NLpol_grace:
 __Nlpol_grace_held:
 	case (0xa971c):
 	#ifdef M68K_DEBUG
-		line_no = 68317;
+		line_no = 68318;
 	#endif
 	__Fa9720 ();
 	#ifdef M68K_DEBUG
-		line_no = 68318;
+		line_no = 68319;
 	#endif
 	__Fa9722 ();
 	#ifdef M68K_DEBUG
-		line_no = 68319;
+		line_no = 68320;
 	#endif
 	__Fa9728 ();
 	#ifdef M68K_DEBUG
-		line_no = 68320;
+		line_no = 68321;
 	#endif
 	__Fa972c ();
 	#ifdef M68K_DEBUG
-		line_no = 68321;
+		line_no = 68322;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488635,11 +488635,11 @@ __Nlpol_grace_held:
 __Nlpol_grace_no:
 	case (0xa972e):
 	#ifdef M68K_DEBUG
-		line_no = 68323;
+		line_no = 68324;
 	#endif
 	__Fa9730 ();
 	#ifdef M68K_DEBUG
-		line_no = 68324;
+		line_no = 68325;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488647,7 +488647,7 @@ __Nlpol_grace_no:
 __NLpol_dmg1:
 	case (0xa9732):
 	#ifdef M68K_DEBUG
-		line_no = 68327;
+		line_no = 68328;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9734);
@@ -488656,7 +488656,7 @@ __NLpol_dmg1:
 	}
 	case (0xa9734):
 	#ifdef M68K_DEBUG
-		line_no = 68328;
+		line_no = 68329;
 	#endif
 	if (C)
 	{
@@ -488667,7 +488667,7 @@ __NLpol_dmg1:
 		goto __Nlpol_dmg1_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68329;
+		line_no = 68330;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da973a);
@@ -488678,11 +488678,11 @@ __NLpol_dmg1:
 __Nlpol_dmg1_skip:
 	case (0xa973a):
 	#ifdef M68K_DEBUG
-		line_no = 68331;
+		line_no = 68332;
 	#endif
 	__Fa973c ();
 	#ifdef M68K_DEBUG
-		line_no = 68332;
+		line_no = 68333;
 	#endif
 	{
 		goto __Nlpol_dmg1_back;
@@ -488690,7 +488690,7 @@ __Nlpol_dmg1_skip:
 __NLpol_dmg2:
 	case (0xa9742):
 	#ifdef M68K_DEBUG
-		line_no = 68335;
+		line_no = 68336;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9744);
@@ -488699,7 +488699,7 @@ __NLpol_dmg2:
 	}
 	case (0xa9744):
 	#ifdef M68K_DEBUG
-		line_no = 68336;
+		line_no = 68337;
 	#endif
 	if (C)
 	{
@@ -488710,7 +488710,7 @@ __NLpol_dmg2:
 		goto __Nlpol_dmg2_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68337;
+		line_no = 68338;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da974a);
@@ -488721,12 +488721,12 @@ __NLpol_dmg2:
 __Nlpol_dmg2_skip:
 	case (0xa974a):
 	#ifdef M68K_DEBUG
-		line_no = 68339;
+		line_no = 68340;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68340;
+		line_no = 68341;
 	#endif
 	{
 		goto __Nl3f9d0;
@@ -488735,15 +488735,15 @@ __NLpol_next:
 __NLmine_dist:
 	case (0xa9756):
 	#ifdef M68K_DEBUG
-		line_no = 68367;
+		line_no = 68368;
 	#endif
 	__Fa975a ();
 	#ifdef M68K_DEBUG
-		line_no = 68368;
+		line_no = 68369;
 	#endif
 	__Fa975e ();
 	#ifdef M68K_DEBUG
-		line_no = 68369;
+		line_no = 68370;
 	#endif
 	if (nZ)
 	{
@@ -488753,16 +488753,16 @@ __NLmine_dist:
 	} else {
 		goto __Nlmine_dist_far;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 68370;
-	#endif
-	__Fa9764 ();
 	#ifdef M68K_DEBUG
 		line_no = 68371;
 	#endif
-	__Fa9768 ();
+	__Fa9764 ();
 	#ifdef M68K_DEBUG
 		line_no = 68372;
+	#endif
+	__Fa9768 ();
+	#ifdef M68K_DEBUG
+		line_no = 68373;
 	#endif
 	if (nZ)
 	{
@@ -488773,53 +488773,53 @@ __NLmine_dist:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68373;
+		line_no = 68374;
 	#endif
 	__Fa976c ();
 	#ifdef M68K_DEBUG
-		line_no = 68374;
+		line_no = 68375;
 	#endif
 	__Fa976e ();
 __Nlmine_dist_axis:
 	case (0xa976e):
 	#ifdef M68K_DEBUG
-		line_no = 68376;
+		line_no = 68377;
 	#endif
 	__Fa9772 ();
 	#ifdef M68K_DEBUG
-		line_no = 68377;
+		line_no = 68378;
 	#endif
 	__Fa9776 ();
 	#ifdef M68K_DEBUG
-		line_no = 68378;
+		line_no = 68379;
 	#endif
 	__Fa977a ();
 	#ifdef M68K_DEBUG
-		line_no = 68379;
+		line_no = 68380;
 	#endif
 	__Fa977e ();
 	#ifdef M68K_DEBUG
-		line_no = 68380;
+		line_no = 68381;
 	#endif
 	__Fa9780 ();
 	#ifdef M68K_DEBUG
-		line_no = 68381;
+		line_no = 68382;
 	#endif
 	__Fa9782 ();
 	#ifdef M68K_DEBUG
-		line_no = 68382;
+		line_no = 68383;
 	#endif
 	__Fa9784 ();
 	#ifdef M68K_DEBUG
-		line_no = 68383;
+		line_no = 68384;
 	#endif
 	__Fa9786 ();
 	#ifdef M68K_DEBUG
-		line_no = 68384;
+		line_no = 68385;
 	#endif
 	__Fa9788 ();
 	#ifdef M68K_DEBUG
-		line_no = 68385;
+		line_no = 68386;
 	#endif
 	if (nZ)
 	{
@@ -488830,19 +488830,19 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68386;
+		line_no = 68387;
 	#endif
 	__Fa978c ();
 	#ifdef M68K_DEBUG
-		line_no = 68387;
+		line_no = 68388;
 	#endif
 	__Fa978e ();
 	#ifdef M68K_DEBUG
-		line_no = 68388;
+		line_no = 68389;
 	#endif
 	__Fa9790 ();
 	#ifdef M68K_DEBUG
-		line_no = 68389;
+		line_no = 68390;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -488853,19 +488853,19 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68390;
+		line_no = 68391;
 	#endif
 	__Fa9794 ();
 	#ifdef M68K_DEBUG
-		line_no = 68391;
+		line_no = 68392;
 	#endif
 	__Fa9796 ();
 	#ifdef M68K_DEBUG
-		line_no = 68392;
+		line_no = 68393;
 	#endif
 	__Fa9798 ();
 	#ifdef M68K_DEBUG
-		line_no = 68393;
+		line_no = 68394;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -488876,23 +488876,23 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68394;
+		line_no = 68395;
 	#endif
 	__Fa979c ();
 	#ifdef M68K_DEBUG
-		line_no = 68395;
+		line_no = 68396;
 	#endif
 	__Fa979e ();
 	#ifdef M68K_DEBUG
-		line_no = 68396;
+		line_no = 68397;
 	#endif
 	__Fa97a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68397;
+		line_no = 68398;
 	#endif
 	__Fa97a4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68398;
+		line_no = 68399;
 	#endif
 	if (nZ)
 	{
@@ -488903,7 +488903,7 @@ __Nlmine_dist_axis:
 		goto __Nlmine_dist_axis;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68399;
+		line_no = 68400;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488911,11 +488911,11 @@ __Nlmine_dist_axis:
 __Nlmine_dist_far:
 	case (0xa97a8):
 	#ifdef M68K_DEBUG
-		line_no = 68401;
+		line_no = 68402;
 	#endif
 	__Fa97ae ();
 	#ifdef M68K_DEBUG
-		line_no = 68402;
+		line_no = 68403;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -488923,7 +488923,7 @@ __Nlmine_dist_far:
 __NLmine_phys:
 	case (0xa97b0):
 	#ifdef M68K_DEBUG
-		line_no = 68405;
+		line_no = 68406;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da97b4);
@@ -488933,19 +488933,19 @@ __NLmine_phys:
 	}
 	case (0xa97b4):
 	#ifdef M68K_DEBUG
-		line_no = 68406;
+		line_no = 68407;
 	#endif
 	__Fa97b8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68407;
+		line_no = 68408;
 	#endif
 	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68408;
+		line_no = 68409;
 	#endif
 	__Fa97be ();
 	#ifdef M68K_DEBUG
-		line_no = 68409;
+		line_no = 68410;
 	#endif
 	if ((!nZ))
 	{
@@ -488956,29 +488956,29 @@ __NLmine_phys:
 		goto __Nlmine_off;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68410;
+		line_no = 68411;
 	#endif
 	__Fa97c4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68411;
+		line_no = 68412;
 	#endif
 	__Fa97c6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68412;
+		line_no = 68413;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 68413;
+		line_no = 68414;
 	#endif
 	__Fa97cc ();
 __Nlmine_next:
 	case (0xa97cc):
 	#ifdef M68K_DEBUG
-		line_no = 68415;
+		line_no = 68416;
 	#endif
 	__Fa97d2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68416;
+		line_no = 68417;
 	#endif
 	if ((!nZ))
 	{
@@ -488989,11 +488989,11 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68417;
+		line_no = 68418;
 	#endif
 	__Fa97da ();
 	#ifdef M68K_DEBUG
-		line_no = 68418;
+		line_no = 68419;
 	#endif
 	if (nZ)
 	{
@@ -489004,11 +489004,11 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68419;
+		line_no = 68420;
 	#endif
 	__Fa97e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68420;
+		line_no = 68421;
 	#endif
 	if ((!nZ))
 	{
@@ -489018,13 +489018,13 @@ __Nlmine_next:
 	} else {
 		goto __Nlmine_skip;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 68421;
-	#endif
-	__Fa97e6 ();
 	#ifdef M68K_DEBUG
 		line_no = 68422;
 	#endif
+	__Fa97e6 ();
+	#ifdef M68K_DEBUG
+		line_no = 68423;
+	#endif
 	if ((!nZ))
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
@@ -489034,11 +489034,11 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68423;
+		line_no = 68424;
 	#endif
 	__Fa97ea ();
 	#ifdef M68K_DEBUG
-		line_no = 68424;
+		line_no = 68425;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da97f0);
@@ -489047,11 +489047,11 @@ __Nlmine_next:
 	}
 	case (0xa97f0):
 	#ifdef M68K_DEBUG
-		line_no = 68425;
+		line_no = 68426;
 	#endif
 	__Fa97f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68426;
+		line_no = 68427;
 	#endif
 	if ((C || (!nZ)))
 	{
@@ -489062,11 +489062,11 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68427;
+		line_no = 68428;
 	#endif
 	__Fa97fe ();
 	#ifdef M68K_DEBUG
-		line_no = 68428;
+		line_no = 68429;
 	#endif
 	if ((!nZ))
 	{
@@ -489077,7 +489077,7 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68429;
+		line_no = 68430;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9804);
@@ -489086,11 +489086,11 @@ __Nlmine_next:
 	}
 	case (0xa9804):
 	#ifdef M68K_DEBUG
-		line_no = 68430;
+		line_no = 68431;
 	#endif
 	__Fa9806 ();
 	#ifdef M68K_DEBUG
-		line_no = 68431;
+		line_no = 68432;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -489101,19 +489101,19 @@ __Nlmine_next:
 		goto __Nlmine_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68432;
+		line_no = 68433;
 	#endif
 	__Fa980c ();
 	#ifdef M68K_DEBUG
-		line_no = 68433;
+		line_no = 68434;
 	#endif
 	__Fa9810 ();
 	#ifdef M68K_DEBUG
-		line_no = 68434;
+		line_no = 68435;
 	#endif
 	__Fa9814 ();
 	#ifdef M68K_DEBUG
-		line_no = 68435;
+		line_no = 68436;
 	#endif
 	{
 		goto __Nl75824;
@@ -489121,17 +489121,17 @@ __Nlmine_next:
 __Nlmine_skip:
 	case (0xa981a):
 	#ifdef M68K_DEBUG
-		line_no = 68437;
+		line_no = 68438;
 	#endif
 	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlmine_next;
 __Nlmine_off:
 	case (0xa981e):
 	#ifdef M68K_DEBUG
-		line_no = 68439;
+		line_no = 68440;
 	#endif
 	__Fa9822 ();
 	#ifdef M68K_DEBUG
-		line_no = 68440;
+		line_no = 68441;
 	#endif
 	{
 		goto __Nl74f04;
@@ -489139,11 +489139,11 @@ __Nlmine_off:
 __NLmine_boom:
 	case (0xa9828):
 	#ifdef M68K_DEBUG
-		line_no = 68443;
+		line_no = 68444;
 	#endif
 	__Fa982e ();
 	#ifdef M68K_DEBUG
-		line_no = 68444;
+		line_no = 68445;
 	#endif
 	if (nZ)
 	{
@@ -489154,19 +489154,19 @@ __NLmine_boom:
 		goto __Nlmine_boom_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68445;
+		line_no = 68446;
 	#endif
 	__Fa9836 ();
 	#ifdef M68K_DEBUG
-		line_no = 68446;
+		line_no = 68447;
 	#endif
 	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68447;
+		line_no = 68448;
 	#endif
 	__Fa983c ();
 	#ifdef M68K_DEBUG
-		line_no = 68448;
+		line_no = 68449;
 	#endif
 	if ((!nZ))
 	{
@@ -489177,67 +489177,67 @@ __NLmine_boom:
 		goto __Nlmine_boom_pop;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68449;
+		line_no = 68450;
 	#endif
 	__Fa9844 ();
 	#ifdef M68K_DEBUG
-		line_no = 68450;
+		line_no = 68451;
 	#endif
 	__Fa9846 ();
 	#ifdef M68K_DEBUG
-		line_no = 68451;
+		line_no = 68452;
 	#endif
 	Regs[11]._u32 = (__DL75818);
 	#ifdef M68K_DEBUG
-		line_no = 68452;
+		line_no = 68453;
 	#endif
 	__Fa984e ();
 	#ifdef M68K_DEBUG
-		line_no = 68453;
+		line_no = 68454;
 	#endif
 	__Fa9852 ();
 	#ifdef M68K_DEBUG
-		line_no = 68454;
+		line_no = 68455;
 	#endif
 	__Fa9856 ();
 __Nlmine_boom_reload:
 	case (0xa9856):
 	#ifdef M68K_DEBUG
-		line_no = 68456;
+		line_no = 68457;
 	#endif
 	Regs[12]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 68457;
+		line_no = 68458;
 	#endif
 	(* hcalls[151]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68458;
+		line_no = 68459;
 	#endif
 	__Fa9860 ();
 	#ifdef M68K_DEBUG
-		line_no = 68459;
+		line_no = 68460;
 	#endif
 	__Fa9862 ();
 	#ifdef M68K_DEBUG
-		line_no = 68460;
+		line_no = 68461;
 	#endif
 	__Fa9864 ();
 	#ifdef M68K_DEBUG
-		line_no = 68461;
+		line_no = 68462;
 	#endif
 	Regs[10]._s32 = rdlong(Regs[15]._s32+4);
 __Nlmine_boom_next:
 	case (0xa9868):
 	#ifdef M68K_DEBUG
-		line_no = 68463;
+		line_no = 68464;
 	#endif
 	__Fa986a ();
 	#ifdef M68K_DEBUG
-		line_no = 68464;
+		line_no = 68465;
 	#endif
 	__Fa9870 ();
 	#ifdef M68K_DEBUG
-		line_no = 68465;
+		line_no = 68466;
 	#endif
 	if ((!nZ))
 	{
@@ -489248,11 +489248,11 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68466;
+		line_no = 68467;
 	#endif
 	__Fa9878 ();
 	#ifdef M68K_DEBUG
-		line_no = 68467;
+		line_no = 68468;
 	#endif
 	if (nZ)
 	{
@@ -489263,11 +489263,11 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68468;
+		line_no = 68469;
 	#endif
 	__Fa987e ();
 	#ifdef M68K_DEBUG
-		line_no = 68469;
+		line_no = 68470;
 	#endif
 	if ((!nZ))
 	{
@@ -489278,11 +489278,11 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68470;
+		line_no = 68471;
 	#endif
 	__Fa9882 ();
 	#ifdef M68K_DEBUG
-		line_no = 68471;
+		line_no = 68472;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9888);
@@ -489291,11 +489291,11 @@ __Nlmine_boom_next:
 	}
 	case (0xa9888):
 	#ifdef M68K_DEBUG
-		line_no = 68472;
+		line_no = 68473;
 	#endif
 	__Fa988a ();
 	#ifdef M68K_DEBUG
-		line_no = 68473;
+		line_no = 68474;
 	#endif
 	if ((!nZ))
 	{
@@ -489306,11 +489306,11 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68474;
+		line_no = 68475;
 	#endif
 	__Fa9892 ();
 	#ifdef M68K_DEBUG
-		line_no = 68475;
+		line_no = 68476;
 	#endif
 	if ((C || (!nZ)))
 	{
@@ -489321,11 +489321,11 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68476;
+		line_no = 68477;
 	#endif
 	__Fa989a ();
 	#ifdef M68K_DEBUG
-		line_no = 68477;
+		line_no = 68478;
 	#endif
 	if ((!nZ))
 	{
@@ -489336,7 +489336,7 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68478;
+		line_no = 68479;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da98a0);
@@ -489345,11 +489345,11 @@ __Nlmine_boom_next:
 	}
 	case (0xa98a0):
 	#ifdef M68K_DEBUG
-		line_no = 68479;
+		line_no = 68480;
 	#endif
 	__Fa98a2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68480;
+		line_no = 68481;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -489360,15 +489360,15 @@ __Nlmine_boom_next:
 		goto __Nlmine_boom_skip;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68481;
+		line_no = 68482;
 	#endif
 	__Fa98a8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68482;
+		line_no = 68483;
 	#endif
 	__Fa98ac ();
 	#ifdef M68K_DEBUG
-		line_no = 68483;
+		line_no = 68484;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da98b0);
@@ -489378,7 +489378,7 @@ __Nlmine_boom_next:
 	}
 	case (0xa98b0):
 	#ifdef M68K_DEBUG
-		line_no = 68484;
+		line_no = 68485;
 	#endif
 	{
 		goto __Nlmine_boom_reload_next;
@@ -489386,11 +489386,11 @@ __Nlmine_boom_next:
 __Nlmine_boom_skip:
 	case (0xa98b2):
 	#ifdef M68K_DEBUG
-		line_no = 68486;
+		line_no = 68487;
 	#endif
 	__Fa98b4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68487;
+		line_no = 68488;
 	#endif
 	if ((!N))
 	{
@@ -489401,7 +489401,7 @@ __Nlmine_boom_skip:
 		goto __Nlmine_boom_next;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68488;
+		line_no = 68489;
 	#endif
 	{
 		goto __Nlmine_boom_end;
@@ -489409,11 +489409,11 @@ __Nlmine_boom_skip:
 __Nlmine_boom_reload_next:
 	case (0xa98b8):
 	#ifdef M68K_DEBUG
-		line_no = 68490;
+		line_no = 68491;
 	#endif
 	__Fa98ba ();
 	#ifdef M68K_DEBUG
-		line_no = 68491;
+		line_no = 68492;
 	#endif
 	if (N)
 	{
@@ -489424,7 +489424,7 @@ __Nlmine_boom_reload_next:
 		goto __Nlmine_boom_end;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68492;
+		line_no = 68493;
 	#endif
 	{
 		goto __Nlmine_boom_reload;
@@ -489432,27 +489432,27 @@ __Nlmine_boom_reload_next:
 __Nlmine_boom_end:
 	case (0xa98be):
 	#ifdef M68K_DEBUG
-		line_no = 68494;
+		line_no = 68495;
 	#endif
 	Regs[15]._u32 = (Regs[15]._s32+8);
 __Nlmine_boom_pop:
 	case (0xa98c2):
 	#ifdef M68K_DEBUG
-		line_no = 68496;
+		line_no = 68497;
 	#endif
 	__Fa98c6 ();
 __Nlmine_boom_done:
 	case (0xa98c6):
 	#ifdef M68K_DEBUG
-		line_no = 68498;
+		line_no = 68499;
 	#endif
 	__Fa98ca ();
 	#ifdef M68K_DEBUG
-		line_no = 68499;
+		line_no = 68500;
 	#endif
 	__Fa98ce ();
 	#ifdef M68K_DEBUG
-		line_no = 68500;
+		line_no = 68501;
 	#endif
 	{
 		goto __Nl7582c;
@@ -489460,11 +489460,11 @@ __Nlmine_boom_done:
 __NLtguard:
 	case (0xa98d4):
 	#ifdef M68K_DEBUG
-		line_no = 68517;
+		line_no = 68518;
 	#endif
 	__Fa98d8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68518;
+		line_no = 68519;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -489475,11 +489475,11 @@ __NLtguard:
 		goto __Nltg_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68519;
+		line_no = 68520;
 	#endif
 	__Fa98de ();
 	#ifdef M68K_DEBUG
-		line_no = 68520;
+		line_no = 68521;
 	#endif
 	if (nZ)
 	{
@@ -489489,13 +489489,13 @@ __NLtguard:
 	} else {
 		goto __Nltg_done;
 	}}
-	#ifdef M68K_DEBUG
-		line_no = 68521;
-	#endif
-	__Fa98e4 ();
 	#ifdef M68K_DEBUG
 		line_no = 68522;
 	#endif
+	__Fa98e4 ();
+	#ifdef M68K_DEBUG
+		line_no = 68523;
+	#endif
 	if (nZ)
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
@@ -489505,11 +489505,11 @@ __NLtguard:
 		goto __Nltg_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68523;
+		line_no = 68524;
 	#endif
 	__Fa98ec ();
 	#ifdef M68K_DEBUG
-		line_no = 68524;
+		line_no = 68525;
 	#endif
 	if ((!nZ))
 	{
@@ -489520,15 +489520,15 @@ __NLtguard:
 		goto __Nltg_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68525;
+		line_no = 68526;
 	#endif
 	__Fa98f2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68526;
+		line_no = 68527;
 	#endif
 	__Fa98f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68527;
+		line_no = 68528;
 	#endif
 	if (((!C) && nZ))
 	{
@@ -489539,27 +489539,27 @@ __NLtguard:
 		goto __Nltg_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68528;
+		line_no = 68529;
 	#endif
 	__Fa98fa ();
 	#ifdef M68K_DEBUG
-		line_no = 68529;
+		line_no = 68530;
 	#endif
 	__Fa98fe ();
 	#ifdef M68K_DEBUG
-		line_no = 68530;
+		line_no = 68531;
 	#endif
 	__Fa9900 ();
 	#ifdef M68K_DEBUG
-		line_no = 68531;
+		line_no = 68532;
 	#endif
 	__Fa9902 ();
 	#ifdef M68K_DEBUG
-		line_no = 68532;
+		line_no = 68533;
 	#endif
 	__Fa9904 ();
 	#ifdef M68K_DEBUG
-		line_no = 68533;
+		line_no = 68534;
 	#endif
 	if ((nZ && (!(N ^ V))))
 	{
@@ -489570,11 +489570,11 @@ __NLtguard:
 		goto __Nltg_done;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68534;
+		line_no = 68535;
 	#endif
 	__Fa990c ();
 	#ifdef M68K_DEBUG
-		line_no = 68535;
+		line_no = 68536;
 	#endif
 	if ((!nZ))
 	{
@@ -489585,23 +489585,23 @@ __NLtguard:
 		goto __Nltg_key;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68536;
+		line_no = 68537;
 	#endif
 	__Fa9910 ();
 __Nltg_key:
 	case (0xa9910):
 	#ifdef M68K_DEBUG
-		line_no = 68538;
+		line_no = 68539;
 	#endif
 	__Fa9914 ();
 	#ifdef M68K_DEBUG
-		line_no = 68539;
+		line_no = 68540;
 	#endif
 	__Fa991a ();
 __Nltg_done:
 	case (0xa991a):
 	#ifdef M68K_DEBUG
-		line_no = 68541;
+		line_no = 68542;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -489609,11 +489609,11 @@ __Nltg_done:
 __Nltg_far:
 	case (0xa991c):
 	#ifdef M68K_DEBUG
-		line_no = 68543;
+		line_no = 68544;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 68544;
+		line_no = 68545;
 	#endif
 	{
 		goto __NL43926;
@@ -489622,11 +489622,11 @@ __NLtguard_tab:
 __NLrange_chk:
 	case (0xa993e):
 	#ifdef M68K_DEBUG
-		line_no = 68576;
+		line_no = 68577;
 	#endif
 	__Fa9942 ();
 	#ifdef M68K_DEBUG
-		line_no = 68577;
+		line_no = 68578;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -489637,31 +489637,31 @@ __NLrange_chk:
 		goto __Nlrange_ok;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68578;
+		line_no = 68579;
 	#endif
 	__Fa9948 ();
 	#ifdef M68K_DEBUG
-		line_no = 68579;
+		line_no = 68580;
 	#endif
 	(* hcalls[152]) ();
 	#ifdef M68K_DEBUG
-		line_no = 68580;
+		line_no = 68581;
 	#endif
 	__Fa994e ();
 	#ifdef M68K_DEBUG
-		line_no = 68581;
+		line_no = 68582;
 	#endif
 	__Fa9952 ();
 	#ifdef M68K_DEBUG
-		line_no = 68582;
+		line_no = 68583;
 	#endif
 	__Fa9954 ();
 	#ifdef M68K_DEBUG
-		line_no = 68583;
+		line_no = 68584;
 	#endif
 	__Fa9958 ();
 	#ifdef M68K_DEBUG
-		line_no = 68584;
+		line_no = 68585;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -489672,17 +489672,17 @@ __NLrange_chk:
 		goto __Nlrange_out;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68585;
+		line_no = 68586;
 	#endif
 	__Fa995e ();
 	#ifdef M68K_DEBUG
-		line_no = 68586;
+		line_no = 68587;
 	#endif
 	__Fa9960 ();
 __Nlrange_ok:
 	case (0xa9960):
 	#ifdef M68K_DEBUG
-		line_no = 68588;
+		line_no = 68589;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -489690,11 +489690,11 @@ __Nlrange_ok:
 __Nlrange_out:
 	case (0xa9962):
 	#ifdef M68K_DEBUG
-		line_no = 68590;
+		line_no = 68591;
 	#endif
 	Regs[15]._u32 = Regs[15]._s32 + (s32)4;
 	#ifdef M68K_DEBUG
-		line_no = 68591;
+		line_no = 68592;
 	#endif
 	{
 		goto __Nl390d6;
@@ -489702,7 +489702,7 @@ __Nlrange_out:
 __NLcam_relvec:
 	case (0xa996a):
 	#ifdef M68K_DEBUG
-		line_no = 68600;
+		line_no = 68601;
 	#endif
 	{
 		goto __NL4350e;
@@ -489710,11 +489710,11 @@ __NLcam_relvec:
 __NLstart_keys:
 	case (0xa9970):
 	#ifdef M68K_DEBUG
-		line_no = 68622;
+		line_no = 68623;
 	#endif
 	__Fa9974 ();
 	#ifdef M68K_DEBUG
-		line_no = 68623;
+		line_no = 68624;
 	#endif
 	if (nZ)
 	{
@@ -489725,11 +489725,11 @@ __NLstart_keys:
 		goto __Nlstart_key6;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68624;
+		line_no = 68625;
 	#endif
 	__Fa997a ();
 	#ifdef M68K_DEBUG
-		line_no = 68625;
+		line_no = 68626;
 	#endif
 	{
 		goto __NL4289a;
@@ -489737,11 +489737,11 @@ __NLstart_keys:
 __Nlstart_key6:
 	case (0xa9980):
 	#ifdef M68K_DEBUG
-		line_no = 68627;
+		line_no = 68628;
 	#endif
 	__Fa9984 ();
 	#ifdef M68K_DEBUG
-		line_no = 68628;
+		line_no = 68629;
 	#endif
 	if (nZ)
 	{
@@ -489752,11 +489752,11 @@ __Nlstart_key6:
 		goto __Nlstart_nokey;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68629;
+		line_no = 68630;
 	#endif
 	__Fa998a ();
 	#ifdef M68K_DEBUG
-		line_no = 68630;
+		line_no = 68631;
 	#endif
 	{
 		goto __NL4289a;
@@ -489764,7 +489764,7 @@ __Nlstart_key6:
 __Nlstart_nokey:
 	case (0xa9990):
 	#ifdef M68K_DEBUG
-		line_no = 68632;
+		line_no = 68633;
 	#endif
 	{
 		goto __Nl42850;
@@ -489772,15 +489772,15 @@ __Nlstart_nokey:
 __NLstart_body:
 	case (0xa9996):
 	#ifdef M68K_DEBUG
-		line_no = 68635;
+		line_no = 68636;
 	#endif
 	__Fa999c ();
 	#ifdef M68K_DEBUG
-		line_no = 68636;
+		line_no = 68637;
 	#endif
 	__Fa99a0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68637;
+		line_no = 68638;
 	#endif
 	if (nZ)
 	{
@@ -489791,13 +489791,13 @@ __NLstart_body:
 		goto __Nlstart_body_x;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68638;
+		line_no = 68639;
 	#endif
 	__Fa99a8 ();
 __Nlstart_body_x:
 	case (0xa99a8):
 	#ifdef M68K_DEBUG
-		line_no = 68640;
+		line_no = 68641;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -489805,11 +489805,11 @@ __Nlstart_body_x:
 __NLstart_ship:
 	case (0xa99aa):
 	#ifdef M68K_DEBUG
-		line_no = 68643;
+		line_no = 68644;
 	#endif
 	__Fa99ae ();
 	#ifdef M68K_DEBUG
-		line_no = 68644;
+		line_no = 68645;
 	#endif
 	if ((!nZ))
 	{
@@ -489820,11 +489820,11 @@ __NLstart_ship:
 		goto __Nlstart_earth;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68645;
+		line_no = 68646;
 	#endif
 	__Fa99b4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68646;
+		line_no = 68647;
 	#endif
 	if (nZ)
 	{
@@ -489835,7 +489835,7 @@ __NLstart_ship:
 		goto __Nlstart_notmars;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68647;
+		line_no = 68648;
 	#endif
 	{
 		goto __Nlstart_mars;
@@ -489843,7 +489843,7 @@ __NLstart_ship:
 __Nlstart_notmars:
 	case (0xa99bc):
 	#ifdef M68K_DEBUG
-		line_no = 68649;
+		line_no = 68650;
 	#endif
 	{
 		goto __Nl616f0;
@@ -489851,15 +489851,15 @@ __Nlstart_notmars:
 __Nlstart_earth:
 	case (0xa99c2):
 	#ifdef M68K_DEBUG
-		line_no = 68651;
+		line_no = 68652;
 	#endif
 	__Fa99c6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68652;
+		line_no = 68653;
 	#endif
 	__Fa99ca ();
 	#ifdef M68K_DEBUG
-		line_no = 68653;
+		line_no = 68654;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da99d0);
@@ -489868,55 +489868,55 @@ __Nlstart_earth:
 	}
 	case (0xa99d0):
 	#ifdef M68K_DEBUG
-		line_no = 68654;
+		line_no = 68655;
 	#endif
 	__Fa99d4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68655;
+		line_no = 68656;
 	#endif
 	__Fa99d8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68656;
+		line_no = 68657;
 	#endif
 	__Fa99dc ();
 	#ifdef M68K_DEBUG
-		line_no = 68657;
+		line_no = 68658;
 	#endif
 	__Fa99e0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68658;
+		line_no = 68659;
 	#endif
 	__Fa99e8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68659;
+		line_no = 68660;
 	#endif
 	__Fa99ee ();
 	#ifdef M68K_DEBUG
-		line_no = 68660;
+		line_no = 68661;
 	#endif
 	__Fa99f2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68661;
+		line_no = 68662;
 	#endif
 	__Fa99f6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68662;
+		line_no = 68663;
 	#endif
 	__Fa99fa ();
 	#ifdef M68K_DEBUG
-		line_no = 68663;
+		line_no = 68664;
 	#endif
 	__Fa9a02 ();
 	#ifdef M68K_DEBUG
-		line_no = 68664;
+		line_no = 68665;
 	#endif
 	__Fa9a08 ();
 	#ifdef M68K_DEBUG
-		line_no = 68665;
+		line_no = 68666;
 	#endif
 	__Fa9a0a ();
 	#ifdef M68K_DEBUG
-		line_no = 68666;
+		line_no = 68667;
 	#endif
 	{
 		goto __NL617ea;
@@ -489924,7 +489924,7 @@ __Nlstart_earth:
 __NLshuttle_news:
 	case (0xa9a10):
 	#ifdef M68K_DEBUG
-		line_no = 68703;
+		line_no = 68704;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a14);
@@ -489934,11 +489934,11 @@ __NLshuttle_news:
 	}
 	case (0xa9a14):
 	#ifdef M68K_DEBUG
-		line_no = 68704;
+		line_no = 68705;
 	#endif
 	__Fa9a18 ();
 	#ifdef M68K_DEBUG
-		line_no = 68705;
+		line_no = 68706;
 	#endif
 	if ((!C))
 	{
@@ -489949,11 +489949,11 @@ __NLshuttle_news:
 		goto __Nlsn_game;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68706;
+		line_no = 68707;
 	#endif
 	__Fa9a20 ();
 	#ifdef M68K_DEBUG
-		line_no = 68707;
+		line_no = 68708;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -489966,11 +489966,11 @@ __NLshuttle_news:
 __Nlsn_game:
 	case (0xa9a22):
 	#ifdef M68K_DEBUG
-		line_no = 68709;
+		line_no = 68710;
 	#endif
 	__Fa9a26 ();
 	#ifdef M68K_DEBUG
-		line_no = 68710;
+		line_no = 68711;
 	#endif
 	{
 		goto __Nlshuttle_news_back;
@@ -489978,11 +489978,11 @@ __Nlsn_game:
 __Nlsn_ours:
 	case (0xa9a2c):
 	#ifdef M68K_DEBUG
-		line_no = 68712;
+		line_no = 68713;
 	#endif
 	__Fa9a30 ();
 	#ifdef M68K_DEBUG
-		line_no = 68713;
+		line_no = 68714;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a32);
@@ -489991,11 +489991,11 @@ __Nlsn_ours:
 	}
 	case (0xa9a32):
 	#ifdef M68K_DEBUG
-		line_no = 68714;
+		line_no = 68715;
 	#endif
 	__Fa9a36 ();
 	#ifdef M68K_DEBUG
-		line_no = 68715;
+		line_no = 68716;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490004,11 +490004,11 @@ __Nlsn_counts:
 __Nlsn_make:
 	case (0xa9a40):
 	#ifdef M68K_DEBUG
-		line_no = 68725;
+		line_no = 68726;
 	#endif
 	__Fa9a44 ();
 	#ifdef M68K_DEBUG
-		line_no = 68726;
+		line_no = 68727;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a48);
@@ -490018,27 +490018,27 @@ __Nlsn_make:
 	}
 	case (0xa9a48):
 	#ifdef M68K_DEBUG
-		line_no = 68727;
+		line_no = 68728;
 	#endif
 	__Fa9a4a ();
 	#ifdef M68K_DEBUG
-		line_no = 68728;
+		line_no = 68729;
 	#endif
 	__Fa9a4e ();
 	#ifdef M68K_DEBUG
-		line_no = 68729;
+		line_no = 68730;
 	#endif
 	Regs[10]._u32 = (Regs[14]._s32+1254);
 	#ifdef M68K_DEBUG
-		line_no = 68730;
+		line_no = 68731;
 	#endif
 	Regs[10]._u32 = Regs[10]._s32 + (s32)Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68731;
+		line_no = 68732;
 	#endif
 	__Fa9a56 ();
 	#ifdef M68K_DEBUG
-		line_no = 68732;
+		line_no = 68733;
 	#endif
 	if (nZ)
 	{
@@ -490049,15 +490049,15 @@ __Nlsn_make:
 		goto __Nlsn_other;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68733;
+		line_no = 68734;
 	#endif
 	__Fa9a5a ();
 	#ifdef M68K_DEBUG
-		line_no = 68734;
+		line_no = 68735;
 	#endif
 	__Fa9a5e ();
 	#ifdef M68K_DEBUG
-		line_no = 68735;
+		line_no = 68736;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -490068,47 +490068,47 @@ __Nlsn_make:
 		goto __Nlsn_wrap;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68736;
+		line_no = 68737;
 	#endif
 	__Fa9a62 ();
 __Nlsn_wrap:
 	case (0xa9a62):
 	#ifdef M68K_DEBUG
-		line_no = 68738;
+		line_no = 68739;
 	#endif
 	__Fa9a64 ();
 	#ifdef M68K_DEBUG
-		line_no = 68739;
+		line_no = 68740;
 	#endif
 	__Fa9a68 ();
 	#ifdef M68K_DEBUG
-		line_no = 68740;
+		line_no = 68741;
 	#endif
 	Regs[10]._u32 = (Regs[14]._s32+1254);
 	#ifdef M68K_DEBUG
-		line_no = 68741;
+		line_no = 68742;
 	#endif
 	Regs[10]._u32 = Regs[10]._s32 + (s32)Regs[0]._s32;
 __Nlsn_other:
 	case (0xa9a6e):
 	#ifdef M68K_DEBUG
-		line_no = 68743;
+		line_no = 68744;
 	#endif
 	__Fa9a70 ();
 	#ifdef M68K_DEBUG
-		line_no = 68744;
+		line_no = 68745;
 	#endif
 	__Fa9a74 ();
 	#ifdef M68K_DEBUG
-		line_no = 68746;
+		line_no = 68747;
 	#endif
 	__Fa9a78 ();
 	#ifdef M68K_DEBUG
-		line_no = 68747;
+		line_no = 68748;
 	#endif
 	__Fa9a7c ();
 	#ifdef M68K_DEBUG
-		line_no = 68748;
+		line_no = 68749;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a80);
@@ -490117,7 +490117,7 @@ __Nlsn_other:
 	}
 	case (0xa9a80):
 	#ifdef M68K_DEBUG
-		line_no = 68749;
+		line_no = 68750;
 	#endif
 	if ((!nZ))
 	{
@@ -490128,15 +490128,15 @@ __Nlsn_other:
 		goto __Nlsn_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68750;
+		line_no = 68751;
 	#endif
 	__Fa9a86 ();
 	#ifdef M68K_DEBUG
-		line_no = 68751;
+		line_no = 68752;
 	#endif
 	__Fa9a88 ();
 	#ifdef M68K_DEBUG
-		line_no = 68752;
+		line_no = 68753;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a8c);
@@ -490145,7 +490145,7 @@ __Nlsn_other:
 	}
 	case (0xa9a8c):
 	#ifdef M68K_DEBUG
-		line_no = 68753;
+		line_no = 68754;
 	#endif
 	if ((!nZ))
 	{
@@ -490156,15 +490156,15 @@ __Nlsn_other:
 		goto __Nlsn_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68754;
+		line_no = 68755;
 	#endif
 	__Fa9a90 ();
 	#ifdef M68K_DEBUG
-		line_no = 68755;
+		line_no = 68756;
 	#endif
 	__Fa9a94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68756;
+		line_no = 68757;
 	#endif
 	if ((!nZ))
 	{
@@ -490177,21 +490177,21 @@ __Nlsn_other:
 __Nlsn_far:
 	case (0xa9a96):
 	#ifdef M68K_DEBUG
-		line_no = 68758;
+		line_no = 68759;
 	#endif
 	__Fa9a98 ();
 __Nlsn_near:
 	case (0xa9a98):
 	#ifdef M68K_DEBUG
-		line_no = 68760;
+		line_no = 68761;
 	#endif
 	__Fa9a9c ();
 	#ifdef M68K_DEBUG
-		line_no = 68761;
+		line_no = 68762;
 	#endif
 	__Fa9a9e ();
 	#ifdef M68K_DEBUG
-		line_no = 68762;
+		line_no = 68763;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9aa2);
@@ -490201,19 +490201,19 @@ __Nlsn_near:
 	}
 	case (0xa9aa2):
 	#ifdef M68K_DEBUG
-		line_no = 68763;
+		line_no = 68764;
 	#endif
 	__Fa9aa4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68764;
+		line_no = 68765;
 	#endif
 	__Fa9aa8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68765;
+		line_no = 68766;
 	#endif
 	__Fa9aaa ();
 	#ifdef M68K_DEBUG
-		line_no = 68766;
+		line_no = 68767;
 	#endif
 	if (nZ)
 	{
@@ -490224,11 +490224,11 @@ __Nlsn_near:
 		goto __Nlsn_pay_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68767;
+		line_no = 68768;
 	#endif
 	__Fa9aae ();
 	#ifdef M68K_DEBUG
-		line_no = 68768;
+		line_no = 68769;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ab2);
@@ -490238,23 +490238,23 @@ __Nlsn_near:
 	}
 	case (0xa9ab2):
 	#ifdef M68K_DEBUG
-		line_no = 68769;
+		line_no = 68770;
 	#endif
 	__Fa9ab4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68770;
+		line_no = 68771;
 	#endif
 	__Fa9ab6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68771;
+		line_no = 68772;
 	#endif
 	__Fa9aba ();
 	#ifdef M68K_DEBUG
-		line_no = 68772;
+		line_no = 68773;
 	#endif
 	__Fa9abe ();
 	#ifdef M68K_DEBUG
-		line_no = 68773;
+		line_no = 68774;
 	#endif
 	{
 		goto __Nlsn_pay;
@@ -490262,11 +490262,11 @@ __Nlsn_near:
 __Nlsn_pay_far:
 	case (0xa9ac0):
 	#ifdef M68K_DEBUG
-		line_no = 68775;
+		line_no = 68776;
 	#endif
 	__Fa9ac4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68776;
+		line_no = 68777;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ac8);
@@ -490276,57 +490276,57 @@ __Nlsn_pay_far:
 	}
 	case (0xa9ac8):
 	#ifdef M68K_DEBUG
-		line_no = 68777;
+		line_no = 68778;
 	#endif
 	__Fa9aca ();
 	#ifdef M68K_DEBUG
-		line_no = 68778;
+		line_no = 68779;
 	#endif
 	__Fa9acc ();
 	#ifdef M68K_DEBUG
-		line_no = 68779;
+		line_no = 68780;
 	#endif
 	__Fa9ad0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68780;
+		line_no = 68781;
 	#endif
 	__Fa9ad4 ();
 __Nlsn_pay:
 	case (0xa9ad4):
 	#ifdef M68K_DEBUG
-		line_no = 68783;
+		line_no = 68784;
 	#endif
 	__Fa9ad6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68784;
+		line_no = 68785;
 	#endif
 	__Fa9ad8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68785;
+		line_no = 68786;
 	#endif
 	__Fa9ada ();
 	#ifdef M68K_DEBUG
-		line_no = 68786;
+		line_no = 68787;
 	#endif
 	__Fa9adc ();
 	#ifdef M68K_DEBUG
-		line_no = 68787;
+		line_no = 68788;
 	#endif
 	__Fa9ae0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68788;
+		line_no = 68789;
 	#endif
 	__Fa9ae2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68789;
+		line_no = 68790;
 	#endif
 	__Fa9ae4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68790;
+		line_no = 68791;
 	#endif
 	__Fa9ae6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68791;
+		line_no = 68792;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9aea);
@@ -490336,27 +490336,27 @@ __Nlsn_pay:
 	}
 	case (0xa9aea):
 	#ifdef M68K_DEBUG
-		line_no = 68792;
+		line_no = 68793;
 	#endif
 	__Fa9aec ();
 	#ifdef M68K_DEBUG
-		line_no = 68793;
+		line_no = 68794;
 	#endif
 	Regs[10]._s32 = Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68794;
+		line_no = 68795;
 	#endif
 	__Fa9af0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68795;
+		line_no = 68796;
 	#endif
 	__Fa9af2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68796;
+		line_no = 68797;
 	#endif
 	__Fa9af6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68797;
+		line_no = 68798;
 	#endif
 	{
 		goto __NL60192;
@@ -490364,15 +490364,15 @@ __Nlsn_pay:
 __Nlsh_obj:
 	case (0xa9afc):
 	#ifdef M68K_DEBUG
-		line_no = 68802;
+		line_no = 68803;
 	#endif
 	__Fa9afe ();
 	#ifdef M68K_DEBUG
-		line_no = 68803;
+		line_no = 68804;
 	#endif
 	__Fa9b00 ();
 	#ifdef M68K_DEBUG
-		line_no = 68804;
+		line_no = 68805;
 	#endif
 	if ((!nZ))
 	{
@@ -490383,11 +490383,11 @@ __Nlsh_obj:
 		goto __Nlsh_obj_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68805;
+		line_no = 68806;
 	#endif
 	__Fa9b06 ();
 	#ifdef M68K_DEBUG
-		line_no = 68806;
+		line_no = 68807;
 	#endif
 	if ((!C))
 	{
@@ -490398,15 +490398,15 @@ __Nlsh_obj:
 		goto __Nlsh_obj_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68807;
+		line_no = 68808;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+14466);
 	#ifdef M68K_DEBUG
-		line_no = 68808;
+		line_no = 68809;
 	#endif
 	__Fa9b10 ();
 	#ifdef M68K_DEBUG
-		line_no = 68809;
+		line_no = 68810;
 	#endif
 	if ((!nZ))
 	{
@@ -490417,27 +490417,27 @@ __Nlsh_obj:
 		goto __Nlsh_obj_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68810;
+		line_no = 68811;
 	#endif
 	__Fa9b14 ();
 	#ifdef M68K_DEBUG
-		line_no = 68811;
+		line_no = 68812;
 	#endif
 	Regs[10]._u32 = (__DL44b02_obj_offsets);
 	#ifdef M68K_DEBUG
-		line_no = 68812;
+		line_no = 68813;
 	#endif
 	__Fa9b1e ();
 	#ifdef M68K_DEBUG
-		line_no = 68813;
+		line_no = 68814;
 	#endif
 	Regs[9]._u32 = Regs[9]._s32 + (s32)Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68814;
+		line_no = 68815;
 	#endif
 	__Fa9b22 ();
 	#ifdef M68K_DEBUG
-		line_no = 68815;
+		line_no = 68816;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490445,11 +490445,11 @@ __Nlsh_obj:
 __Nlsh_obj_none:
 	case (0xa9b24):
 	#ifdef M68K_DEBUG
-		line_no = 68817;
+		line_no = 68818;
 	#endif
 	__Fa9b26 ();
 	#ifdef M68K_DEBUG
-		line_no = 68818;
+		line_no = 68819;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490457,11 +490457,11 @@ __Nlsh_obj_none:
 __NLshuttle_click:
 	case (0xa9b28):
 	#ifdef M68K_DEBUG
-		line_no = 68823;
+		line_no = 68824;
 	#endif
 	__Fa9b2c ();
 	#ifdef M68K_DEBUG
-		line_no = 68824;
+		line_no = 68825;
 	#endif
 	if ((!nZ))
 	{
@@ -490472,11 +490472,11 @@ __NLshuttle_click:
 		goto __NLshuttle_offer;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68825;
+		line_no = 68826;
 	#endif
 	__Fa9b32 ();
 	#ifdef M68K_DEBUG
-		line_no = 68826;
+		line_no = 68827;
 	#endif
 	if ((!nZ))
 	{
@@ -490487,7 +490487,7 @@ __NLshuttle_click:
 		goto __NLshuttle_accept;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68827;
+		line_no = 68828;
 	#endif
 	{
 		goto __NLshuttle_click_game;
@@ -490495,35 +490495,35 @@ __NLshuttle_click:
 __NLshuttle_offer:
 	case (0xa9b3c):
 	#ifdef M68K_DEBUG
-		line_no = 68832;
+		line_no = 68833;
 	#endif
 	__Fa9b40 ();
 	#ifdef M68K_DEBUG
-		line_no = 68833;
+		line_no = 68834;
 	#endif
 	__Fa9b42 ();
 	#ifdef M68K_DEBUG
-		line_no = 68834;
+		line_no = 68835;
 	#endif
 	Regs[11]._s32 = Regs[9]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68835;
+		line_no = 68836;
 	#endif
 	__Fa9b4a ();
 	#ifdef M68K_DEBUG
-		line_no = 68836;
+		line_no = 68837;
 	#endif
 	__Fa9b4e ();
 	#ifdef M68K_DEBUG
-		line_no = 68837;
+		line_no = 68838;
 	#endif
 	__Fa9b54 ();
 	#ifdef M68K_DEBUG
-		line_no = 68838;
+		line_no = 68839;
 	#endif
 	__Fa9b58 ();
 	#ifdef M68K_DEBUG
-		line_no = 68839;
+		line_no = 68840;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b5c);
@@ -490533,11 +490533,11 @@ __NLshuttle_offer:
 	}
 	case (0xa9b5c):
 	#ifdef M68K_DEBUG
-		line_no = 68840;
+		line_no = 68841;
 	#endif
 	Regs[8]._u32 = (__DL78b20);
 	#ifdef M68K_DEBUG
-		line_no = 68841;
+		line_no = 68842;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b66);
@@ -490547,23 +490547,23 @@ __NLshuttle_offer:
 	}
 	case (0xa9b66):
 	#ifdef M68K_DEBUG
-		line_no = 68842;
+		line_no = 68843;
 	#endif
 	__Fa9b6c ();
 	#ifdef M68K_DEBUG
-		line_no = 68843;
+		line_no = 68844;
 	#endif
 	__Fa9b72 ();
 	#ifdef M68K_DEBUG
-		line_no = 68844;
+		line_no = 68845;
 	#endif
 	Regs[11]._s32 = -26145;
 	#ifdef M68K_DEBUG
-		line_no = 68845;
+		line_no = 68846;
 	#endif
 	__Fa9b7a ();
 	#ifdef M68K_DEBUG
-		line_no = 68846;
+		line_no = 68847;
 	#endif
 	if (C)
 	{
@@ -490574,17 +490574,17 @@ __NLshuttle_offer:
 		goto __Nlso_soon;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68847;
+		line_no = 68848;
 	#endif
 	Regs[11]._s32 = -26144;
 __Nlso_soon:
 	case (0xa9b80):
 	#ifdef M68K_DEBUG
-		line_no = 68849;
+		line_no = 68850;
 	#endif
 	__Fa9b84 ();
 	#ifdef M68K_DEBUG
-		line_no = 68850;
+		line_no = 68851;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b8a);
@@ -490593,7 +490593,7 @@ __Nlso_soon:
 	}
 	case (0xa9b8a):
 	#ifdef M68K_DEBUG
-		line_no = 68851;
+		line_no = 68852;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b90);
@@ -490602,11 +490602,11 @@ __Nlso_soon:
 	}
 	case (0xa9b90):
 	#ifdef M68K_DEBUG
-		line_no = 68852;
+		line_no = 68853;
 	#endif
 	__Fa9b94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68853;
+		line_no = 68854;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b9a);
@@ -490615,11 +490615,11 @@ __Nlso_soon:
 	}
 	case (0xa9b9a):
 	#ifdef M68K_DEBUG
-		line_no = 68854;
+		line_no = 68855;
 	#endif
 	__Fa9b9e ();
 	#ifdef M68K_DEBUG
-		line_no = 68855;
+		line_no = 68856;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ba4);
@@ -490628,7 +490628,7 @@ __Nlso_soon:
 	}
 	case (0xa9ba4):
 	#ifdef M68K_DEBUG
-		line_no = 68856;
+		line_no = 68857;
 	#endif
 	{
 		goto __NL780c4;
@@ -490636,11 +490636,11 @@ __Nlso_soon:
 __NLshuttle_accept:
 	case (0xa9baa):
 	#ifdef M68K_DEBUG
-		line_no = 68861;
+		line_no = 68862;
 	#endif
 	__Fa9bb0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68862;
+		line_no = 68863;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -490651,11 +490651,11 @@ __NLshuttle_accept:
 		goto __Nlsa_roster;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68863;
+		line_no = 68864;
 	#endif
 	__Fa9bb6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68864;
+		line_no = 68865;
 	#endif
 	{
 		goto __NL76130;
@@ -490663,27 +490663,27 @@ __NLshuttle_accept:
 __Nlsa_roster:
 	case (0xa9bbc):
 	#ifdef M68K_DEBUG
-		line_no = 68866;
+		line_no = 68867;
 	#endif
 	__Fa9bc2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68867;
+		line_no = 68868;
 	#endif
 	__Fa9bc4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68868;
+		line_no = 68869;
 	#endif
 	__Fa9bc8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68869;
+		line_no = 68870;
 	#endif
 	__Fa9bca ();
 	#ifdef M68K_DEBUG
-		line_no = 68870;
+		line_no = 68871;
 	#endif
 	__Fa9bcc ();
 	#ifdef M68K_DEBUG
-		line_no = 68871;
+		line_no = 68872;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bd2);
@@ -490692,11 +490692,11 @@ __Nlsa_roster:
 	}
 	case (0xa9bd2):
 	#ifdef M68K_DEBUG
-		line_no = 68872;
+		line_no = 68873;
 	#endif
 	__Fa9bd4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68873;
+		line_no = 68874;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -490707,11 +490707,11 @@ __Nlsa_roster:
 		goto __Nlsa_room;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68874;
+		line_no = 68875;
 	#endif
 	__Fa9bda ();
 	#ifdef M68K_DEBUG
-		line_no = 68875;
+		line_no = 68876;
 	#endif
 	{
 		goto __NL76130;
@@ -490719,15 +490719,15 @@ __Nlsa_roster:
 __Nlsa_room:
 	case (0xa9be0):
 	#ifdef M68K_DEBUG
-		line_no = 68877;
+		line_no = 68878;
 	#endif
 	__Fa9be4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68878;
+		line_no = 68879;
 	#endif
 	Regs[11]._s32 = -26152;
 	#ifdef M68K_DEBUG
-		line_no = 68879;
+		line_no = 68880;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bee);
@@ -490736,11 +490736,11 @@ __Nlsa_room:
 	}
 	case (0xa9bee):
 	#ifdef M68K_DEBUG
-		line_no = 68880;
+		line_no = 68881;
 	#endif
 	__Fa9bf4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68881;
+		line_no = 68882;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bfa);
@@ -490749,43 +490749,43 @@ __Nlsa_room:
 	}
 	case (0xa9bfa):
 	#ifdef M68K_DEBUG
-		line_no = 68882;
+		line_no = 68883;
 	#endif
 	__Fa9c00 ();
 	#ifdef M68K_DEBUG
-		line_no = 68883;
+		line_no = 68884;
 	#endif
 	__Fa9c02 ();
 	#ifdef M68K_DEBUG
-		line_no = 68884;
+		line_no = 68885;
 	#endif
 	__Fa9c04 ();
 	#ifdef M68K_DEBUG
-		line_no = 68885;
+		line_no = 68886;
 	#endif
 	__Fa9c06 ();
 	#ifdef M68K_DEBUG
-		line_no = 68886;
+		line_no = 68887;
 	#endif
 	__Fa9c0a ();
 	#ifdef M68K_DEBUG
-		line_no = 68887;
+		line_no = 68888;
 	#endif
 	__Fa9c0e ();
 	#ifdef M68K_DEBUG
-		line_no = 68888;
+		line_no = 68889;
 	#endif
 	__Fa9c12 ();
 	#ifdef M68K_DEBUG
-		line_no = 68889;
+		line_no = 68890;
 	#endif
 	__Fa9c16 ();
 	#ifdef M68K_DEBUG
-		line_no = 68890;
+		line_no = 68891;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+124);
 	#ifdef M68K_DEBUG
-		line_no = 68891;
+		line_no = 68892;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9c1e);
@@ -490795,7 +490795,7 @@ __Nlsa_room:
 	}
 	case (0xa9c1e):
 	#ifdef M68K_DEBUG
-		line_no = 68892;
+		line_no = 68893;
 	#endif
 	{
 		goto __NL782c2;
@@ -490803,11 +490803,11 @@ __Nlsa_room:
 __NLshuttle_match:
 	case (0xa9c24):
 	#ifdef M68K_DEBUG
-		line_no = 68899;
+		line_no = 68900;
 	#endif
 	__Fa9c28 ();
 	#ifdef M68K_DEBUG
-		line_no = 68900;
+		line_no = 68901;
 	#endif
 	if (nZ)
 	{
@@ -490818,11 +490818,11 @@ __NLshuttle_match:
 		goto __Nlsm_next;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68901;
+		line_no = 68902;
 	#endif
 	__Fa9c30 ();
 	#ifdef M68K_DEBUG
-		line_no = 68902;
+		line_no = 68903;
 	#endif
 	if ((!nZ))
 	{
@@ -490833,28 +490833,28 @@ __NLshuttle_match:
 		goto __Nlsm_take;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68903;
+		line_no = 68904;
 	#endif
 	__Fa9c34 ();
 	#ifdef M68K_DEBUG
-		line_no = 68904;
+		line_no = 68905;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+678);
 	#ifdef M68K_DEBUG
-		line_no = 68905;
+		line_no = 68906;
 	#endif
 	__Fa9c3c ();
 	#ifdef M68K_DEBUG
-		line_no = 68906;
+		line_no = 68907;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68907;
+		line_no = 68908;
 	#endif
 	__Fa9c42 ();
 	#ifdef M68K_DEBUG
-		line_no = 68908;
+		line_no = 68909;
 	#endif
 	if (nZ)
 	{
@@ -490865,13 +490865,13 @@ __NLshuttle_match:
 		goto __Nlsm_next;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68909;
+		line_no = 68910;
 	#endif
 	__Fa9c4a ();
 __Nlsm_take:
 	case (0xa9c4a):
 	#ifdef M68K_DEBUG
-		line_no = 68911;
+		line_no = 68912;
 	#endif
 	{
 		goto __Nlpax_deliver;
@@ -490879,11 +490879,11 @@ __Nlsm_take:
 __Nlsm_next:
 	case (0xa9c50):
 	#ifdef M68K_DEBUG
-		line_no = 68913;
+		line_no = 68914;
 	#endif
 	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlsm_loop;
 	#ifdef M68K_DEBUG
-		line_no = 68914;
+		line_no = 68915;
 	#endif
 	{
 		goto __Nl7eda0;
@@ -490891,7 +490891,7 @@ __Nlsm_next:
 __Nlsm_loop:
 	case (0xa9c5a):
 	#ifdef M68K_DEBUG
-		line_no = 68916;
+		line_no = 68917;
 	#endif
 	{
 		goto __Nl7ee7e;
@@ -490899,23 +490899,23 @@ __Nlsm_loop:
 __NLseats_figures:
 	case (0xa9c60):
 	#ifdef M68K_DEBUG
-		line_no = 68925;
+		line_no = 68926;
 	#endif
 	__Fa9c66 ();
 	#ifdef M68K_DEBUG
-		line_no = 68926;
+		line_no = 68927;
 	#endif
 	__Fa9c68 ();
 	#ifdef M68K_DEBUG
-		line_no = 68927;
+		line_no = 68928;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+674);
 	#ifdef M68K_DEBUG
-		line_no = 68928;
+		line_no = 68929;
 	#endif
 	__Fa9c72 ();
 	#ifdef M68K_DEBUG
-		line_no = 68929;
+		line_no = 68930;
 	#endif
 	if ((!nZ))
 	{
@@ -490926,18 +490926,18 @@ __NLseats_figures:
 		goto __Nlsf_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68930;
+		line_no = 68931;
 	#endif
 	__Fa9c76 ();
 __Nlsf_none:
 	case (0xa9c76):
 	#ifdef M68K_DEBUG
-		line_no = 68932;
+		line_no = 68933;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68933;
+		line_no = 68934;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490945,23 +490945,23 @@ __Nlsf_none:
 __NLseats_free:
 	case (0xa9c7a):
 	#ifdef M68K_DEBUG
-		line_no = 68936;
+		line_no = 68937;
 	#endif
 	__Fa9c7e ();
 	#ifdef M68K_DEBUG
-		line_no = 68937;
+		line_no = 68938;
 	#endif
 	__Fa9c80 ();
 	#ifdef M68K_DEBUG
-		line_no = 68938;
+		line_no = 68939;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+674);
 	#ifdef M68K_DEBUG
-		line_no = 68939;
+		line_no = 68940;
 	#endif
 	__Fa9c8a ();
 	#ifdef M68K_DEBUG
-		line_no = 68940;
+		line_no = 68941;
 	#endif
 	if ((!nZ))
 	{
@@ -490972,22 +490972,22 @@ __NLseats_free:
 		goto __Nlsfr_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68941;
+		line_no = 68942;
 	#endif
 	__Fa9c8e ();
 __Nlsfr_none:
 	case (0xa9c8e):
 	#ifdef M68K_DEBUG
-		line_no = 68943;
+		line_no = 68944;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68944;
+		line_no = 68945;
 	#endif
 	__Fa9c94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68945;
+		line_no = 68946;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490995,11 +490995,11 @@ __Nlsfr_none:
 __NLshuttle_strings:
 	case (0xa9c96):
 	#ifdef M68K_DEBUG
-		line_no = 68951;
+		line_no = 68952;
 	#endif
 	__Fa9c9a ();
 	#ifdef M68K_DEBUG
-		line_no = 68953;
+		line_no = 68954;
 	#endif
 	if ((!nZ))
 	{
@@ -491010,15 +491010,15 @@ __NLshuttle_strings:
 		goto __Nlss_station;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68954;
+		line_no = 68955;
 	#endif
 	__Fa9ca0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68956;
+		line_no = 68957;
 	#endif
 	Regs[9]._u32 = (__DLshuttle_string_table);
 	#ifdef M68K_DEBUG
-		line_no = 68957;
+		line_no = 68958;
 	#endif
 	{
 		jdest = (Regs[13]._s32+372);
@@ -491027,11 +491027,11 @@ __NLshuttle_strings:
 __Nlss_station:
 	case (0xa9caa):
 	#ifdef M68K_DEBUG
-		line_no = 68959;
+		line_no = 68960;
 	#endif
 	__Fa9cae ();
 	#ifdef M68K_DEBUG
-		line_no = 68960;
+		line_no = 68961;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9cb2);
@@ -491040,7 +491040,7 @@ __Nlss_station:
 	}
 	case (0xa9cb2):
 	#ifdef M68K_DEBUG
-		line_no = 68961;
+		line_no = 68962;
 	#endif
 	if ((!nZ))
 	{
@@ -491051,11 +491051,11 @@ __Nlss_station:
 		goto __Nlss_end;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68962;
+		line_no = 68963;
 	#endif
 	Regs[10]._u32 = (Regs[9]._s32+246);
 	#ifdef M68K_DEBUG
-		line_no = 68963;
+		line_no = 68964;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9cba);
@@ -491064,11 +491064,11 @@ __Nlss_station:
 	}
 	case (0xa9cba):
 	#ifdef M68K_DEBUG
-		line_no = 68964;
+		line_no = 68965;
 	#endif
 	__Fa9cbe ();
 	#ifdef M68K_DEBUG
-		line_no = 68965;
+		line_no = 68966;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9cc2);
@@ -491077,7 +491077,7 @@ __Nlss_station:
 	}
 	case (0xa9cc2):
 	#ifdef M68K_DEBUG
-		line_no = 68966;
+		line_no = 68967;
 	#endif
 	if ((!nZ))
 	{
@@ -491088,19 +491088,19 @@ __Nlss_station:
 		goto __Nlss_end;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68967;
+		line_no = 68968;
 	#endif
 	__Fa9cc8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68968;
+		line_no = 68969;
 	#endif
 	__Fa9ccc ();
 	#ifdef M68K_DEBUG
-		line_no = 68969;
+		line_no = 68970;
 	#endif
 	Regs[10]._u32 = (Regs[9]._s32+246);
 	#ifdef M68K_DEBUG
-		line_no = 68970;
+		line_no = 68971;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9cd2);
@@ -491109,21 +491109,21 @@ __Nlss_station:
 	}
 	case (0xa9cd2):
 	#ifdef M68K_DEBUG
-		line_no = 68971;
+		line_no = 68972;
 	#endif
 	__Fa9cd6 ();
 __Nlss_end:
 	case (0xa9cd6):
 	#ifdef M68K_DEBUG
-		line_no = 68973;
+		line_no = 68974;
 	#endif
 	__Fa9cd8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68974;
+		line_no = 68975;
 	#endif
 	__Fa9cdc ();
 	#ifdef M68K_DEBUG
-		line_no = 68975;
+		line_no = 68976;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -491131,17 +491131,17 @@ __Nlss_end:
 __Nlss_copy:
 	case (0xa9cde):
 	#ifdef M68K_DEBUG
-		line_no = 68978;
+		line_no = 68979;
 	#endif
 	__Fa9ce0 ();
 __Nlss_copy_char:
 	case (0xa9ce0):
 	#ifdef M68K_DEBUG
-		line_no = 68980;
+		line_no = 68981;
 	#endif
 	__Fa9ce2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68981;
+		line_no = 68982;
 	#endif
 	if ((!nZ))
 	{
@@ -491152,17 +491152,17 @@ __Nlss_copy_char:
 		goto __Nlss_copy_end;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68982;
+		line_no = 68983;
 	#endif
 	Regs[8]._u32 = Regs[8]._s32 + (s32)1;
 	#ifdef M68K_DEBUG
-		line_no = 68983;
+		line_no = 68984;
 	#endif
 	if ((!0) && (--Regs[0]._s16 != -1)) goto __Nlss_copy_char;
 __Nlss_copy_end:
 	case (0xa9cea):
 	#ifdef M68K_DEBUG
-		line_no = 68985;
+		line_no = 68986;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -491183,7 +491183,7 @@ __Nlsh_s_later:
 __NLshuttle_click_game:
 	case (0xa9e04):
 	#ifdef M68K_DEBUG
-		line_no = 69048;
+		line_no = 69047;
 	#endif
 	{
 		goto __NLafmu_comms_click;
@@ -491191,11 +491191,11 @@ __NLshuttle_click_game:
 __NLshuttle_modstr:
 	case (0xa9e0a):
 	#ifdef M68K_DEBUG
-		line_no = 69052;
+		line_no = 69051;
 	#endif
 	__Fa9e0e ();
 	#ifdef M68K_DEBUG
-		line_no = 69054;
+		line_no = 69053;
 	#endif
 	if (C)
 	{
@@ -491206,7 +491206,7 @@ __NLshuttle_modstr:
 		goto __Nlshuttle_modstr_afmu;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 69055;
+		line_no = 69054;
 	#endif
 	{
 		goto __NLshuttle_strings;
@@ -491214,11 +491214,11 @@ __NLshuttle_modstr:
 __Nlshuttle_modstr_afmu:
 	case (0xa9e16):
 	#ifdef M68K_DEBUG
-		line_no = 69057;
+		line_no = 69056;
 	#endif
 	__Fa9e1a ();
 	#ifdef M68K_DEBUG
-		line_no = 69059;
+		line_no = 69058;
 	#endif
 	if (C)
 	{
@@ -491229,7 +491229,7 @@ __Nlshuttle_modstr_afmu:
 		goto __Nlshuttle_modstr_game;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 69060;
+		line_no = 69059;
 	#endif
 	{
 		goto __Nlafmu_strings_ours;
@@ -491237,7 +491237,7 @@ __Nlshuttle_modstr_afmu:
 __Nlshuttle_modstr_game:
 	case (0xa9e22):
 	#ifdef M68K_DEBUG
-		line_no = 69062;
+		line_no = 69061;
 	#endif
 	{
 		goto __Nlafmu_strings_game;
