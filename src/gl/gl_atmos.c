@@ -120,14 +120,14 @@ typedef struct
 
 static AtmosBuf rec, pub, show;
 static int first_pending, planet_puts;
-/* ... of them by the cockpit's turned passes */
-static int turned_puts;
+/* ... of them with the planet's horizon well inside the pass's view */
+static int horizon_puts;
 static float scale_so_far = 1.0f;
 
 void soft_nodes_reset(void)
 {
 	rec.arena_used = 0;
-	rec.n_bands = first_pending = rec.n_planets = planet_puts = turned_puts = 0;
+	rec.n_bands = first_pending = rec.n_planets = planet_puts = horizon_puts = 0;
 	rec.sky = -1;
 	rec.sky_ahead = rec.sky_air = false;
 	scale_so_far = 1.0f;
@@ -155,9 +155,11 @@ void atmos_publish(void)
 	 * stands in, gl_planet.c). Those keep the last frame's bands, which are
 	 * drawn round the planet's current place (draw_bands). So do frames
 	 * whose only pass is the game camera's when it has the planet without
-	 * its horizon (nose up: save "Flicker3"); the turned passes look all
-	 * round. A frame whose planet routine ran in one of those without
-	 * making any has none. */
+	 * its horizon (nose up: save "Flicker3"), and those whose capture pass
+	 * was aimed at something else and only caught a big planet's middle
+	 * (save "flashing": over Mars, passes towards its far moons). Only a
+	 * pass that had the planet's horizon well in view and made no bands
+	 * says there are none. */
 	static AtmosBuf held;
 	static int held_age = HELD_FRAMES;
 	if (rec.n_bands > 0)
@@ -165,7 +167,7 @@ void atmos_publish(void)
 		copy_atmos(&held, &rec);
 		held_age = 0;
 	}
-	else if ((planet_puts == 0 || (cockpit_active() && turned_puts == 0)) && held_age < HELD_FRAMES)
+	else if (horizon_puts == 0 && held_age < HELD_FRAMES)
 	{
 		held_age++;
 		copy_atmos(&pub, &held);
@@ -225,8 +227,17 @@ void Nu_AtmosBand(void)
 void atmos_place_bands(const float centre[3], float radius)
 {
 	planet_puts++;
-	if (cockpit_turned_pass())
-		turned_puts++;
+	/* the horizon is a ring at angle a round the centre's direction (the
+	 * pass looks along -z): its nearest point to the pass's middle is
+	 * |off - a| from it. Within half the view's height it is surely in. */
+	double dist = sqrt((double)centre[0] * centre[0] + (double)centre[1] * centre[1] + (double)centre[2] * centre[2]);
+	if (dist > 0.0 && radius > 0.0f)
+	{
+		double off = acos(fmax(-1.0, fmin(1.0, -centre[2] / dist)));
+		double a = asin(fmin((double)radius / dist, 1.0));
+		if (fabs(off - a) < CLASSIC_FOV * 0.5 * GLM_PI / 180.0)
+			horizon_puts++;
+	}
 	if (first_pending < rec.n_bands)
 	{
 		/* L3da2e sets it only for some view directions: a pass looking
