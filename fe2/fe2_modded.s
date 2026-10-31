@@ -1063,7 +1063,11 @@ L1afae:
 		dc.b	$7,$2,$0,$8,$88,$84,$5,$8,$9,$4,$0,$a,$88,$88,$8,$6
 		dc.b	$a,$4,$0,$c,$88,$84,$7,$a,$b,$6,$0,$e,$0,$0,$c,$84
 		dc.b	$3e,$80,$10,$80,$2,$4,$6,$7,$8,$a,$c,$d,$e,$10,$0,$0
-		dc.b	$a,$a5,$f9,$9d,$0,$0,$0,$8,$0,$4,$0,$e,$0,$28,$40,$b
+* Interplanetary Shuttle ship data: forward thrust 2725, reverse thrust
+* (also the up/down and sideways thrust) was -1635 ($f99d), too little to
+* lift off from Earth (needs about 2000); now -2500. Capacity was 4 t,
+* all taken by the built-in drive; now 7 t (see Lstart_ship).
+		dc.b	$a,$a5,$f6,$3c,$0,$0,$0,$8,$0,$7,$0,$e,$0,$28,$40,$b
 		dc.b	$0,$1,$0,$0,$80,$1,$1,$0,$1,$90,$0,$64,$1,$e0,$0,$64
 	l1b7de:	dc.b	$0,$2c,$0,$10,$1,$40,$0,$24,$0,$c,$0,$3,$0,$0,$0,$4b
 		dc.b	$1,$c,$f4,$0,$1,$c,$f4,$4b,$13,$81,$ff,$0,$13,$81,$fe,$2
@@ -23992,12 +23996,12 @@ L427dc_IntroLoop:
 		bra.s	L4289a
 	l42838:	cmpi.b	#$34,d0
 		bne.s	l42844
-		move.w	#$501,d0
+		move.w	#$301,d0
 		bra.s	L4289a
-	l42844:	cmpi.b	#$35,d0
-		bne.s	l42850
-		move.w	#$401,d0
-		bra.s	L4289a
+	l42844:	jmp	Lstart_keys
+		nop
+		nop
+		nop
 	l42850:	move.w	#$1,d0
 		cmpi.l	#$9c2334,A6_time_of_day(a6)
 		bcc.s	L4289a
@@ -31485,7 +31489,7 @@ L4b206:
 		move.b	#$70,1183(a6)
 		cmp.w	#$2,d0
 		beq.s	l4b244
-		move.b	#$6f,1183(a6)
+		jmp	Lstart_body
 	l4b244:	rts
 
 L4b246:
@@ -38175,8 +38179,11 @@ L5fcd2:
 		dc.b	$ff,$fb,$ff,$fd,$7,$d0,$3,$e8
 
 L5fdca:
-		jsr	A5_2RandInts(a5)
-		andi.w	#$3e,d0
+* Lshuttle_news may make a shuttle advert instead (same size as the
+* jsr / andi it replaces). See the end of the file.
+		jmp	Lshuttle_news
+		nop
+lshuttle_news_back:
 		movem.w	d6-7,-(a7)
 		move.w	L5fde4(pc,d0.w),d0
 		jsr	L5fde4(pc,d0.w)
@@ -40133,9 +40140,9 @@ L61666:
 		move.l	#$3e8,A6_cash(a6)
 		move.w	714(a6),d0
 		lsr.w	#8,d0
-		cmp.w	#$1,d0
-		bne.w	l616f0
-		move.w	#$20,d1
+		jmp	Lstart_ship
+		nop
+	lstart_mars:	move.w	#$20,d1
 		move.w	#$4a0d,d7
 		bsr.w	L615bc
 		move.b	#$1,166(a1)
@@ -49771,15 +49778,17 @@ L731a8:
 		dc.b	$0
 	l7389d:	dc.b	"Select Start Position:"
 		dc.b	$d,$d,$fd,$2d,$81
-		dc.b	" 1. Ross 154 System (Recommended Start Position)"
+		dc.b	" 1. Ross 154 (Recommended)"
 		dc.b	$d,$d,$fd,$2d,$81
-		dc.b	" 2. Mars in the Sol System"
+		dc.b	" 2. Mars, Sol System"
 		dc.b	$d,$d,$fd,$2d,$81
 		dc.b	" 3. Lave System"
 		dc.b	$d,$d,$fd,$2d,$81
-		dc.b	" 4. Last Saved Position"
+		dc.b	" 4. Earth (Interplanetary Shuttle)"
 		dc.b	$d,$d,$fd,$2d,$81
-		dc.b	" 5. Select Position from disc"
+		dc.b	" 5. Last Saved Position"
+		dc.b	$d,$d,$fd,$2d,$81
+		dc.b	" 6. Load from disc"
 		dc.b	$fe,$26,$9c
 		dc.b	"Copyright @ D.J.Braben 1993, All rights reserved."
 		dc.b	$0
@@ -52790,7 +52799,7 @@ L76436:
 		movem.l	(a1),d0-4/a2
 * MOD Auto Field-Maintenance Unit: hook, same size as the code it
 * replaced so nothing moves. See Lafmu_ at the end of the file.
-	l76468:	jmp	Lafmu_comms_click
+	l76468:	jmp	Lshuttle_click
 Lafmu_comms_click_done:
 		move.w	L76476(pc,d0.w),d0
 		jmp	L76476(pc,d0.w)
@@ -55055,8 +55064,9 @@ L7822c:
 		movem.l	11746(a6),d1-5/a2-3
 		btst	#$d,d4
 		bne.s	l78258
-		move.w	A6_cabins(a6),d0
-		sub.w	744(a6),d0
+* Lseats_free: free cabins plus Passenger Seats (same size)
+		jsr	Lseats_free
+		nop
 		ext.w	d4
 		lsr.w	#2,d4
 		addq.w	#1,d4
@@ -55430,7 +55440,8 @@ L78668:
 L786c2:
 		move.w	#$98d1,d0
 		move.l	A6_cash(a6),d1
-		movem.w	A6_cargo_space(a6),d2-3/a2-3
+* Lseats_figures: the cabin figure counts Passenger Seats too (same size)
+		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
 		moveq	#13,d4
@@ -58791,9 +58802,11 @@ L7ee5e:
 	l7ee7e:	lea	16(a0),a0
 		btst	#$7,2(a0)
 		bne.w	l7edf0
-		cmp.l	4(a0),d2
-		dbeq	d7,l7ee7e
+* Lshuttle_match: shuttle passengers only leave at their starport
+		jmp	Lshuttle_match
+		nop
 		bne.w	l7eda0
+lpax_deliver:
 		movem.w	0(a0),d3-4
 		movem.l	4(a0),d1-2/a2
 		movem.l	a2/d7/a0/d2-4/d0,-(a7)
@@ -59356,7 +59369,8 @@ L7f54a:
 L7f55c:
 		move.w	#$9c38,d0
 		move.l	A6_cash(a6),d1
-		movem.w	A6_cargo_space(a6),d2-3/a2-3
+* Lseats_figures: the cabin figure counts Passenger Seats too (same size)
+		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
 		move.w	#$be,d5
@@ -62462,8 +62476,8 @@ L83dae:
 		ds.b	7
 		dc.b	$88,$17,$15,$e0,$0,$15,$1e,$e0,$0,$0,$0,$0,$0,$0,$0,$0
 		ds.b	4
-		dc.b	$88,$17,$17,$6a,$0,$15,$24,$32,$0,$ff,$ff,$cc,$0,$0,$0,$0
-		dc.b	$1,$0,$0,$0,$88,$17,$17,$6a,$0,$15,$24,$32,$0,$ff,$ff,$cc
+		dc.b	$88,$17,$18,$80,$0,$15,$24,$a0,$0,$ff,$ff,$94,$0,$0,$0,$0
+		dc.b	$0,$0,$0,$0,$88,$17,$17,$6a,$0,$15,$24,$32,$0,$ff,$ff,$cc
 		ds.b	4
 		dc.b	$1,$0,$0,$0,$88,$17,$17,$6a,$0,$15,$24,$32,$0,$ff,$ff,$cc
 		ds.b	4
@@ -66701,6 +66715,10 @@ AFMU_STR_DONE		equ	$99d0
 AFMU_STR_NOTHING	equ	$99d1
 AFMU_STR_NO_FUEL	equ	$99d2
 AFMU_STR_NO_UNIT	equ	$99d3
+* Passenger Seats (see Lseats_equipment); defined here, before their first use
+SEATS_BIT		equ	20
+SEATS_STR_NAME		equ	$99d4
+* ^^ after the station strings ($99cd) and the modded build's AFMU ($99ce-$99d3)
 
 * Shop list (L76a76): add our row, then start the game's loop as before.
 * Same row as the loop makes: d1/d2 price * tech factor, d3 mass, a0 name.
@@ -66712,6 +66730,14 @@ Lafmu_shop_row:
 		movea.w	#AFMU_STR_NAME,a0
 		move.w	#$986e,d0
 		jsr	L76018
+* Passenger Seats row
+		lea	Lseats_equipment,a1
+		movem.w	(a1),d1-3
+		mulu	11784(a6),d1
+		mulu	11784(a6),d2
+		movea.w	#SEATS_STR_NAME,a0
+		move.w	#$986e,d0
+		jsr	L76018
 		lea	L7655c_equipment_list,a1
 		moveq	#0,d0
 		jmp	l76ad0
@@ -66720,6 +66746,8 @@ Lafmu_shop_row:
 Lafmu_find_item:
 		cmpi.w	#AFMU_STR_NAME,d6
 		beq.s	lafmu_find_ours
+		cmpi.w	#SEATS_STR_NAME,d6
+		beq.s	lafmu_find_seats
 		subi.w	#$9873,d6
 		mulu	#$c,d6
 		lea	L7655c_equipment_list,a3
@@ -66728,13 +66756,18 @@ lafmu_find_ours:
 		moveq	#0,d6
 		lea	Lafmu_equipment,a3
 		jmp	Lafmu_find_item_done
+lafmu_find_seats:
+		moveq	#0,d6
+		lea	Lseats_equipment,a3
+		jmp	Lafmu_find_item_done
 
 * Station module string lookup (fn 40), d0 = string id
 Lafmu_strings:
 		andi.w	#$3fe,d0
-		cmp.w	#$39c,d0
-* ^^ (AFMU_STR_BASE - $9800) * 2
-		bcc.s	lafmu_strings_ours
+* Lshuttle_modstr: shuttle ids, then the AFMU ids (same size as the
+* cmp.w #$39c,d0 / bcc.s lafmu_strings_ours it replaces)
+		jmp	Lshuttle_modstr
+lafmu_strings_game:
 		lea	L79280_station_strings,a1
 		jmp	A5_CopyFmtStr(a5)
 lafmu_strings_ours:
@@ -66818,6 +66851,9 @@ Lafmu_flag_name:
 		cmpi.w	#38,d0
 * ^^ AFMU_BIT * 2
 		beq.s	lafmu_flag_ours
+		cmpi.w	#40,d0
+* ^^ SEATS_BIT * 2
+		beq.s	lafmu_flag_seats
 		move.l	a1,-(a7)
 		lea	L7e1f8_equip_flag_names,a1
 		move.w	0(a1,d0.w),d0
@@ -66825,6 +66861,9 @@ Lafmu_flag_name:
 		rts
 lafmu_flag_ours:
 		move.w	#AFMU_STR_NAME,d0
+		rts
+lafmu_flag_seats:
+		move.w	#SEATS_STR_NAME,d0
 		rts
 
 * Equipment entry, laid out like L7655c_equipment_list
@@ -66846,6 +66885,7 @@ Lafmu_string_table:
 		dc.w	lafmu_s_nothing-Lafmu_string_table
 		dc.w	lafmu_s_no_fuel-Lafmu_string_table
 		dc.w	lafmu_s_no_unit-Lafmu_string_table
+		dc.w	lseats_s_name-Lafmu_string_table
 lafmu_s_name:
 		dc.b	"AFMU"
 		dc.b	$0
@@ -66869,6 +66909,33 @@ lafmu_s_no_unit:
 		dc.b	$d
 		dc.b	"No Field-Maintenance Unit fitted."
 		dc.b	$0
+* pad: Lseats_equipment needs an even address
+		ds.b	1
+
+******************************************************************************
+* Passenger Seats: equipment, 2 t, sold at every station (tech level 0), one
+* per ship. Equipment flag bit 20 (the random damage routine L44fd6 picks
+* bits 0-18 and the station repair list knows 0-17, so it never breaks).
+* Four seats for in-system passenger jobs; small ships such as the
+* Interplanetary Shuttle have no room for a 5 t cabin.
+******************************************************************************
+* (SEATS_BIT and SEATS_STR_NAME are defined with the AFMU ids above)
+
+* Equipment entry, laid out like the equipment list (L7655c)
+Lseats_equipment:
+		dc.w	100
+		dc.w	80
+		dc.w	2
+		dc.w	3
+* ^^ buy price, sell price (times the station's factor), mass, unknown (3)
+		dc.b	$0,$80,$14,$0
+* ^^ kind 0 (flag bit), flags, bit 20, tech level 0
+
+lseats_s_name:
+		dc.b	"Passenger Seats"
+		dc.b	$0
+* pad: keeps the build tag where it was (odd)
+		ds.b	1
 
 * ---------------------------------------------------------------------------
 * Build tag for the DEBUG page: proof that a rebuild actually picked up the
@@ -67772,6 +67839,14 @@ Lland_cmp:
 		tst.w	d0
 		movem.l	(a7)+,d0
 		bne.s	lland_cmp_on
+* Except the player taking off (mode $48): a weak ship (the shuttle at
+* Earth) sinks into the pad for a frame before its thrust wins, and that
+* touch went down the crash path and could destroy it.
+		cmpa.l	674(a6),a0
+		bne.s	lland_cmp_off
+		cmpi.b	#$48,704(a6)
+		beq.s	lland_cmp_on
+lland_cmp_off:
 		moveq	#0,d3
 lland_cmp_on:
 		cmp.l	#$78000000,d3
@@ -68523,3 +68598,465 @@ lrange_out:
 ******************************************************************************
 Lcam_relvec:
 		jmp	L4350e
+
+******************************************************************************
+* New start position 4: landed at London on Earth in an Interplanetary
+* Shuttle with only the interplanetary drive (no hyperdrive), so the player
+* starts out inside the Sol system. It is start code 3 (the high byte of the
+* event 1 word, 714(a6)), which the game did not use: its galaxy position
+* entry in L83dae was a copy of Ross 154's and is now Sol's. The title keys
+* become 4 = Earth, 5 = last saved position (code 5), 6 = from disc (code 4).
+*  - Lstart_keys replaces cmpi.b #$35,d0 / bne.s l42850 / move.w #$401,d0 /
+*    bra.s L4289a at l42844 (key 4 there now gives $301).
+*  - Lstart_body replaces move.b #$6f,1183(a6) in L4b206 (the start's planet:
+*    $60 Mars, $6f for Ross 154; Earth is object $6e).
+*  - Lstart_ship replaces cmp.w #$1,d0 / bne.w l616f0 in L61666; the Earth
+*    case is the Mars one (L61666 code 1) with the shuttle (model 10, d1 =
+*    $14), Atmospheric Shielding (bit 14) and Passenger Seats (bit 20):
+*    1 + 2 t, the whole 3 t left beside the built-in interplanetary drive
+*    (drive word $8001: grade 1, 4 t, taken off the capacity of 7 t when
+*    the object is made). No gun mountings. Earth's surface bases are
+*    objects 103-109; London is 109.
+******************************************************************************
+Lstart_keys:
+		cmpi.b	#$35,d0
+		bne.s	lstart_key6
+		move.w	#$501,d0
+		jmp	L4289a
+lstart_key6:
+		cmpi.b	#$36,d0
+		bne.s	lstart_nokey
+		move.w	#$401,d0
+		jmp	L4289a
+lstart_nokey:
+		jmp	l42850
+
+Lstart_body:
+		move.b	#$6f,1183(a6)
+		cmp.w	#$3,d0
+		bne.s	lstart_body_x
+		move.b	#$6e,1183(a6)
+lstart_body_x:
+		rts
+
+Lstart_ship:
+		cmp.w	#$3,d0
+		beq.s	lstart_earth
+		cmp.w	#$1,d0
+		bne.s	lstart_notmars
+		jmp	lstart_mars
+lstart_notmars:
+		jmp	l616f0
+lstart_earth:
+		move.w	#$14,d1
+		move.w	#$5e77,d7
+		jsr	L615bc
+		clr.l	168(a1)
+		clr.l	172(a1)
+		clr.l	176(a1)
+		clr.w	182(a1)
+		move.l	#$104000,158(a1)
+		subi.w	#$3,738(a6)
+		clr.w	816(a6)
+		clr.w	742(a6)
+		clr.w	792(a6)
+		move.l	#$40000000,242(a1)
+		move.b	#$6e,68(a1)
+		moveq	#109,d0
+		jmp	L617ea
+
+******************************************************************************
+* Shuttle runs: bulletin board adverts for passengers to another starport in
+* the same system, paid when you land there. The jobs are ordinary entries of
+* the passenger list (11960(a6), 16 bytes, count 11930(a6)), so they are in
+* the saved game, use cabins (744(a6)) and expire like other passengers:
+*  - flags word +2: bit 0 of the low byte set = shuttle run (the game's
+*    passengers never set it: the low byte is (count - 1) << 2 or $1c);
+*  - destination system +4 = the system the job was taken in;
+*  - name seed +12: its low byte is the destination starport's object slot.
+* Hooks (each the same size as the code it replaces):
+*  - L5fdca (makes one station news entry): Lshuttle_news, about 1 in 5
+*    entries becomes a shuttle advert when the system has 2+ starports;
+*  - l76468 (station screen item click): Lshuttle_click, for the advert and
+*    its accept button;
+*  - station strings (fn 40): Lshuttle_strings, ids SH_STR_BASE and up;
+*  - L7ee5e (passengers leaving at a landing): Lshuttle_match, a shuttle
+*    passenger only leaves at the starport it booked.
+* Seats and cabins: Passenger Seats (SEATS_BIT) give 4 places on top of the
+* cabins (740(a6)), for these jobs and the game's passenger adverts alike.
+******************************************************************************
+SH_STR_AD		equ	$99d5
+SH_STR_OK		equ	$99d6
+SH_STR_TALK		equ	$99d7
+SH_STR_THANKS		equ	$99d8
+SH_STR_STATION		equ	$99d9
+SH_STR_ROOM		equ	$99da
+SH_STR_ONE		equ	$99db
+SH_STR_SOON		equ	$99df
+SH_STR_LATER		equ	$99e0
+SH_AD_CHANCE		equ	$1a00
+SH_SEATS		equ	4
+
+* Replaces jsr A5_2RandInts(a5) / andi.w #$3e,d0 at the start of L5fdca.
+* In: a0 = station record, a1 = where the news entry goes (L60192).
+Lshuttle_news:
+		jsr	A5_2RandInts(a5)
+		cmpi.w	#SH_AD_CHANCE,d1
+		bcc.s	lsn_game
+		cmpi.w	#2,1248(a6)
+		bge.s	lsn_ours
+lsn_game:
+		andi.w	#$3e,d0
+		jmp	lshuttle_news_back
+lsn_ours:
+		movem.w	d6-7,-(a7)
+		bsr.s	lsn_make
+		movem.w	(a7)+,d6-7
+		rts
+
+lsn_counts:
+		dc.b	0,0,0,1,1,2,2,3
+* ^^ passengers - 1 for RandInt(8): mostly one or two
+
+* Make the advert: d0 = SH_STR_AD, d1 = destination slot, d2 = text id of
+* the seat count, d3 = pay (credits), d4 = days allowed << 8 + (count - 1)
+* << 2, a2 = client name seed with the destination slot in its low byte.
+lsn_make:
+		move.w	1248(a6),d0
+		jsr	A5_RandInt(a5)
+		move.w	d0,d6
+		mulu	#474,d0
+		lea	1254(a6),a2
+		adda.l	d0,a2
+		cmpa.l	a0,a2
+		bne.s	lsn_other
+		addq.w	#1,d6
+		cmp.w	1248(a6),d6
+		blt.s	lsn_wrap
+		moveq	#0,d6
+lsn_wrap:
+		move.w	d6,d0
+		mulu	#474,d0
+		lea	1254(a6),a2
+		adda.l	d0,a2
+lsn_other:
+		moveq	#0,d5
+		move.b	124(a2),d5
+* near (1 = other body): the two starports' parent bodies
+		movem.l	a1-2,-(a7)
+		move.b	124(a0),d1
+		bsr.w	lsh_obj
+		beq.s	lsn_far
+		move.b	68(a1),d7
+		move.b	d5,d1
+		bsr.w	lsh_obj
+		beq.s	lsn_far
+		moveq	#0,d6
+		cmp.b	68(a1),d7
+		beq.s	lsn_near
+lsn_far:
+		moveq	#1,d6
+lsn_near:
+		movem.l	(a7)+,a1-2
+		moveq	#8,d0
+		jsr	A5_RandInt(a5)
+		moveq	#0,d4
+		move.b	lsn_counts(pc,d0.w),d4
+		tst.w	d6
+		bne.s	lsn_pay_far
+		moveq	#90,d0
+		jsr	A5_RandInt(a5)
+		moveq	#0,d3
+		move.w	d0,d3
+		addi.w	#60,d3
+		move.w	#$200,d7
+		bra.s	lsn_pay
+lsn_pay_far:
+		move.w	#400,d0
+		jsr	A5_RandInt(a5)
+		moveq	#0,d3
+		move.w	d0,d3
+		addi.w	#200,d3
+		move.w	#$e00,d7
+* pay = base * (count + 1) / 2
+lsn_pay:
+		move.w	d4,d0
+		addq.w	#2,d0
+		mulu	d0,d3
+		lsr.l	#1,d3
+		move.w	#SH_STR_ONE,d2
+		add.w	d4,d2
+		asl.w	#2,d4
+		or.w	d7,d4
+		jsr	A5_2RandInts(a5)
+		move.b	d5,d0
+		movea.l	d0,a2
+		moveq	#0,d1
+		move.b	d5,d1
+		move.w	#SH_STR_AD,d0
+		jmp	L60192
+
+* d1.b = object slot -> a1 = the object, Z clear; Z set if no such object.
+* Uses d0, a2.
+lsh_obj:
+		moveq	#0,d0
+		move.b	d1,d0
+		beq.s	lsh_obj_none
+		cmpi.w	#115,d0
+		bcc.s	lsh_obj_none
+		movea.l	A6_big_space(a6),a1
+		tst.b	0(a1,d0.w)
+		beq.s	lsh_obj_none
+		add.w	d0,d0
+		lea	L44b02_obj_offsets,a2
+		move.w	0(a2,d0.w),d0
+		adda.l	d0,a1
+		moveq	#1,d0
+		rts
+lsh_obj_none:
+		moveq	#0,d0
+		rts
+
+* Item click: d0 = item id, a1 = the item (id word, its entry index word,
+* then d1-d4 and a2 as listed).
+Lshuttle_click:
+		cmpi.w	#SH_STR_AD,d0
+		beq.s	Lshuttle_offer
+		cmpi.w	#SH_STR_OK,d0
+		beq.w	Lshuttle_accept
+		jmp	Lshuttle_click_game
+
+* The advert picked: the client's face and words, then accept / hang up
+* (laid out like the passenger advert, L78058).
+Lshuttle_offer:
+		movem.l	(a1),d0-4/a2
+		move.w	(a1),d5
+		movea.l	a1,a3
+		movem.l	d1-5/a2-3,11746(a6)
+		move.l	a2,11736(a6)
+		move.w	#$8000,11780(a6)
+		clr.w	11740(a6)
+		jsr	A5_SetMainIconPositions(a5)
+		lea	L78b20,a0
+		jsr	A5_UISetIconPositions(a5)
+		move.w	#$98c1,11726(a6)
+		movem.l	11746(a6),d1-5/a2-3
+		movea.w	#SH_STR_SOON,a3
+		cmpi.w	#$300,d4
+		bcs.s	lso_soon
+		movea.w	#SH_STR_LATER,a3
+lso_soon:
+		move.w	#SH_STR_TALK,d0
+		jsr	L76130
+		jsr	L75f2a
+		move.w	#SH_STR_OK,d0
+		jsr	L76018
+		move.w	#$983e,d0
+		jsr	L76018
+		jmp	L780c4
+
+* Accept: room in seats + cabins, then the passenger entry (L7ec22, the
+* ship screen module's fn 32) and the advert taken off the board.
+Lshuttle_accept:
+		cmpi.w	#$3b,11930(a6)
+		blt.s	lsa_roster
+		move.w	#$9912,d0
+		jmp	L76130
+lsa_roster:
+		movem.l	11746(a6),d1-5/a2-3
+		move.w	d4,d6
+		andi.w	#$1c,d6
+		lsr.w	#2,d6
+		addq.w	#1,d6
+		jsr	Lseats_free
+		cmp.w	d6,d0
+		bge.s	lsa_room
+		move.w	#SH_STR_ROOM,d0
+		jmp	L76130
+lsa_room:
+		add.w	d6,744(a6)
+		movea.w	#SH_STR_THANKS,a3
+		jsr	L78222
+		movem.l	11746(a6),d1-5/a2-3
+		jsr	L782dc
+		movem.l	11746(a6),d1-5/a2-3
+		moveq	#0,d2
+		move.w	d4,d2
+		lsr.w	#8,d2
+		add.l	A6_day_since_epoch(a6),d2
+		andi.w	#$1c,d4
+		ori.w	#1,d4
+		move.l	726(a6),d1
+		movea.l	A6_mod_shipscreen(a6),a1
+		jsr	32(a1)
+		jmp	L782c2
+
+* Replaces cmp.l 4(a0),d2 / dbeq d7,l7ee7e in L7ee5e (a0 = entry, d2 =
+* current system, d7 = entries left): a shuttle passenger only matches at
+* its starport (678(a6), the one landed at); then its mark is cleared so
+* the game's own code pays and lets it off as any passenger.
+Lshuttle_match:
+		cmp.l	4(a0),d2
+		bne.s	lsm_next
+		btst	#0,3(a0)
+		beq.s	lsm_take
+		move.l	a1,-(a7)
+		movea.l	678(a6),a1
+		move.b	93(a1),d1
+		movea.l	(a7)+,a1
+		cmp.b	15(a0),d1
+		bne.s	lsm_next
+		bclr	#0,3(a0)
+lsm_take:
+		jmp	lpax_deliver
+lsm_next:
+		dbra	d7,lsm_loop
+		jmp	l7eda0
+lsm_loop:
+		jmp	l7ee7e
+
+* Places for passengers: cabins (740(a6)) plus SH_SEATS when Passenger
+* Seats are fitted (bit SEATS_BIT of the equipment long 158(ship), byte 159
+* bit 4). Lseats_figures replaces movem.w 738(a6),d2-3/a2-3 in L786c2 and
+* L7f55c (the cargo / cabin figures under the station and ship screens);
+* Lseats_free replaces move.w 740(a6),d0 / sub.w 744(a6),d0 in L7822c (the
+* game's own passenger adverts) and gives d0 = free places.
+Lseats_figures:
+		movem.w	738(a6),d2-3/a2-3
+		move.l	a0,-(a7)
+		movea.l	674(a6),a0
+		btst	#4,159(a0)
+		beq.s	lsf_none
+		addq.w	#SH_SEATS,d3
+lsf_none:
+		movea.l	(a7)+,a0
+		rts
+
+Lseats_free:
+		move.w	740(a6),d0
+		move.l	a0,-(a7)
+		movea.l	674(a6),a0
+		btst	#4,159(a0)
+		beq.s	lsfr_none
+		addq.w	#SH_SEATS,d0
+lsfr_none:
+		movea.l	(a7)+,a0
+		sub.w	744(a6),d0
+		rts
+
+* Station strings (fn 40) from SH_STR_BASE: d0 = (id - $9800) * 2, a0 =
+* the output. SH_STR_STATION prints the starport whose slot is in d1.b
+* with its body, e.g. "London (Earth)".
+Lshuttle_strings:
+		cmpi.w	#$3b2,d0
+* ^^ (SH_STR_STATION - $9800) * 2
+		beq.s	lss_station
+		subi.w	#$3aa,d0
+* ^^ (SH_STR_AD - $9800) * 2
+		lea	Lshuttle_string_table,a1
+		jmp	A5_CopyFmtStr(a5)
+lss_station:
+		movem.l	d1/a2,-(a7)
+		bsr.w	lsh_obj
+		beq.s	lss_end
+		lea	246(a1),a2
+		bsr.s	lss_copy
+		move.b	68(a1),d1
+		bsr.w	lsh_obj
+		beq.s	lss_end
+		move.b	#$20,(a0)+
+		move.b	#$28,(a0)+
+		lea	246(a1),a2
+		bsr.s	lss_copy
+		move.b	#$29,(a0)+
+lss_end:
+		clr.b	(a0)+
+		movem.l	(a7)+,d1/a2
+		rts
+* copy the name at a2 (up to 24 characters), a0 left at its end
+lss_copy:
+		moveq	#23,d0
+lss_copy_char:
+		move.b	(a2)+,(a0)
+		beq.s	lss_copy_end
+		addq.l	#1,a0
+		dbra	d0,lss_copy_char
+lss_copy_end:
+		rts
+
+Lshuttle_string_table:
+		dc.w	lsh_s_ad-Lshuttle_string_table
+		dc.w	lsh_s_ok-Lshuttle_string_table
+		dc.w	lsh_s_talk-Lshuttle_string_table
+		dc.w	lsh_s_thanks-Lshuttle_string_table
+		dc.w	lsh_s_none-Lshuttle_string_table
+		dc.w	lsh_s_room-Lshuttle_string_table
+		dc.w	lsh_s_one-Lshuttle_string_table
+		dc.w	lsh_s_two-Lshuttle_string_table
+		dc.w	lsh_s_three-Lshuttle_string_table
+		dc.w	lsh_s_four-Lshuttle_string_table
+		dc.w	lsh_s_soon-Lshuttle_string_table
+		dc.w	lsh_s_later-Lshuttle_string_table
+lsh_s_ad:
+		dc.b	"SHUTTLE: "
+		dc.b	$ff,$30,$19
+		dc.b	" to "
+		dc.b	$ff,$99,$d9
+		dc.b	". Will pay $"
+		dc.b	$ff,$30,$3,$2e,$0
+lsh_s_ok:
+		dc.b	$ff,$98,$32,$0
+lsh_s_talk:
+		dc.b	"I'm "
+		dc.b	$ff,$92,$3
+		dc.b	" and I need "
+		dc.b	$ff,$30,$19
+		dc.b	" to "
+		dc.b	$ff,$99,$d9
+		dc.b	", within "
+		dc.b	$ff,$30,$1c
+		dc.b	". I will pay $"
+		dc.b	$ff,$30,$3,$2e,$0
+lsh_s_thanks:
+		dc.b	"Excellent. $"
+		dc.b	$ff,$30,$3
+		dc.b	" will be paid when we land at "
+		dc.b	$ff,$99,$d9
+		dc.b	".",$0
+lsh_s_none:
+		dc.b	$0
+lsh_s_room:
+		dc.b	"You do not have enough free seats or cabins.",$0
+lsh_s_one:
+		dc.b	"a seat",$0
+lsh_s_two:
+		dc.b	"two seats",$0
+lsh_s_three:
+		dc.b	"three seats",$0
+lsh_s_four:
+		dc.b	"four seats",$0
+lsh_s_soon:
+		dc.b	"two days",$0
+lsh_s_later:
+		dc.b	"two weeks",$0
+* pad: the code after needs an even address
+		ds.b	1
+
+
+* Not a shuttle item: the AFMU's click hook, then the game's table
+Lshuttle_click_game:
+		jmp	Lafmu_comms_click
+
+* Station strings for the modded build: the shuttle's, the AFMU's or the game's
+Lshuttle_modstr:
+		cmp.w	#$3aa,d0
+* ^^ (SH_STR_AD - $9800) * 2
+		bcs.s	lshuttle_modstr_afmu
+		jmp	Lshuttle_strings
+lshuttle_modstr_afmu:
+		cmp.w	#$39c,d0
+* ^^ (AFMU_STR_BASE - $9800) * 2
+		bcs.s	lshuttle_modstr_game
+		jmp	lafmu_strings_ours
+lshuttle_modstr_game:
+		jmp	lafmu_strings_game

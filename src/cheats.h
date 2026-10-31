@@ -96,6 +96,16 @@ typedef struct
 /* Fills `out` (room for CHEAT_SHIPS_MAX) nearest first and returns how many; 0 without a ship */
 int cheat_ships(CheatShip *out);
 
+typedef struct
+{
+	int slot;
+	double distance_km;
+	unsigned age; /* the despawn counter at +134 */
+	int tick;     /* the byte at +95 the despawn also tests */
+} CheatDust;
+/* The space dust objects (state $60), by slot */
+int cheat_dust(CheatDust *out, int max);
+
 /* The ship's current target (the object the panel shows and a missile goes for): the slot of its
  * object, 0 for none */
 int cheat_target(void);

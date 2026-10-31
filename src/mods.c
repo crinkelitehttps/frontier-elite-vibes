@@ -123,6 +123,22 @@ static void afmu_strip(void)
 	int mass = rdword(FE2_Lafmu_equipment + 4);
 	mods_strip_word(GAME_A6 + A6_CARGO_SPACE, rdword(GAME_A6 + A6_CARGO_SPACE) + mass);
 }
+
+/* Passenger Seats (Lseats_equipment): equipment flag bit 20, stripped the same way */
+#define SEATS_BIT 20
+
+static void seats_strip(void)
+{
+	u32 ship = game_player_ship();
+	if (!ship)
+		return;
+	u32 fitted = (u32)rdlong(ship + OBJ_EQUIPMENT);
+	if (!(fitted & (1u << SEATS_BIT)))
+		return;
+	mods_strip_long(ship + OBJ_EQUIPMENT, fitted & ~(1u << SEATS_BIT));
+	int mass = rdword(FE2_Lseats_equipment + 4);
+	mods_strip_word(GAME_A6 + A6_CARGO_SPACE, rdword(GAME_A6 + A6_CARGO_SPACE) + mass);
+}
 #endif
 
 /* =========================================================================
@@ -138,6 +154,12 @@ static const GameMod mods[] = {
 	 "Equipment flag bit 19 on your ship and its 3t mass. Left out, the unit is gone (as if "
 	 "sold, without the money) when the save is loaded.",
 	 afmu_strip},
+	{"Passenger Seats",
+	 "Equipment sold everywhere: four passenger seats in 2t, for in-system passenger jobs in "
+	 "ships too small for a cabin (the Interplanetary Shuttle of the Earth start).",
+	 "Equipment flag bit 20 on your ship and its 2t mass. Left out, the seats are gone (as if "
+	 "sold, without the money) when the save is loaded.",
+	 seats_strip},
 	{"Free camera",
 	 "Ctrl-V, FREE CAMERA in this menu, or the camera button in the touch dropdown pauses the "
 	 "game in the flight view and lets you fly a camera around freely.",

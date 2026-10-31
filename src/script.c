@@ -6,7 +6,7 @@
  * (a load, a pause) holds the rest. Output goes to stdout.
  *
  *   starting and loading
- *     new N              title menu entry N (1-5 as the keys)
+ *     new N              title menu entry N (1-6 as the keys; 4 = Earth in a shuttle)
  *     load NAME          load the commander file savs/NAME through the title menu's list
  *     waitgame           wait until the player has a ship
  *     wait SECONDS
@@ -300,6 +300,15 @@ static void cmd_ships(void)
 	say("%d ships", count);
 }
 
+static void cmd_dust(void)
+{
+	CheatDust dust[CHEAT_SHIPS_MAX];
+	int count = cheat_dust(dust, CHEAT_SHIPS_MAX);
+	for (int i = 0; i < count; i++)
+		say("dust %d %.3f km age %u b95 %d", dust[i].slot, dust[i].distance_km, dust[i].age, dust[i].tick);
+	say("%d dust", count);
+}
+
 static void cmd_bodies(void)
 {
 	CheatBody bodies[64];
@@ -411,6 +420,8 @@ static void run(char *line)
 		cmd_bodies();
 	else if (!strcmp(line, "ships"))
 		cmd_ships();
+	else if (!strcmp(line, "dust"))
+		cmd_dust();
 	else if (!strcmp(line, "snap"))
 	{
 		char name[32];
@@ -478,7 +489,7 @@ static int wait_done(void)
 		else if (game_screen() == SCREEN_TITLE && now - started > 1500 && now - last_try > 1500 && last_try != 1)
 		{
 			last_try = now;
-			Input_TapSTKey(0x06); /* key 5 */
+			Input_TapSTKey(0x07); /* key 6, select position from disc */
 		}
 		return 0;
 	default:

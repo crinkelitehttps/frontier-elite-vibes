@@ -220,6 +220,8 @@ static const char *const equip_names[] = {
 	/* mods, from the end of fe2_modded.s */
 	"Auto Field-Maintenance Unit (Game Mod)",
 #endif
+	/* added to both builds (Lseats_equipment) */
+	"Passenger Seats",
 };
 #define EQUIP_COUNT ((int)(sizeof(equip_names) / sizeof(equip_names[0])))
 
@@ -232,6 +234,8 @@ static u32 equip(int item)
 	if (item == GAME_EQUIP_COUNT)
 		return FE2_Lafmu_equipment;
 #endif
+	if (item == EQUIP_COUNT - 1)
+		return FE2_Lseats_equipment;
 	return EQUIP_TABLE + (u32)item * EQUIP_SIZE;
 }
 
@@ -568,6 +572,37 @@ int cheat_ships(CheatShip *out)
 		s->at_rest = !rdlong(o + OBJ_VEL) && !rdlong(o + OBJ_VEL + 4) && !rdlong(o + OBJ_VEL + 8);
 	}
 	qsort(out, n, sizeof(*out), ship_nearer);
+	return n;
+}
+
+int cheat_dust(CheatDust *out, int max)
+{
+	if (!ship())
+		return 0;
+	pos64 base[3], me[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	for (int a = 0; a < 3; a++)
+		me[a] = base[a] + obj_pos(ship(), a);
+	int n = 0;
+	for (int i = 1; i < OBJECT_SLOTS && n < max; i++)
+	{
+		u32 o = slot_object(i);
+		if (o == ship() || !rdbyte(FE2_big_space + i) || (u8)rdbyte(o + OBJ_STATE) != 0x60)
+			continue;
+		pos64 at[3];
+		abs_pos((u8)rdbyte(o + OBJ_PARENT), at);
+		double sum = 0.0;
+		for (int a = 0; a < 3; a++)
+		{
+			double d = (double)(at[a] + obj_pos(o, a) - me[a]) / MM_PER_KM;
+			sum += d * d;
+		}
+		out[n].slot = i;
+		out[n].distance_km = sqrt(sum);
+		out[n].age = (u32)rdlong(o + 134);
+		out[n].tick = (u8)rdbyte(o + 95);
+		n++;
+	}
 	return n;
 }
 
