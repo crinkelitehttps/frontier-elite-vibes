@@ -54,8 +54,10 @@ typedef struct
 
 /* Checks that `s` parses to exactly its length */
 bool planet_surface_valid(const PlanetSurface *s);
-/* The surface texture for `s`: each texel's feature code (GL_R8, code / 255;
- * the colour is the planet's colour table at code / 4), equirectangular: u =
+/* The surface texture for `s`: for each of the feature code's bits 2, 3, 4
+ * (R, G, B; the colour is the planet's colour table at code / 4) the signed
+ * distance to the edge of the bit's region: 0.5 on the edge, 1 four texels
+ * inside, 0 four outside; filtered linearly. Equirectangular: u =
  * longitude from atan2(x, z), v = acos(y) / pi, in the planet's own axes.
  * Made on first use and kept; 0 if it can't be made. Needs the GL context. */
 GLuint planet_surface_texture(const PlanetSurface *s);

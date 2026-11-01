@@ -671,13 +671,6 @@ static const char *FS_SPHERE =
 	"uniform vec3 uPalette[16];\n" /* by code / 4: dark 0-7, lit 8-15 */
 	"uniform float uFlat;\n" /* the sphere drawn is this many times the planet (draw_sphere) */
 	"out vec4 fragColor;\n"
-	/* a texel's colour: the code through the palette (dark half, lit half) */
-	"vec3 texel(ivec2 c, ivec2 size, float lit){\n"
-	"  c.x = ((c.x % size.x) + size.x) % size.x;\n"
-	"  c.y = clamp(c.y, 0, size.y - 1);\n"
-	"  int k = (int(texelFetch(uSurface, c, 0).r * 255.0 + 0.5) >> 2) & 7;\n"
-	"  return mix(uPalette[k], uPalette[k + 8], lit);\n"
-	"}\n"
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
 	"  float b = dot(d, uCentre);\n"
@@ -713,14 +706,18 @@ static const char *FS_SPHERE =
 	"    vec3 p = normalize(uToLocal * n);\n"
 	"    vec2 uv = vec2(atan(p.x, p.z) / 6.2831853 + 0.5, acos(clamp(p.y, -1.0, 1.0)) / 3.14159265);\n"
 	"    float lit = smoothstep(-0.03, 0.03, dot(normalize(n), uLightDir));\n"
-	/* codes can't be blended: blend the four nearest texels' colours */
-	"    ivec2 size = textureSize(uSurface, 0);\n"
-	"    vec2 t = uv * vec2(size) - 0.5;\n"
-	"    ivec2 i = ivec2(floor(t));\n"
-	"    vec2 f = t - floor(t);\n"
-	"    vec3 a = mix(texel(i, size, lit), texel(i + ivec2(1, 0), size, lit), f.x);\n"
-	"    vec3 b = mix(texel(i + ivec2(0, 1), size, lit), texel(i + ivec2(1, 1), size, lit), f.x);\n"
-	"    fragColor = vec4(mix(a, b, f.y), 1.0);\n"
+	/* three signed distances (0.5 on the edge), one per colour bit: each bit's
+	 * coverage is about one pixel wide, whatever the zoom; the colour mixes
+	 * the eight palette entries by the coverages */
+		"    vec3 sd = texture(uSurface, uv).rgb;\n"
+		"    vec3 w = max(fwidth(sd), vec3(1e-5));\n"
+		"    vec3 c = clamp((sd - 0.5) / w + 0.5, 0.0, 1.0);\n"
+		"    vec3 col = vec3(0.0);\n"
+		"    for (int k = 0; k < 8; k++) {\n"
+		"      float wt = ((k & 1) != 0 ? c.x : 1.0 - c.x) * ((k & 2) != 0 ? c.y : 1.0 - c.y) * ((k & 4) != 0 ? c.z : 1.0 - c.z);\n"
+		"      if (wt > 0.0) col += wt * mix(uPalette[k], uPalette[k + 8], lit);\n"
+		"    }\n"
+		"    fragColor = vec4(col, 1.0);\n"
 	"  } else\n"
 	"    fragColor = vec4(clamp(uAmbient + l * uDiffuse, 0.0, 1.0), 1.0);\n"
 	"}\n";

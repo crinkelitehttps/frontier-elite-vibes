@@ -13,6 +13,13 @@
 #define TEX_W 2048
 #define TEX_H 1024
 
+/* The texture holds, for each of the colour code's three bits (2, 3, 4), a
+ * signed distance to the edge of that bit's region (even-odd fill of the
+ * features having the bit): 0.5 on the edge, up (inside) to +SDF_RANGE
+ * texels. Each bit is its own two-region mask, so where three colours meet
+ * the edges stay exact. */
+#define SDF_RANGE 4.0f
+
 /* The game splits an edge while its counter (16 + detail option, 2 per
  * level) is above 4: six levels at the default detail */
 #define LEVELS 6
@@ -260,9 +267,47 @@ static void to_tex(const float v[3], float *x, float *y)
 	*y = acosf(fmaxf(-1.0f, fminf(1.0f, v[1]))) / 3.14159265f * TEX_H;
 }
 
+/* Lowers the unsigned distance (ud: 3 bytes per texel, 255 = SDF_RANGE or
+ * more) of the texels near the segment a-b, in texel units (x may lie outside
+ * 0..TEX_W: the outline's unwrapped longitudes), for the channels in `bits` */
+static void stamp_segment(uint8_t *ud, int bits, const float a[2], const float b[2])
+{
+	float x0 = fminf(a[0], b[0]) - SDF_RANGE, x1 = fmaxf(a[0], b[0]) + SDF_RANGE;
+	float y0 = fminf(a[1], b[1]) - SDF_RANGE, y1 = fmaxf(a[1], b[1]) + SDF_RANGE;
+	int ix0 = (int)floorf(x0), ix1 = (int)ceilf(x1);
+	int iy0 = (int)floorf(y0), iy1 = (int)ceilf(y1);
+	if (iy0 < 0)
+		iy0 = 0;
+	if (iy1 > TEX_H)
+		iy1 = TEX_H;
+	if (ix1 - ix0 > TEX_W)
+		ix1 = ix0 + TEX_W;
+	float dx = b[0] - a[0], dy = b[1] - a[1];
+	float len2 = dx * dx + dy * dy;
+	for (int y = iy0; y < iy1; y++)
+	{
+		float py = (float)y + 0.5f;
+		for (int x = ix0; x < ix1; x++)
+		{
+			float px = (float)x + 0.5f;
+			float t = len2 > 0.0f ? ((px - a[0]) * dx + (py - a[1]) * dy) / len2 : 0.0f;
+			t = fmaxf(0.0f, fminf(1.0f, t));
+			float ex = a[0] + dx * t - px, ey = a[1] + dy * t - py;
+			float d = sqrtf(ex * ex + ey * ey);
+			if (d >= SDF_RANGE)
+				continue;
+			uint8_t v = (uint8_t)(d / SDF_RANGE * 255.0f + 0.5f);
+			uint8_t *u = ud + ((size_t)y * TEX_W + (((x % TEX_W) + TEX_W) % TEX_W)) * 3;
+			for (int ch = 0; ch < 3; ch++)
+				if ((bits & (1 << ch)) && v < u[ch])
+					u[ch] = v;
+		}
+	}
+}
+
 /* XORs `code` into the texels inside the spherical polygon pts[0..n) (even
- * odd), on the equirectangular map */
-static void fill_polygon(uint8_t *codes, float (*pts)[3], int n, int code)
+ * odd), on the equirectangular map, and stamps its edges into `ud` */
+static void fill_polygon(uint8_t *codes, uint8_t *ud, float (*pts)[3], int n, int code)
 {
 	if (n < 3)
 		return;
@@ -281,6 +326,11 @@ static void fill_polygon(uint8_t *codes, float (*pts)[3], int n, int code)
 			float dx = uv[i][0] - uv[i - 1][0];
 			uv[i][0] -= TEX_W * roundf(dx / TEX_W);
 		}
+	}
+	{
+		int bits = (code >> 2) & 7;
+		for (int i = 0; bits && i < n; i++)
+			stamp_segment(ud, bits, uv[i], uv[i + 1]);
 	}
 	int m = n + 1;
 	/* all the way round a pole: close through it (the one on the outline's
@@ -342,8 +392,9 @@ out:
 	free(uv);
 }
 
-static void fill_circle(uint8_t *codes, const float c[3], float cos_r, int code)
+static void fill_circle(uint8_t *codes, uint8_t *ud, const float c[3], float cos_r, int code)
 {
+	const int bits = (code >> 2) & 7;
 	float r = acosf(cos_r), colat = acosf(fmaxf(-1.0f, fminf(1.0f, c[1])));
 	int r0 = (int)floorf((colat - r) / 3.14159265f * TEX_H), r1 = (int)ceilf((colat + r) / 3.14159265f * TEX_H);
 	for (int row = r0 < 0 ? 0 : r0; row < r1 && row < TEX_H; row++)
@@ -368,12 +419,16 @@ static GLuint make_texture(const PlanetSurface *s)
 		return 0;
 	Uint64 t0 = SDL_GetPerformanceCounter();
 	uint8_t *codes = calloc((size_t)TEX_W * TEX_H, 1);
+	uint8_t *ud = malloc((size_t)TEX_W * TEX_H * 3);
+	if (ud)
+		memset(ud, 255, (size_t)TEX_W * TEX_H * 3);
 	Splitter sp = {0};
 	sp.cap = MAX_OUTLINE * 64;
 	sp.pts = malloc(sizeof *sp.pts * (size_t)sp.cap);
-	if (!codes || !sp.pts)
+	if (!codes || !ud || !sp.pts)
 	{
 		free(codes);
+		free(ud);
 		free(sp.pts);
 		return 0;
 	}
@@ -399,7 +454,7 @@ static GLuint make_texture(const PlanetSurface *s)
 				if (k)
 					for (int j = 0; j < 3; j++)
 						cen[j] = -cen[j];
-				fill_circle(codes, cen, c->cos_r, c->code);
+				fill_circle(codes, ud, cen, c->cos_r, c->code);
 				for (int e = 0; e < 4; e++)
 					rng_step(&sp.rng);
 			}
@@ -414,22 +469,32 @@ static GLuint make_texture(const PlanetSurface *s)
 			split_edge(&sp, pts[i - 1], pts[i % o->count], 0);
 		if (sp.n > 1)
 			sp.n--; /* the close ends on the first point again */
-		fill_polygon(codes, sp.pts, sp.n, o->code);
+		fill_polygon(codes, ud, sp.pts, sp.n, o->code);
 	}
 	free(sp.pts);
+
+	/* signed distances: 127.5 on the edge, 128..255 inside, 0..127 outside */
+	for (size_t i = 0; i < (size_t)TEX_W * TEX_H; i++)
+		for (int ch = 0; ch < 3; ch++)
+		{
+			float d = (float)ud[i * 3 + ch] * 0.5f;
+			float v = (codes[i] >> (2 + ch)) & 1 ? 127.5f + d : 127.5f - d;
+			ud[i * 3 + ch] = (uint8_t)(v < 0.0f ? 0.0f : v > 255.0f ? 255.0f : v);
+		}
 
 	GLuint tex;
 	glGenTextures(1, &tex);
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, TEX_W, TEX_H, 0, GL_RED, GL_UNSIGNED_BYTE, codes);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, TEX_W, TEX_H, 0, GL_RGB, GL_UNSIGNED_BYTE, ud);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	free(codes);
+	free(ud);
 	log_printf("Planet surface: %d outlines, %d circles, made in %.0f ms\n", p.n_outlines, p.n_circles,
 			   (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency());
 	return tex;
