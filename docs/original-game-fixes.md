@@ -266,3 +266,6 @@ compared as an exponent: the distance is 2^(14 + `d7` + `88(a4)`) mm (`Call_Targ
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics
   handler cuts the linear atmospheric drag off with a hard `cmpi.l
   #$1312d00,692(a6)` (no density fade).
+- Many more original-game bugs, from the Frontierverse bug list, with their status against these
+  fixes: see `frontierverse-bug-list.md`. Open items worth checking first: Black Hole Bug (may
+  relate to fixes 1 and 2), Bribe Bug, Passenger Bug, Scoop Conversion Bug, the crashing systems.
