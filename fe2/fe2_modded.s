@@ -58291,10 +58291,10 @@ L7e806:
 		beq.s	l7e862
 		move.w	#$9c15,d0
 		bra.s	l7e862
-	l7e85a:	moveq	#0,d2
-		move.b	d4,d2
-		lsr.w	#2,d2
-		addq.w	#1,d2
+	l7e85a:
+* Lshuttle_roster: a shuttle run in its own system shows its starport
+		jsr	Lshuttle_roster
+		nop
 	l7e862:	bsr.w	L7f576
 		movem.l	(a7)+,d0/d5-6/a1
 		addi.w	#$a,d6
@@ -68695,6 +68695,8 @@ SH_STR_ROOM		equ	$99da
 SH_STR_ONE		equ	$99db
 SH_STR_SOON		equ	$99df
 SH_STR_LATER		equ	$99e0
+SH_STR_ROW		equ	$99e1
+SH_STR_PORT		equ	$99e2
 SH_AD_CHANCE		equ	$1a00
 SH_SEATS		equ	4
 
@@ -68952,6 +68954,9 @@ Lshuttle_strings:
 		cmpi.w	#$3b2,d0
 * ^^ (SH_STR_STATION - $9800) * 2
 		beq.s	lss_station
+		cmpi.w	#$3c4,d0
+* ^^ (SH_STR_PORT - $9800) * 2
+		beq.s	lss_port
 		subi.w	#$3aa,d0
 * ^^ (SH_STR_AD - $9800) * 2
 		lea	Lshuttle_string_table,a1
@@ -68974,6 +68979,14 @@ lss_end:
 		clr.b	(a0)+
 		movem.l	(a7)+,d1/a2
 		rts
+* SH_STR_PORT: the starport whose slot is in d1.b, without its body
+lss_port:
+		movem.l	d1/a2,-(a7)
+		bsr.w	lsh_obj
+		beq.s	lss_end
+		lea	246(a1),a2
+		bsr.s	lss_copy
+		bra.s	lss_end
 * copy the name at a2 (up to 24 characters), a0 left at its end
 lss_copy:
 		moveq	#23,d0
@@ -68998,6 +69011,7 @@ Lshuttle_string_table:
 		dc.w	lsh_s_four-Lshuttle_string_table
 		dc.w	lsh_s_soon-Lshuttle_string_table
 		dc.w	lsh_s_later-Lshuttle_string_table
+		dc.w	lsh_s_row-Lshuttle_string_table
 lsh_s_ad:
 		dc.b	"SHUTTLE: "
 		dc.b	$ff,$30,$19
@@ -69040,6 +69054,37 @@ lsh_s_soon:
 		dc.b	"two days",$0
 lsh_s_later:
 		dc.b	"two weeks",$0
+* SH_STR_ROW: ship screen roster row (the game's $9c12) with "*" and the
+* starport (d1 = its slot) in place of the system
+lsh_s_row:
+		dc.b	$ff,$92,$3,$fd,$28,$ff,$30,$2,$fd,$32
+		dc.b	"*",$ff,$99,$e2
+		dc.b	$fd,$51,$24,$ff,$30,$3,$0,$0
+* ^^ pad to an even length
+
+* Replaces moveq #0,d2 / move.b d4,d2 / lsr.w #2,d2 / addq.w #1,d2 in the
+* ship screen's passenger roster (L7e806: d0 = string, d1 = system, d4 =
+* flags, a2 = name seed). A shuttle run (flags bit 0) in the system it was
+* taken in shows "*" and its starport instead of the system name.
+Lshuttle_roster:
+		moveq	#0,d2
+		move.b	d4,d2
+		lsr.w	#2,d2
+		addq.w	#1,d2
+		btst	#0,d4
+		beq.s	lsro_end
+		cmp.l	726(a6),d1
+		bne.s	lsro_end
+		movem.l	d0-1/a1-2,-(a7)
+		move.l	a2,d1
+		bsr.w	lsh_obj
+		movem.l	(a7)+,d0-1/a1-2
+* ^^ movem leaves the flags of lsh_obj
+		beq.s	lsro_end
+		move.w	#SH_STR_ROW,d0
+		move.l	a2,d1
+lsro_end:
+		rts
 
 
 * Not a shuttle item: the AFMU's click hook, then the game's table

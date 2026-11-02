@@ -22180,10 +22180,6 @@ extern void __F72ecc ();
 extern void __F72ed2 ();
 extern void __F72ed6 ();
 extern void __F72edc ();
-extern void __F72ee0 ();
-extern void __F72ee2 ();
-extern void __F72ee4 ();
-extern void __F72ee6 ();
 extern void __F72eee ();
 extern void __F72ef2 ();
 extern void __F72f54 ();
@@ -25272,17 +25268,30 @@ extern void __Fa9c8e ();
 extern void __Fa9c94 ();
 extern void __Fa9c9a ();
 extern void __Fa9ca0 ();
-extern void __Fa9cae ();
-extern void __Fa9cbe ();
-extern void __Fa9cc8 ();
-extern void __Fa9ccc ();
-extern void __Fa9cd6 ();
-extern void __Fa9cd8 ();
+extern void __Fa9ca6 ();
+extern void __Fa9cb4 ();
+extern void __Fa9cc4 ();
+extern void __Fa9cce ();
+extern void __Fa9cd2 ();
 extern void __Fa9cdc ();
-extern void __Fa9ce0 ();
+extern void __Fa9cde ();
 extern void __Fa9ce2 ();
-extern void __Fa9e0e ();
-extern void __Fa9e1a ();
+extern void __Fa9ce8 ();
+extern void __Fa9cf8 ();
+extern void __Fa9cfa ();
+extern void __Fa9e36 ();
+extern void __Fa9e38 ();
+extern void __Fa9e3a ();
+extern void __Fa9e3c ();
+extern void __Fa9e40 ();
+extern void __Fa9e46 ();
+extern void __Fa9e4c ();
+extern void __Fa9e4e ();
+extern void __Fa9e56 ();
+extern void __Fa9e5c ();
+extern void __Fa9e5e ();
+extern void __Fa9e6a ();
+extern void __Fa9e76 ();
 #endif /* PART1 */
 #define __DL22_PlayEffect (0x22)
 #define __DL54_StopMusic (0x28)
@@ -33759,6 +33768,7 @@ extern void __Fa9e1a ();
 #define __Dl7e82c (0x72eb0)
 #define __Dl7e846 (0x72eca)
 #define __Dl7e85a (0x72ede)
+#define __D72ee4 (0x72ee4)
 #define __Dl7e862 (0x72ee6)
 #define __D72eea (0x72eea)
 #define __Dl7e872 (0x72ef6)
@@ -35370,32 +35380,39 @@ extern void __Fa9e1a ();
 #define __DLseats_free (0xa9c7a)
 #define __Dlsfr_none (0xa9c8e)
 #define __DLshuttle_strings (0xa9c96)
-#define __Dlss_station (0xa9caa)
-#define __Da9cb2 (0xa9cb2)
-#define __Da9cba (0xa9cba)
-#define __Da9cc2 (0xa9cc2)
-#define __Da9cd2 (0xa9cd2)
-#define __Dlss_end (0xa9cd6)
-#define __Dlss_copy (0xa9cde)
-#define __Dlss_copy_char (0xa9ce0)
-#define __Dlss_copy_end (0xa9cea)
-#define __DLshuttle_string_table (0xa9cec)
-#define __Dlsh_s_ad (0xa9d04)
-#define __Dlsh_s_ok (0xa9d28)
-#define __Dlsh_s_talk (0xa9d2c)
-#define __Dlsh_s_thanks (0xa9d68)
-#define __Dlsh_s_none (0xa9d9a)
-#define __Dlsh_s_room (0xa9d9b)
-#define __Dlsh_s_one (0xa9dc9)
-#define __Dlsh_s_two (0xa9dd0)
-#define __Dlsh_s_three (0xa9dda)
-#define __Dlsh_s_four (0xa9de6)
-#define __Dlsh_s_soon (0xa9df1)
-#define __Dlsh_s_later (0xa9dfa)
-#define __DLshuttle_click_game (0xa9e04)
-#define __DLshuttle_modstr (0xa9e0a)
-#define __Dlshuttle_modstr_afmu (0xa9e16)
-#define __Dlshuttle_modstr_game (0xa9e22)
+#define __Dlss_station (0xa9cb0)
+#define __Da9cb8 (0xa9cb8)
+#define __Da9cc0 (0xa9cc0)
+#define __Da9cc8 (0xa9cc8)
+#define __Da9cd8 (0xa9cd8)
+#define __Dlss_end (0xa9cdc)
+#define __Dlss_port (0xa9ce4)
+#define __Da9cec (0xa9cec)
+#define __Da9cf4 (0xa9cf4)
+#define __Dlss_copy (0xa9cf6)
+#define __Dlss_copy_char (0xa9cf8)
+#define __Dlss_copy_end (0xa9d02)
+#define __DLshuttle_string_table (0xa9d04)
+#define __Dlsh_s_ad (0xa9d1e)
+#define __Dlsh_s_ok (0xa9d42)
+#define __Dlsh_s_talk (0xa9d46)
+#define __Dlsh_s_thanks (0xa9d82)
+#define __Dlsh_s_none (0xa9db4)
+#define __Dlsh_s_room (0xa9db5)
+#define __Dlsh_s_one (0xa9de3)
+#define __Dlsh_s_two (0xa9dea)
+#define __Dlsh_s_three (0xa9df4)
+#define __Dlsh_s_four (0xa9e00)
+#define __Dlsh_s_soon (0xa9e0b)
+#define __Dlsh_s_later (0xa9e14)
+#define __Dlsh_s_row (0xa9e1e)
+#define __DLshuttle_roster (0xa9e34)
+#define __Da9e52 (0xa9e52)
+#define __Dlsro_end (0xa9e5e)
+#define __DLshuttle_click_game (0xa9e60)
+#define __DLshuttle_modstr (0xa9e66)
+#define __Dlshuttle_modstr_afmu (0xa9e72)
+#define __Dlshuttle_modstr_game (0xa9e7e)
 #ifdef PART2
 void __F36 ()
 {
@@ -244761,42 +244778,6 @@ void __F72edc ()
 	V = 0;
 	C = 0;
 }
-void __F72ee0 ()
-{
-	s32 val = 0;
-	Regs[2]._s32 = val;
-}
-void __F72ee2 ()
-{
-	s32 val = Regs[4]._s8;
-	Regs[2]._s8 = val;
-}
-void __F72ee4 ()
-{
-	u32 val = (u16)Regs[2]._s16;
-
-	val >>= 1;
-	X = val & 1;
-	val >>= 1;
-	Regs[2]._s16 = val;
-}
-void __F72ee6 ()
-{
-	s32 dest = Regs[2]._s16;
-
-	s32 src = 1;
-
-	s32 val = (s16)dest + (s16)src;
-	s32 flgs = ((s16)src) < 0;
-	s32 flgo = ((s16)dest) < 0;
-	s32 flgn = ((s16)val) < 0;
-	nZ = val;
-	V = (flgs ^ flgn) & (flgo ^ flgn);
-	X = ((u16)(~src)) < ((u16)dest);
-	C = X;
-	N = (flgn != 0);
-	Regs[2]._s16 = val;
-}
 void __F72eee ()
 {
 	s32 src = (Regs[15]._s32);
@@ -274041,6 +274022,21 @@ void __Fa9ca0 ()
 {
 	s32 dest = Regs[0]._s16;
 
+	s32 src = 964;
+
+	s32 val = (s16)dest - (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u16)src) > ((u16)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __Fa9ca6 ()
+{
+	s32 dest = Regs[0]._s16;
+
 	s32 src = 938;
 
 	u32 newv = (s16)dest - (s16)src;
@@ -274054,7 +274050,7 @@ void __Fa9ca0 ()
 	N = (flgn != 0);
 	Regs[0]._s16 = newv;
 }
-void __Fa9cae ()
+void __Fa9cb4 ()
 {
 	s32 dest = (Regs[15]._s32-4);
 	wrlong (dest, Regs[10]._u32);
@@ -274063,7 +274059,7 @@ void __Fa9cae ()
 	dest -= 4;
 	Regs[15]._s32 -= 8;
 }
-void __Fa9cbe ()
+void __Fa9cc4 ()
 {
 	s32 val = rdbyte(Regs[9]._s32+68);
 	Regs[1]._s8 = val;
@@ -274072,13 +274068,13 @@ void __Fa9cbe ()
 	V = 0;
 	C = 0;
 }
-void __Fa9cc8 ()
+void __Fa9cce ()
 {
 	s32 val = 32;
 	wrbyte(Regs[8]._s32, val);
 	Regs[8]._s32 += 1;
 }
-void __Fa9ccc ()
+void __Fa9cd2 ()
 {
 	s32 val = 40;
 	wrbyte(Regs[8]._s32, val);
@@ -274088,13 +274084,13 @@ void __Fa9ccc ()
 	V = 0;
 	C = 0;
 }
-void __Fa9cd6 ()
+void __Fa9cdc ()
 {
 	s32 val = 41;
 	wrbyte(Regs[8]._s32, val);
 	Regs[8]._s32 += 1;
 }
-void __Fa9cd8 ()
+void __Fa9cde ()
 {
 	wrbyte(Regs[8]._s32, 0);
 	Regs[8]._s32 += 1;
@@ -274103,7 +274099,7 @@ void __Fa9cd8 ()
 	V = 0;
 	C = 0;
 }
-void __Fa9cdc ()
+void __Fa9ce2 ()
 {
 	s32 src = (Regs[15]._s32);
 	Regs[1]._s32 = rdlong (src);
@@ -274112,12 +274108,21 @@ void __Fa9cdc ()
 	src += 4;
 	Regs[15]._s32 += 8;
 }
-void __Fa9ce0 ()
+void __Fa9ce8 ()
+{
+	s32 dest = (Regs[15]._s32-4);
+	wrlong (dest, Regs[10]._u32);
+	dest -= 4;
+	wrlong (dest, Regs[1]._u32);
+	dest -= 4;
+	Regs[15]._s32 -= 8;
+}
+void __Fa9cf8 ()
 {
 	s32 val = 23;
 	Regs[0]._s32 = val;
 }
-void __Fa9ce2 ()
+void __Fa9cfa ()
 {
 	s32 val = rdbyte(Regs[10]._s32);
 	wrbyte(Regs[8]._s32, val);
@@ -274127,7 +274132,113 @@ void __Fa9ce2 ()
 	V = 0;
 	C = 0;
 }
-void __Fa9e0e ()
+void __Fa9e36 ()
+{
+	s32 val = 0;
+	Regs[2]._s32 = val;
+}
+void __Fa9e38 ()
+{
+	s32 val = Regs[4]._s8;
+	Regs[2]._s8 = val;
+}
+void __Fa9e3a ()
+{
+	u32 val = (u16)Regs[2]._s16;
+
+	val >>= 1;
+	X = val & 1;
+	val >>= 1;
+	Regs[2]._s16 = val;
+}
+void __Fa9e3c ()
+{
+	s32 dest = Regs[2]._s16;
+
+	s32 src = 1;
+
+	s32 val = (s16)dest + (s16)src;
+	s32 flgs = ((s16)src) < 0;
+	s32 flgo = ((s16)dest) < 0;
+	s32 flgn = ((s16)val) < 0;
+	V = (flgs ^ flgn) & (flgo ^ flgn);
+	X = ((u16)(~src)) < ((u16)dest);
+	C = X;
+	N = (flgn != 0);
+	Regs[2]._s16 = val;
+}
+void __Fa9e40 ()
+{
+	u32 src = 0;
+	u32 dest = Regs[4]._s32;
+	src &= 31;
+	nZ = !(1 ^ ((dest >> src) & 1));
+}
+void __Fa9e46 ()
+{
+	s32 dest = Regs[1]._s32;
+
+	s32 src = rdlong(Regs[14]._s32+726);
+
+	s32 val = (s32)dest - (s32)src;
+	s32 flgs = ((s32)src) < 0;
+	s32 flgo = ((s32)dest) < 0;
+	s32 flgn = ((s32)val) < 0;
+	V = ((flgs != flgo) && (flgn != flgo));
+	C = ((u32)src) > ((u32)dest);
+	N = (flgn != 0);
+	nZ = val;
+}
+void __Fa9e4c ()
+{
+	s32 dest = (Regs[15]._s32-4);
+	wrlong (dest, Regs[10]._u32);
+	dest -= 4;
+	wrlong (dest, Regs[9]._u32);
+	dest -= 4;
+	wrlong (dest, Regs[1]._u32);
+	dest -= 4;
+	wrlong (dest, Regs[0]._u32);
+	dest -= 4;
+	Regs[15]._s32 -= 16;
+}
+void __Fa9e4e ()
+{
+	s32 val = Regs[10]._s32;
+	Regs[1]._s32 = val;
+	nZ = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
+}
+void __Fa9e56 ()
+{
+	s32 src = (Regs[15]._s32);
+	Regs[0]._s32 = rdlong (src);
+	src += 4;
+	Regs[1]._s32 = rdlong (src);
+	src += 4;
+	Regs[9]._s32 = rdlong (src);
+	src += 4;
+	Regs[10]._s32 = rdlong (src);
+	src += 4;
+	Regs[15]._s32 += 16;
+}
+void __Fa9e5c ()
+{
+	s32 val = -26143;
+	Regs[0]._s16 = val;
+}
+void __Fa9e5e ()
+{
+	s32 val = Regs[10]._s32;
+	Regs[1]._s32 = val;
+	nZ = val;
+	N = val < 0;
+	V = 0;
+	C = 0;
+}
+void __Fa9e6a ()
 {
 	s32 dest = Regs[0]._s16;
 
@@ -274142,7 +274253,7 @@ void __Fa9e0e ()
 	N = (flgn != 0);
 	nZ = val;
 }
-void __Fa9e1a ()
+void __Fa9e76 ()
 {
 	s32 dest = Regs[0]._s16;
 
@@ -462124,21 +462235,17 @@ __Nl7e846:
 __Nl7e85a:
 	case (0x72ede):
 	#ifdef M68K_DEBUG
-		line_no = 58294;
-	#endif
-	__F72ee0 ();
-	#ifdef M68K_DEBUG
-		line_no = 58295;
-	#endif
-	__F72ee2 ();
-	#ifdef M68K_DEBUG
 		line_no = 58296;
 	#endif
-	__F72ee4 ();
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __D72ee4);
+	{
+		goto __NLshuttle_roster;
+	}
+	case (0x72ee4):
 	#ifdef M68K_DEBUG
 		line_no = 58297;
 	#endif
-	__F72ee6 ();
 __Nl7e862:
 	case (0x72ee6):
 	#ifdef M68K_DEBUG
@@ -489924,7 +490031,7 @@ __Nlstart_earth:
 __NLshuttle_news:
 	case (0xa9a10):
 	#ifdef M68K_DEBUG
-		line_no = 68704;
+		line_no = 68706;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a14);
@@ -489934,11 +490041,11 @@ __NLshuttle_news:
 	}
 	case (0xa9a14):
 	#ifdef M68K_DEBUG
-		line_no = 68705;
+		line_no = 68707;
 	#endif
 	__Fa9a18 ();
 	#ifdef M68K_DEBUG
-		line_no = 68706;
+		line_no = 68708;
 	#endif
 	if ((!C))
 	{
@@ -489949,11 +490056,11 @@ __NLshuttle_news:
 		goto __Nlsn_game;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68707;
+		line_no = 68709;
 	#endif
 	__Fa9a20 ();
 	#ifdef M68K_DEBUG
-		line_no = 68708;
+		line_no = 68710;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -489966,11 +490073,11 @@ __NLshuttle_news:
 __Nlsn_game:
 	case (0xa9a22):
 	#ifdef M68K_DEBUG
-		line_no = 68710;
+		line_no = 68712;
 	#endif
 	__Fa9a26 ();
 	#ifdef M68K_DEBUG
-		line_no = 68711;
+		line_no = 68713;
 	#endif
 	{
 		goto __Nlshuttle_news_back;
@@ -489978,11 +490085,11 @@ __Nlsn_game:
 __Nlsn_ours:
 	case (0xa9a2c):
 	#ifdef M68K_DEBUG
-		line_no = 68713;
+		line_no = 68715;
 	#endif
 	__Fa9a30 ();
 	#ifdef M68K_DEBUG
-		line_no = 68714;
+		line_no = 68716;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a32);
@@ -489991,11 +490098,11 @@ __Nlsn_ours:
 	}
 	case (0xa9a32):
 	#ifdef M68K_DEBUG
-		line_no = 68715;
+		line_no = 68717;
 	#endif
 	__Fa9a36 ();
 	#ifdef M68K_DEBUG
-		line_no = 68716;
+		line_no = 68718;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490004,11 +490111,11 @@ __Nlsn_counts:
 __Nlsn_make:
 	case (0xa9a40):
 	#ifdef M68K_DEBUG
-		line_no = 68726;
+		line_no = 68728;
 	#endif
 	__Fa9a44 ();
 	#ifdef M68K_DEBUG
-		line_no = 68727;
+		line_no = 68729;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a48);
@@ -490018,27 +490125,27 @@ __Nlsn_make:
 	}
 	case (0xa9a48):
 	#ifdef M68K_DEBUG
-		line_no = 68728;
+		line_no = 68730;
 	#endif
 	__Fa9a4a ();
 	#ifdef M68K_DEBUG
-		line_no = 68729;
+		line_no = 68731;
 	#endif
 	__Fa9a4e ();
 	#ifdef M68K_DEBUG
-		line_no = 68730;
+		line_no = 68732;
 	#endif
 	Regs[10]._u32 = (Regs[14]._s32+1254);
 	#ifdef M68K_DEBUG
-		line_no = 68731;
+		line_no = 68733;
 	#endif
 	Regs[10]._u32 = Regs[10]._s32 + (s32)Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68732;
+		line_no = 68734;
 	#endif
 	__Fa9a56 ();
 	#ifdef M68K_DEBUG
-		line_no = 68733;
+		line_no = 68735;
 	#endif
 	if (nZ)
 	{
@@ -490049,15 +490156,15 @@ __Nlsn_make:
 		goto __Nlsn_other;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68734;
+		line_no = 68736;
 	#endif
 	__Fa9a5a ();
 	#ifdef M68K_DEBUG
-		line_no = 68735;
+		line_no = 68737;
 	#endif
 	__Fa9a5e ();
 	#ifdef M68K_DEBUG
-		line_no = 68736;
+		line_no = 68738;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -490068,47 +490175,47 @@ __Nlsn_make:
 		goto __Nlsn_wrap;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68737;
+		line_no = 68739;
 	#endif
 	__Fa9a62 ();
 __Nlsn_wrap:
 	case (0xa9a62):
 	#ifdef M68K_DEBUG
-		line_no = 68739;
+		line_no = 68741;
 	#endif
 	__Fa9a64 ();
 	#ifdef M68K_DEBUG
-		line_no = 68740;
+		line_no = 68742;
 	#endif
 	__Fa9a68 ();
 	#ifdef M68K_DEBUG
-		line_no = 68741;
+		line_no = 68743;
 	#endif
 	Regs[10]._u32 = (Regs[14]._s32+1254);
 	#ifdef M68K_DEBUG
-		line_no = 68742;
+		line_no = 68744;
 	#endif
 	Regs[10]._u32 = Regs[10]._s32 + (s32)Regs[0]._s32;
 __Nlsn_other:
 	case (0xa9a6e):
 	#ifdef M68K_DEBUG
-		line_no = 68744;
+		line_no = 68746;
 	#endif
 	__Fa9a70 ();
 	#ifdef M68K_DEBUG
-		line_no = 68745;
+		line_no = 68747;
 	#endif
 	__Fa9a74 ();
 	#ifdef M68K_DEBUG
-		line_no = 68747;
+		line_no = 68749;
 	#endif
 	__Fa9a78 ();
 	#ifdef M68K_DEBUG
-		line_no = 68748;
+		line_no = 68750;
 	#endif
 	__Fa9a7c ();
 	#ifdef M68K_DEBUG
-		line_no = 68749;
+		line_no = 68751;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a80);
@@ -490117,7 +490224,7 @@ __Nlsn_other:
 	}
 	case (0xa9a80):
 	#ifdef M68K_DEBUG
-		line_no = 68750;
+		line_no = 68752;
 	#endif
 	if ((!nZ))
 	{
@@ -490128,15 +490235,15 @@ __Nlsn_other:
 		goto __Nlsn_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68751;
+		line_no = 68753;
 	#endif
 	__Fa9a86 ();
 	#ifdef M68K_DEBUG
-		line_no = 68752;
+		line_no = 68754;
 	#endif
 	__Fa9a88 ();
 	#ifdef M68K_DEBUG
-		line_no = 68753;
+		line_no = 68755;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9a8c);
@@ -490145,7 +490252,7 @@ __Nlsn_other:
 	}
 	case (0xa9a8c):
 	#ifdef M68K_DEBUG
-		line_no = 68754;
+		line_no = 68756;
 	#endif
 	if ((!nZ))
 	{
@@ -490156,15 +490263,15 @@ __Nlsn_other:
 		goto __Nlsn_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68755;
+		line_no = 68757;
 	#endif
 	__Fa9a90 ();
 	#ifdef M68K_DEBUG
-		line_no = 68756;
+		line_no = 68758;
 	#endif
 	__Fa9a94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68757;
+		line_no = 68759;
 	#endif
 	if ((!nZ))
 	{
@@ -490177,21 +490284,21 @@ __Nlsn_other:
 __Nlsn_far:
 	case (0xa9a96):
 	#ifdef M68K_DEBUG
-		line_no = 68759;
+		line_no = 68761;
 	#endif
 	__Fa9a98 ();
 __Nlsn_near:
 	case (0xa9a98):
 	#ifdef M68K_DEBUG
-		line_no = 68761;
+		line_no = 68763;
 	#endif
 	__Fa9a9c ();
 	#ifdef M68K_DEBUG
-		line_no = 68762;
+		line_no = 68764;
 	#endif
 	__Fa9a9e ();
 	#ifdef M68K_DEBUG
-		line_no = 68763;
+		line_no = 68765;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9aa2);
@@ -490201,19 +490308,19 @@ __Nlsn_near:
 	}
 	case (0xa9aa2):
 	#ifdef M68K_DEBUG
-		line_no = 68764;
+		line_no = 68766;
 	#endif
 	__Fa9aa4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68765;
+		line_no = 68767;
 	#endif
 	__Fa9aa8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68766;
+		line_no = 68768;
 	#endif
 	__Fa9aaa ();
 	#ifdef M68K_DEBUG
-		line_no = 68767;
+		line_no = 68769;
 	#endif
 	if (nZ)
 	{
@@ -490224,11 +490331,11 @@ __Nlsn_near:
 		goto __Nlsn_pay_far;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68768;
+		line_no = 68770;
 	#endif
 	__Fa9aae ();
 	#ifdef M68K_DEBUG
-		line_no = 68769;
+		line_no = 68771;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ab2);
@@ -490238,23 +490345,23 @@ __Nlsn_near:
 	}
 	case (0xa9ab2):
 	#ifdef M68K_DEBUG
-		line_no = 68770;
+		line_no = 68772;
 	#endif
 	__Fa9ab4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68771;
+		line_no = 68773;
 	#endif
 	__Fa9ab6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68772;
+		line_no = 68774;
 	#endif
 	__Fa9aba ();
 	#ifdef M68K_DEBUG
-		line_no = 68773;
+		line_no = 68775;
 	#endif
 	__Fa9abe ();
 	#ifdef M68K_DEBUG
-		line_no = 68774;
+		line_no = 68776;
 	#endif
 	{
 		goto __Nlsn_pay;
@@ -490262,11 +490369,11 @@ __Nlsn_near:
 __Nlsn_pay_far:
 	case (0xa9ac0):
 	#ifdef M68K_DEBUG
-		line_no = 68776;
+		line_no = 68778;
 	#endif
 	__Fa9ac4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68777;
+		line_no = 68779;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ac8);
@@ -490276,57 +490383,57 @@ __Nlsn_pay_far:
 	}
 	case (0xa9ac8):
 	#ifdef M68K_DEBUG
-		line_no = 68778;
+		line_no = 68780;
 	#endif
 	__Fa9aca ();
 	#ifdef M68K_DEBUG
-		line_no = 68779;
+		line_no = 68781;
 	#endif
 	__Fa9acc ();
 	#ifdef M68K_DEBUG
-		line_no = 68780;
+		line_no = 68782;
 	#endif
 	__Fa9ad0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68781;
+		line_no = 68783;
 	#endif
 	__Fa9ad4 ();
 __Nlsn_pay:
 	case (0xa9ad4):
 	#ifdef M68K_DEBUG
-		line_no = 68784;
+		line_no = 68786;
 	#endif
 	__Fa9ad6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68785;
+		line_no = 68787;
 	#endif
 	__Fa9ad8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68786;
+		line_no = 68788;
 	#endif
 	__Fa9ada ();
 	#ifdef M68K_DEBUG
-		line_no = 68787;
+		line_no = 68789;
 	#endif
 	__Fa9adc ();
 	#ifdef M68K_DEBUG
-		line_no = 68788;
+		line_no = 68790;
 	#endif
 	__Fa9ae0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68789;
+		line_no = 68791;
 	#endif
 	__Fa9ae2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68790;
+		line_no = 68792;
 	#endif
 	__Fa9ae4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68791;
+		line_no = 68793;
 	#endif
 	__Fa9ae6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68792;
+		line_no = 68794;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9aea);
@@ -490336,27 +490443,27 @@ __Nlsn_pay:
 	}
 	case (0xa9aea):
 	#ifdef M68K_DEBUG
-		line_no = 68793;
+		line_no = 68795;
 	#endif
 	__Fa9aec ();
 	#ifdef M68K_DEBUG
-		line_no = 68794;
+		line_no = 68796;
 	#endif
 	Regs[10]._s32 = Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68795;
+		line_no = 68797;
 	#endif
 	__Fa9af0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68796;
+		line_no = 68798;
 	#endif
 	__Fa9af2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68797;
+		line_no = 68799;
 	#endif
 	__Fa9af6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68798;
+		line_no = 68800;
 	#endif
 	{
 		goto __NL60192;
@@ -490364,32 +490471,17 @@ __Nlsn_pay:
 __Nlsh_obj:
 	case (0xa9afc):
 	#ifdef M68K_DEBUG
-		line_no = 68803;
+		line_no = 68805;
 	#endif
 	__Fa9afe ();
 	#ifdef M68K_DEBUG
-		line_no = 68804;
+		line_no = 68806;
 	#endif
 	__Fa9b00 ();
 	#ifdef M68K_DEBUG
-		line_no = 68805;
-	#endif
-	if ((!nZ))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlsh_obj_none;
-		goto handle_exception;
-	} else {
-		goto __Nlsh_obj_none;
-	}}
-	#ifdef M68K_DEBUG
-		line_no = 68806;
-	#endif
-	__Fa9b06 ();
-	#ifdef M68K_DEBUG
 		line_no = 68807;
 	#endif
-	if ((!C))
+	if ((!nZ))
 	{
 	if ((exceptions_pending) && (rdest == 0)) {
 		rdest = __Dlsh_obj_none;
@@ -490400,13 +490492,28 @@ __Nlsh_obj:
 	#ifdef M68K_DEBUG
 		line_no = 68808;
 	#endif
-	Regs[9]._s32 = rdlong(Regs[14]._s32+14466);
+	__Fa9b06 ();
 	#ifdef M68K_DEBUG
 		line_no = 68809;
 	#endif
-	__Fa9b10 ();
+	if ((!C))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlsh_obj_none;
+		goto handle_exception;
+	} else {
+		goto __Nlsh_obj_none;
+	}}
 	#ifdef M68K_DEBUG
 		line_no = 68810;
+	#endif
+	Regs[9]._s32 = rdlong(Regs[14]._s32+14466);
+	#ifdef M68K_DEBUG
+		line_no = 68811;
+	#endif
+	__Fa9b10 ();
+	#ifdef M68K_DEBUG
+		line_no = 68812;
 	#endif
 	if ((!nZ))
 	{
@@ -490417,27 +490524,27 @@ __Nlsh_obj:
 		goto __Nlsh_obj_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68811;
+		line_no = 68813;
 	#endif
 	__Fa9b14 ();
 	#ifdef M68K_DEBUG
-		line_no = 68812;
+		line_no = 68814;
 	#endif
 	Regs[10]._u32 = (__DL44b02_obj_offsets);
 	#ifdef M68K_DEBUG
-		line_no = 68813;
+		line_no = 68815;
 	#endif
 	__Fa9b1e ();
 	#ifdef M68K_DEBUG
-		line_no = 68814;
+		line_no = 68816;
 	#endif
 	Regs[9]._u32 = Regs[9]._s32 + (s32)Regs[0]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68815;
+		line_no = 68817;
 	#endif
 	__Fa9b22 ();
 	#ifdef M68K_DEBUG
-		line_no = 68816;
+		line_no = 68818;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490445,11 +490552,11 @@ __Nlsh_obj:
 __Nlsh_obj_none:
 	case (0xa9b24):
 	#ifdef M68K_DEBUG
-		line_no = 68818;
+		line_no = 68820;
 	#endif
 	__Fa9b26 ();
 	#ifdef M68K_DEBUG
-		line_no = 68819;
+		line_no = 68821;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490457,11 +490564,11 @@ __Nlsh_obj_none:
 __NLshuttle_click:
 	case (0xa9b28):
 	#ifdef M68K_DEBUG
-		line_no = 68824;
+		line_no = 68826;
 	#endif
 	__Fa9b2c ();
 	#ifdef M68K_DEBUG
-		line_no = 68825;
+		line_no = 68827;
 	#endif
 	if ((!nZ))
 	{
@@ -490472,11 +490579,11 @@ __NLshuttle_click:
 		goto __NLshuttle_offer;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68826;
+		line_no = 68828;
 	#endif
 	__Fa9b32 ();
 	#ifdef M68K_DEBUG
-		line_no = 68827;
+		line_no = 68829;
 	#endif
 	if ((!nZ))
 	{
@@ -490487,7 +490594,7 @@ __NLshuttle_click:
 		goto __NLshuttle_accept;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68828;
+		line_no = 68830;
 	#endif
 	{
 		goto __NLshuttle_click_game;
@@ -490495,35 +490602,35 @@ __NLshuttle_click:
 __NLshuttle_offer:
 	case (0xa9b3c):
 	#ifdef M68K_DEBUG
-		line_no = 68833;
+		line_no = 68835;
 	#endif
 	__Fa9b40 ();
 	#ifdef M68K_DEBUG
-		line_no = 68834;
+		line_no = 68836;
 	#endif
 	__Fa9b42 ();
 	#ifdef M68K_DEBUG
-		line_no = 68835;
+		line_no = 68837;
 	#endif
 	Regs[11]._s32 = Regs[9]._s32;
 	#ifdef M68K_DEBUG
-		line_no = 68836;
+		line_no = 68838;
 	#endif
 	__Fa9b4a ();
 	#ifdef M68K_DEBUG
-		line_no = 68837;
+		line_no = 68839;
 	#endif
 	__Fa9b4e ();
 	#ifdef M68K_DEBUG
-		line_no = 68838;
+		line_no = 68840;
 	#endif
 	__Fa9b54 ();
 	#ifdef M68K_DEBUG
-		line_no = 68839;
+		line_no = 68841;
 	#endif
 	__Fa9b58 ();
 	#ifdef M68K_DEBUG
-		line_no = 68840;
+		line_no = 68842;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b5c);
@@ -490533,11 +490640,11 @@ __NLshuttle_offer:
 	}
 	case (0xa9b5c):
 	#ifdef M68K_DEBUG
-		line_no = 68841;
+		line_no = 68843;
 	#endif
 	Regs[8]._u32 = (__DL78b20);
 	#ifdef M68K_DEBUG
-		line_no = 68842;
+		line_no = 68844;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b66);
@@ -490547,23 +490654,23 @@ __NLshuttle_offer:
 	}
 	case (0xa9b66):
 	#ifdef M68K_DEBUG
-		line_no = 68843;
+		line_no = 68845;
 	#endif
 	__Fa9b6c ();
 	#ifdef M68K_DEBUG
-		line_no = 68844;
+		line_no = 68846;
 	#endif
 	__Fa9b72 ();
 	#ifdef M68K_DEBUG
-		line_no = 68845;
+		line_no = 68847;
 	#endif
 	Regs[11]._s32 = -26145;
 	#ifdef M68K_DEBUG
-		line_no = 68846;
+		line_no = 68848;
 	#endif
 	__Fa9b7a ();
 	#ifdef M68K_DEBUG
-		line_no = 68847;
+		line_no = 68849;
 	#endif
 	if (C)
 	{
@@ -490574,17 +490681,17 @@ __NLshuttle_offer:
 		goto __Nlso_soon;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68848;
+		line_no = 68850;
 	#endif
 	Regs[11]._s32 = -26144;
 __Nlso_soon:
 	case (0xa9b80):
 	#ifdef M68K_DEBUG
-		line_no = 68850;
+		line_no = 68852;
 	#endif
 	__Fa9b84 ();
 	#ifdef M68K_DEBUG
-		line_no = 68851;
+		line_no = 68853;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b8a);
@@ -490593,7 +490700,7 @@ __Nlso_soon:
 	}
 	case (0xa9b8a):
 	#ifdef M68K_DEBUG
-		line_no = 68852;
+		line_no = 68854;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b90);
@@ -490602,11 +490709,11 @@ __Nlso_soon:
 	}
 	case (0xa9b90):
 	#ifdef M68K_DEBUG
-		line_no = 68853;
+		line_no = 68855;
 	#endif
 	__Fa9b94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68854;
+		line_no = 68856;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9b9a);
@@ -490615,11 +490722,11 @@ __Nlso_soon:
 	}
 	case (0xa9b9a):
 	#ifdef M68K_DEBUG
-		line_no = 68855;
+		line_no = 68857;
 	#endif
 	__Fa9b9e ();
 	#ifdef M68K_DEBUG
-		line_no = 68856;
+		line_no = 68858;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9ba4);
@@ -490628,7 +490735,7 @@ __Nlso_soon:
 	}
 	case (0xa9ba4):
 	#ifdef M68K_DEBUG
-		line_no = 68857;
+		line_no = 68859;
 	#endif
 	{
 		goto __NL780c4;
@@ -490636,11 +490743,11 @@ __Nlso_soon:
 __NLshuttle_accept:
 	case (0xa9baa):
 	#ifdef M68K_DEBUG
-		line_no = 68862;
+		line_no = 68864;
 	#endif
 	__Fa9bb0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68863;
+		line_no = 68865;
 	#endif
 	if ((!(N ^ (!V))))
 	{
@@ -490651,11 +490758,11 @@ __NLshuttle_accept:
 		goto __Nlsa_roster;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68864;
+		line_no = 68866;
 	#endif
 	__Fa9bb6 ();
 	#ifdef M68K_DEBUG
-		line_no = 68865;
+		line_no = 68867;
 	#endif
 	{
 		goto __NL76130;
@@ -490663,27 +490770,27 @@ __NLshuttle_accept:
 __Nlsa_roster:
 	case (0xa9bbc):
 	#ifdef M68K_DEBUG
-		line_no = 68867;
+		line_no = 68869;
 	#endif
 	__Fa9bc2 ();
 	#ifdef M68K_DEBUG
-		line_no = 68868;
+		line_no = 68870;
 	#endif
 	__Fa9bc4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68869;
+		line_no = 68871;
 	#endif
 	__Fa9bc8 ();
 	#ifdef M68K_DEBUG
-		line_no = 68870;
+		line_no = 68872;
 	#endif
 	__Fa9bca ();
 	#ifdef M68K_DEBUG
-		line_no = 68871;
+		line_no = 68873;
 	#endif
 	__Fa9bcc ();
 	#ifdef M68K_DEBUG
-		line_no = 68872;
+		line_no = 68874;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bd2);
@@ -490692,11 +490799,11 @@ __Nlsa_roster:
 	}
 	case (0xa9bd2):
 	#ifdef M68K_DEBUG
-		line_no = 68873;
+		line_no = 68875;
 	#endif
 	__Fa9bd4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68874;
+		line_no = 68876;
 	#endif
 	if ((!(N ^ V)))
 	{
@@ -490707,11 +490814,11 @@ __Nlsa_roster:
 		goto __Nlsa_room;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68875;
+		line_no = 68877;
 	#endif
 	__Fa9bda ();
 	#ifdef M68K_DEBUG
-		line_no = 68876;
+		line_no = 68878;
 	#endif
 	{
 		goto __NL76130;
@@ -490719,15 +490826,15 @@ __Nlsa_roster:
 __Nlsa_room:
 	case (0xa9be0):
 	#ifdef M68K_DEBUG
-		line_no = 68878;
+		line_no = 68880;
 	#endif
 	__Fa9be4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68879;
+		line_no = 68881;
 	#endif
 	Regs[11]._s32 = -26152;
 	#ifdef M68K_DEBUG
-		line_no = 68880;
+		line_no = 68882;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bee);
@@ -490736,11 +490843,11 @@ __Nlsa_room:
 	}
 	case (0xa9bee):
 	#ifdef M68K_DEBUG
-		line_no = 68881;
+		line_no = 68883;
 	#endif
 	__Fa9bf4 ();
 	#ifdef M68K_DEBUG
-		line_no = 68882;
+		line_no = 68884;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9bfa);
@@ -490749,43 +490856,43 @@ __Nlsa_room:
 	}
 	case (0xa9bfa):
 	#ifdef M68K_DEBUG
-		line_no = 68883;
+		line_no = 68885;
 	#endif
 	__Fa9c00 ();
 	#ifdef M68K_DEBUG
-		line_no = 68884;
+		line_no = 68886;
 	#endif
 	__Fa9c02 ();
 	#ifdef M68K_DEBUG
-		line_no = 68885;
+		line_no = 68887;
 	#endif
 	__Fa9c04 ();
 	#ifdef M68K_DEBUG
-		line_no = 68886;
+		line_no = 68888;
 	#endif
 	__Fa9c06 ();
 	#ifdef M68K_DEBUG
-		line_no = 68887;
+		line_no = 68889;
 	#endif
 	__Fa9c0a ();
 	#ifdef M68K_DEBUG
-		line_no = 68888;
+		line_no = 68890;
 	#endif
 	__Fa9c0e ();
 	#ifdef M68K_DEBUG
-		line_no = 68889;
+		line_no = 68891;
 	#endif
 	__Fa9c12 ();
 	#ifdef M68K_DEBUG
-		line_no = 68890;
+		line_no = 68892;
 	#endif
 	__Fa9c16 ();
 	#ifdef M68K_DEBUG
-		line_no = 68891;
+		line_no = 68893;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+124);
 	#ifdef M68K_DEBUG
-		line_no = 68892;
+		line_no = 68894;
 	#endif
 	Regs[15]._s32 -= 4;
 	wrlong (Regs[15]._s32, __Da9c1e);
@@ -490795,7 +490902,7 @@ __Nlsa_room:
 	}
 	case (0xa9c1e):
 	#ifdef M68K_DEBUG
-		line_no = 68893;
+		line_no = 68895;
 	#endif
 	{
 		goto __NL782c2;
@@ -490803,11 +490910,11 @@ __Nlsa_room:
 __NLshuttle_match:
 	case (0xa9c24):
 	#ifdef M68K_DEBUG
-		line_no = 68900;
+		line_no = 68902;
 	#endif
 	__Fa9c28 ();
 	#ifdef M68K_DEBUG
-		line_no = 68901;
+		line_no = 68903;
 	#endif
 	if (nZ)
 	{
@@ -490818,11 +490925,11 @@ __NLshuttle_match:
 		goto __Nlsm_next;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68902;
+		line_no = 68904;
 	#endif
 	__Fa9c30 ();
 	#ifdef M68K_DEBUG
-		line_no = 68903;
+		line_no = 68905;
 	#endif
 	if ((!nZ))
 	{
@@ -490833,28 +490940,28 @@ __NLshuttle_match:
 		goto __Nlsm_take;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68904;
+		line_no = 68906;
 	#endif
 	__Fa9c34 ();
 	#ifdef M68K_DEBUG
-		line_no = 68905;
+		line_no = 68907;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[14]._s32+678);
 	#ifdef M68K_DEBUG
-		line_no = 68906;
+		line_no = 68908;
 	#endif
 	__Fa9c3c ();
 	#ifdef M68K_DEBUG
-		line_no = 68907;
+		line_no = 68909;
 	#endif
 	Regs[9]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68908;
+		line_no = 68910;
 	#endif
 	__Fa9c42 ();
 	#ifdef M68K_DEBUG
-		line_no = 68909;
+		line_no = 68911;
 	#endif
 	if (nZ)
 	{
@@ -490865,13 +490972,13 @@ __NLshuttle_match:
 		goto __Nlsm_next;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68910;
+		line_no = 68912;
 	#endif
 	__Fa9c4a ();
 __Nlsm_take:
 	case (0xa9c4a):
 	#ifdef M68K_DEBUG
-		line_no = 68912;
+		line_no = 68914;
 	#endif
 	{
 		goto __Nlpax_deliver;
@@ -490879,11 +490986,11 @@ __Nlsm_take:
 __Nlsm_next:
 	case (0xa9c50):
 	#ifdef M68K_DEBUG
-		line_no = 68914;
+		line_no = 68916;
 	#endif
 	if ((!0) && (--Regs[7]._s16 != -1)) goto __Nlsm_loop;
 	#ifdef M68K_DEBUG
-		line_no = 68915;
+		line_no = 68917;
 	#endif
 	{
 		goto __Nl7eda0;
@@ -490891,7 +490998,7 @@ __Nlsm_next:
 __Nlsm_loop:
 	case (0xa9c5a):
 	#ifdef M68K_DEBUG
-		line_no = 68917;
+		line_no = 68919;
 	#endif
 	{
 		goto __Nl7ee7e;
@@ -490899,23 +491006,23 @@ __Nlsm_loop:
 __NLseats_figures:
 	case (0xa9c60):
 	#ifdef M68K_DEBUG
-		line_no = 68926;
+		line_no = 68928;
 	#endif
 	__Fa9c66 ();
 	#ifdef M68K_DEBUG
-		line_no = 68927;
+		line_no = 68929;
 	#endif
 	__Fa9c68 ();
 	#ifdef M68K_DEBUG
-		line_no = 68928;
+		line_no = 68930;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+674);
 	#ifdef M68K_DEBUG
-		line_no = 68929;
+		line_no = 68931;
 	#endif
 	__Fa9c72 ();
 	#ifdef M68K_DEBUG
-		line_no = 68930;
+		line_no = 68932;
 	#endif
 	if ((!nZ))
 	{
@@ -490926,18 +491033,18 @@ __NLseats_figures:
 		goto __Nlsf_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68931;
+		line_no = 68933;
 	#endif
 	__Fa9c76 ();
 __Nlsf_none:
 	case (0xa9c76):
 	#ifdef M68K_DEBUG
-		line_no = 68933;
+		line_no = 68935;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68934;
+		line_no = 68936;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490945,23 +491052,23 @@ __Nlsf_none:
 __NLseats_free:
 	case (0xa9c7a):
 	#ifdef M68K_DEBUG
-		line_no = 68937;
+		line_no = 68939;
 	#endif
 	__Fa9c7e ();
 	#ifdef M68K_DEBUG
-		line_no = 68938;
+		line_no = 68940;
 	#endif
 	__Fa9c80 ();
 	#ifdef M68K_DEBUG
-		line_no = 68939;
+		line_no = 68941;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[14]._s32+674);
 	#ifdef M68K_DEBUG
-		line_no = 68940;
+		line_no = 68942;
 	#endif
 	__Fa9c8a ();
 	#ifdef M68K_DEBUG
-		line_no = 68941;
+		line_no = 68943;
 	#endif
 	if ((!nZ))
 	{
@@ -490972,22 +491079,22 @@ __NLseats_free:
 		goto __Nlsfr_none;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68942;
+		line_no = 68944;
 	#endif
 	__Fa9c8e ();
 __Nlsfr_none:
 	case (0xa9c8e):
 	#ifdef M68K_DEBUG
-		line_no = 68944;
+		line_no = 68946;
 	#endif
 	Regs[8]._s32 = rdlong(Regs[15]._s32);
 	Regs[15]._s32 += 4;
 	#ifdef M68K_DEBUG
-		line_no = 68945;
+		line_no = 68947;
 	#endif
 	__Fa9c94 ();
 	#ifdef M68K_DEBUG
-		line_no = 68946;
+		line_no = 68948;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -490995,11 +491102,11 @@ __Nlsfr_none:
 __NLshuttle_strings:
 	case (0xa9c96):
 	#ifdef M68K_DEBUG
-		line_no = 68952;
+		line_no = 68954;
 	#endif
 	__Fa9c9a ();
 	#ifdef M68K_DEBUG
-		line_no = 68954;
+		line_no = 68956;
 	#endif
 	if ((!nZ))
 	{
@@ -491010,72 +491117,50 @@ __NLshuttle_strings:
 		goto __Nlss_station;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68955;
+		line_no = 68957;
 	#endif
 	__Fa9ca0 ();
 	#ifdef M68K_DEBUG
-		line_no = 68957;
+		line_no = 68959;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlss_port;
+		goto handle_exception;
+	} else {
+		goto __Nlss_port;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68960;
+	#endif
+	__Fa9ca6 ();
+	#ifdef M68K_DEBUG
+		line_no = 68962;
 	#endif
 	Regs[9]._u32 = (__DLshuttle_string_table);
 	#ifdef M68K_DEBUG
-		line_no = 68958;
+		line_no = 68963;
 	#endif
 	{
 		jdest = (Regs[13]._s32+372);
 		goto jumptable;
 	}
 __Nlss_station:
-	case (0xa9caa):
-	#ifdef M68K_DEBUG
-		line_no = 68960;
-	#endif
-	__Fa9cae ();
-	#ifdef M68K_DEBUG
-		line_no = 68961;
-	#endif
-	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __Da9cb2);
-	{
-		goto __Nlsh_obj;
-	}
-	case (0xa9cb2):
-	#ifdef M68K_DEBUG
-		line_no = 68962;
-	#endif
-	if ((!nZ))
-	{
-	if ((exceptions_pending) && (rdest == 0)) {
-		rdest = __Dlss_end;
-		goto handle_exception;
-	} else {
-		goto __Nlss_end;
-	}}
-	#ifdef M68K_DEBUG
-		line_no = 68963;
-	#endif
-	Regs[10]._u32 = (Regs[9]._s32+246);
-	#ifdef M68K_DEBUG
-		line_no = 68964;
-	#endif
-	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __Da9cba);
-	{
-		goto __Nlss_copy;
-	}
-	case (0xa9cba):
+	case (0xa9cb0):
 	#ifdef M68K_DEBUG
 		line_no = 68965;
 	#endif
-	__Fa9cbe ();
+	__Fa9cb4 ();
 	#ifdef M68K_DEBUG
 		line_no = 68966;
 	#endif
 	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __Da9cc2);
+	wrlong (Regs[15]._s32, __Da9cb8);
 	{
 		goto __Nlsh_obj;
 	}
-	case (0xa9cc2):
+	case (0xa9cb8):
 	#ifdef M68K_DEBUG
 		line_no = 68967;
 	#endif
@@ -491090,58 +491175,140 @@ __Nlss_station:
 	#ifdef M68K_DEBUG
 		line_no = 68968;
 	#endif
-	__Fa9cc8 ();
+	Regs[10]._u32 = (Regs[9]._s32+246);
 	#ifdef M68K_DEBUG
 		line_no = 68969;
 	#endif
-	__Fa9ccc ();
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __Da9cc0);
+	{
+		goto __Nlss_copy;
+	}
+	case (0xa9cc0):
 	#ifdef M68K_DEBUG
 		line_no = 68970;
 	#endif
-	Regs[10]._u32 = (Regs[9]._s32+246);
+	__Fa9cc4 ();
 	#ifdef M68K_DEBUG
 		line_no = 68971;
 	#endif
 	Regs[15]._s32 -= 4;
-	wrlong (Regs[15]._s32, __Da9cd2);
+	wrlong (Regs[15]._s32, __Da9cc8);
 	{
-		goto __Nlss_copy;
+		goto __Nlsh_obj;
 	}
-	case (0xa9cd2):
+	case (0xa9cc8):
 	#ifdef M68K_DEBUG
 		line_no = 68972;
 	#endif
-	__Fa9cd6 ();
-__Nlss_end:
-	case (0xa9cd6):
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlss_end;
+		goto handle_exception;
+	} else {
+		goto __Nlss_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68973;
+	#endif
+	__Fa9cce ();
 	#ifdef M68K_DEBUG
 		line_no = 68974;
 	#endif
-	__Fa9cd8 ();
+	__Fa9cd2 ();
 	#ifdef M68K_DEBUG
 		line_no = 68975;
 	#endif
-	__Fa9cdc ();
+	Regs[10]._u32 = (Regs[9]._s32+246);
 	#ifdef M68K_DEBUG
 		line_no = 68976;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __Da9cd8);
+	{
+		goto __Nlss_copy;
+	}
+	case (0xa9cd8):
+	#ifdef M68K_DEBUG
+		line_no = 68977;
+	#endif
+	__Fa9cdc ();
+__Nlss_end:
+	case (0xa9cdc):
+	#ifdef M68K_DEBUG
+		line_no = 68979;
+	#endif
+	__Fa9cde ();
+	#ifdef M68K_DEBUG
+		line_no = 68980;
+	#endif
+	__Fa9ce2 ();
+	#ifdef M68K_DEBUG
+		line_no = 68981;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
 	goto jumptable;
+__Nlss_port:
+	case (0xa9ce4):
+	#ifdef M68K_DEBUG
+		line_no = 68984;
+	#endif
+	__Fa9ce8 ();
+	#ifdef M68K_DEBUG
+		line_no = 68985;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __Da9cec);
+	{
+		goto __Nlsh_obj;
+	}
+	case (0xa9cec):
+	#ifdef M68K_DEBUG
+		line_no = 68986;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlss_end;
+		goto handle_exception;
+	} else {
+		goto __Nlss_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 68987;
+	#endif
+	Regs[10]._u32 = (Regs[9]._s32+246);
+	#ifdef M68K_DEBUG
+		line_no = 68988;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __Da9cf4);
+	{
+		goto __Nlss_copy;
+	}
+	case (0xa9cf4):
+	#ifdef M68K_DEBUG
+		line_no = 68989;
+	#endif
+	{
+		goto __Nlss_end;
+	}
 __Nlss_copy:
-	case (0xa9cde):
+	case (0xa9cf6):
 	#ifdef M68K_DEBUG
-		line_no = 68979;
+		line_no = 68992;
 	#endif
-	__Fa9ce0 ();
+	__Fa9cf8 ();
 __Nlss_copy_char:
-	case (0xa9ce0):
+	case (0xa9cf8):
 	#ifdef M68K_DEBUG
-		line_no = 68981;
+		line_no = 68994;
 	#endif
-	__Fa9ce2 ();
+	__Fa9cfa ();
 	#ifdef M68K_DEBUG
-		line_no = 68982;
+		line_no = 68995;
 	#endif
 	if ((!nZ))
 	{
@@ -491152,17 +491319,17 @@ __Nlss_copy_char:
 		goto __Nlss_copy_end;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 68983;
+		line_no = 68996;
 	#endif
 	Regs[8]._u32 = Regs[8]._s32 + (s32)1;
 	#ifdef M68K_DEBUG
-		line_no = 68984;
+		line_no = 68997;
 	#endif
 	if ((!0) && (--Regs[0]._s16 != -1)) goto __Nlss_copy_char;
 __Nlss_copy_end:
-	case (0xa9cea):
+	case (0xa9d02):
 	#ifdef M68K_DEBUG
-		line_no = 68986;
+		line_no = 68999;
 	#endif
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
@@ -491180,22 +491347,119 @@ __Nlsh_s_three:
 __Nlsh_s_four:
 __Nlsh_s_soon:
 __Nlsh_s_later:
-__NLshuttle_click_game:
-	case (0xa9e04):
+__Nlsh_s_row:
+__NLshuttle_roster:
+	case (0xa9e34):
 	#ifdef M68K_DEBUG
-		line_no = 69047;
+		line_no = 69070;
+	#endif
+	__Fa9e36 ();
+	#ifdef M68K_DEBUG
+		line_no = 69071;
+	#endif
+	__Fa9e38 ();
+	#ifdef M68K_DEBUG
+		line_no = 69072;
+	#endif
+	__Fa9e3a ();
+	#ifdef M68K_DEBUG
+		line_no = 69073;
+	#endif
+	__Fa9e3c ();
+	#ifdef M68K_DEBUG
+		line_no = 69074;
+	#endif
+	__Fa9e40 ();
+	#ifdef M68K_DEBUG
+		line_no = 69075;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlsro_end;
+		goto handle_exception;
+	} else {
+		goto __Nlsro_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 69076;
+	#endif
+	__Fa9e46 ();
+	#ifdef M68K_DEBUG
+		line_no = 69077;
+	#endif
+	if (nZ)
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlsro_end;
+		goto handle_exception;
+	} else {
+		goto __Nlsro_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 69078;
+	#endif
+	__Fa9e4c ();
+	#ifdef M68K_DEBUG
+		line_no = 69079;
+	#endif
+	__Fa9e4e ();
+	#ifdef M68K_DEBUG
+		line_no = 69080;
+	#endif
+	Regs[15]._s32 -= 4;
+	wrlong (Regs[15]._s32, __Da9e52);
+	{
+		goto __Nlsh_obj;
+	}
+	case (0xa9e52):
+	#ifdef M68K_DEBUG
+		line_no = 69081;
+	#endif
+	__Fa9e56 ();
+	#ifdef M68K_DEBUG
+		line_no = 69083;
+	#endif
+	if ((!nZ))
+	{
+	if ((exceptions_pending) && (rdest == 0)) {
+		rdest = __Dlsro_end;
+		goto handle_exception;
+	} else {
+		goto __Nlsro_end;
+	}}
+	#ifdef M68K_DEBUG
+		line_no = 69084;
+	#endif
+	__Fa9e5c ();
+	#ifdef M68K_DEBUG
+		line_no = 69085;
+	#endif
+	__Fa9e5e ();
+__Nlsro_end:
+	case (0xa9e5e):
+	#ifdef M68K_DEBUG
+		line_no = 69087;
+	#endif
+	jdest = rdlong (Regs[15]._u32);
+	Regs[15]._s32 += 4;
+	goto jumptable;
+__NLshuttle_click_game:
+	case (0xa9e60):
+	#ifdef M68K_DEBUG
+		line_no = 69092;
 	#endif
 	{
 		goto __NLafmu_comms_click;
 	}
 __NLshuttle_modstr:
-	case (0xa9e0a):
+	case (0xa9e66):
 	#ifdef M68K_DEBUG
-		line_no = 69051;
+		line_no = 69096;
 	#endif
-	__Fa9e0e ();
+	__Fa9e6a ();
 	#ifdef M68K_DEBUG
-		line_no = 69053;
+		line_no = 69098;
 	#endif
 	if (C)
 	{
@@ -491206,19 +491470,19 @@ __NLshuttle_modstr:
 		goto __Nlshuttle_modstr_afmu;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 69054;
+		line_no = 69099;
 	#endif
 	{
 		goto __NLshuttle_strings;
 	}
 __Nlshuttle_modstr_afmu:
-	case (0xa9e16):
+	case (0xa9e72):
 	#ifdef M68K_DEBUG
-		line_no = 69056;
+		line_no = 69101;
 	#endif
-	__Fa9e1a ();
+	__Fa9e76 ();
 	#ifdef M68K_DEBUG
-		line_no = 69058;
+		line_no = 69103;
 	#endif
 	if (C)
 	{
@@ -491229,15 +491493,15 @@ __Nlshuttle_modstr_afmu:
 		goto __Nlshuttle_modstr_game;
 	}}
 	#ifdef M68K_DEBUG
-		line_no = 69059;
+		line_no = 69104;
 	#endif
 	{
 		goto __Nlafmu_strings_ours;
 	}
 __Nlshuttle_modstr_game:
-	case (0xa9e22):
+	case (0xa9e7e):
 	#ifdef M68K_DEBUG
-		line_no = 69061;
+		line_no = 69106;
 	#endif
 	{
 		goto __Nlafmu_strings_game;

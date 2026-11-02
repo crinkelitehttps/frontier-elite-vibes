@@ -431,8 +431,9 @@
 #define FE2_Lseats_figures                           0xa9c60 /* Lseats_figures */
 #define FE2_Lseats_free                              0xa9c7a /* Lseats_free */
 #define FE2_Lshuttle_strings                         0xa9c96 /* Lshuttle_strings */
-#define FE2_Lshuttle_string_table                    0xa9cec /* Lshuttle_string_table */
-#define FE2_Lshuttle_click_game                      0xa9e04 /* Lshuttle_click_game */
-#define FE2_Lshuttle_modstr                          0xa9e0a /* Lshuttle_modstr */
+#define FE2_Lshuttle_string_table                    0xa9d04 /* Lshuttle_string_table */
+#define FE2_Lshuttle_roster                          0xa9e34 /* Lshuttle_roster */
+#define FE2_Lshuttle_click_game                      0xa9e60 /* Lshuttle_click_game */
+#define FE2_Lshuttle_modstr                          0xa9e66 /* Lshuttle_modstr */
 
 #endif /* FE2_LABELS_H */

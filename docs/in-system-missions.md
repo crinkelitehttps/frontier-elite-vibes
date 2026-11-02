@@ -58,6 +58,12 @@ reputation -2), and a late named passenger leaves at the next landing in the sys
 `Lseats_strings` in the original build, `Lshuttle_modstr` in the modded build). `$99d9` is not a fixed
 string: it prints the starport whose slot is in d1 and its parent body, e.g. "London (Earth)".
 
+**Ship screen roster.** The passenger list (`L7e806`) shows a shuttle run's destination as `*` and the
+starport (e.g. `*Moscow`) while the ship is in the system the run was taken in; elsewhere it shows the
+system as before. `Lshuttle_roster` (on the row's passenger-count code at `l7e85a`) swaps the game's row
+string `$9c12` for `$99e1`, the same row with `*` + `$99e2` (the starport only, slot in d1) in place of
+the system name.
+
 ## 4. Testing
 
 Measured in a test instance (start 4, London):
@@ -68,5 +74,5 @@ Measured in a test instance (start 4, London):
   Moscow (the landed-at station pointer `678(a6)` poked to Moscow's object, event 5) with the pay and the
   seat given back.
 
-Not done yet: the ship screen's passenger list shows the system, not the starport; selling the seats (or
-a cabin) while they are in use is not refused; a real flight from one starport to another.
+Not done yet: selling the seats (or a cabin) while they are in use is not refused; a real flight from one
+starport to another.

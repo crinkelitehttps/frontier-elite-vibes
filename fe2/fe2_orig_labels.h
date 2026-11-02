@@ -396,8 +396,9 @@
 #define FE2_Lseats_figures                           0x83e00 /* Lseats_figures */
 #define FE2_Lseats_free                              0x83e1a /* Lseats_free */
 #define FE2_Lshuttle_strings                         0x83e36 /* Lshuttle_strings */
-#define FE2_Lshuttle_string_table                    0x83e8c /* Lshuttle_string_table */
-#define FE2_Lshuttle_click_game                      0x83fa4 /* Lshuttle_click_game */
+#define FE2_Lshuttle_string_table                    0x83ea4 /* Lshuttle_string_table */
+#define FE2_Lshuttle_roster                          0x83fd4 /* Lshuttle_roster */
+#define FE2_Lshuttle_click_game                      0x84000 /* Lshuttle_click_game */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */
