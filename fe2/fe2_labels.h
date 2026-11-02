@@ -429,11 +429,13 @@
 #define FE2_Lshuttle_accept                          0xa9baa /* Lshuttle_accept */
 #define FE2_Lshuttle_match                           0xa9c24 /* Lshuttle_match */
 #define FE2_Lseats_figures                           0xa9c60 /* Lseats_figures */
-#define FE2_Lseats_free                              0xa9c7a /* Lseats_free */
-#define FE2_Lshuttle_strings                         0xa9c96 /* Lshuttle_strings */
-#define FE2_Lshuttle_string_table                    0xa9d04 /* Lshuttle_string_table */
-#define FE2_Lshuttle_roster                          0xa9e34 /* Lshuttle_roster */
-#define FE2_Lshuttle_click_game                      0xa9e60 /* Lshuttle_click_game */
-#define FE2_Lshuttle_modstr                          0xa9e66 /* Lshuttle_modstr */
+#define FE2_Lberths_used                             0xa9c74 /* Lberths_used */
+#define FE2_Lship_figures                            0xa9cde /* Lship_figures */
+#define FE2_Lseats_free                              0xa9d10 /* Lseats_free */
+#define FE2_Lshuttle_strings                         0xa9d2c /* Lshuttle_strings */
+#define FE2_Lshuttle_string_table                    0xa9d9a /* Lshuttle_string_table */
+#define FE2_Lshuttle_roster                          0xa9ee0 /* Lshuttle_roster */
+#define FE2_Lshuttle_click_game                      0xa9f0c /* Lshuttle_click_game */
+#define FE2_Lshuttle_modstr                          0xa9f12 /* Lshuttle_modstr */
 
 #endif /* FE2_LABELS_H */

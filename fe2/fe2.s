@@ -55183,7 +55183,7 @@ L78668:
 L786c2:
 		move.w	#$98d1,d0
 		move.l	734(a6),d1
-* Lseats_figures: the cabin figure counts Sleeper Berths too (same size)
+* Lseats_figures: the cabin figure counts cabins only, not Sleeper Berths (same size)
 		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
@@ -59102,12 +59102,13 @@ L7f54a:
 L7f55c:
 		move.w	#$9c38,d0
 		move.l	734(a6),d1
-* Lseats_figures: the cabin figure counts Sleeper Berths too (same size)
+* Lseats_figures: the cabin figure counts cabins only, not Sleeper Berths (same size)
 		jsr	Lseats_figures
 		sub.w	a2,d2
 		sub.w	a3,d3
-		move.w	#$be,d5
-		move.w	#$8a,d6
+* Lship_figures: the block one line higher plus a Berths row (same size)
+		jmp	Lship_figures
+		nop
 
 L7f576:
 		moveq	#15,d4
@@ -67940,6 +67941,7 @@ SH_STR_SOON		equ	$99df
 SH_STR_LATER		equ	$99e0
 SH_STR_ROW		equ	$99e1
 SH_STR_PORT		equ	$99e2
+SH_STR_BERTHS		equ	$99e3
 SH_AD_CHANCE		equ	$1a00
 SH_SEATS		equ	4
 
@@ -68161,22 +68163,99 @@ lsm_next:
 lsm_loop:
 		jmp	l7ee7e
 
-* Places for passengers: cabins (740(a6)) plus SH_SEATS when Passenger
-* Seats are fitted (bit SEATS_BIT of the equipment long 158(ship), byte 159
-* bit 4). Lseats_figures replaces movem.w 738(a6),d2-3/a2-3 in L786c2 and
-* L7f55c (the cargo / cabin figures under the station and ship screens);
-* Lseats_free replaces move.w 740(a6),d0 / sub.w 744(a6),d0 in L7822c (the
-* game's own passenger adverts) and gives d0 = free places.
+* Places for passengers: cabins (740(a6)) plus SH_SEATS when Sleeper
+* Berths are fitted (bit SEATS_BIT of the equipment long 158(ship), byte 159
+* bit 4). 744(a6) counts the places used in both. Lseats_figures replaces
+* movem.w 738(a6),d2-3/a2-3 in L786c2 and L7f55c (the cargo / cabin figures
+* under the station and ship screens) and leaves out the berths in use, so
+* the figures are cabins only; the ship screen adds a Berths row
+* (Lship_figures). Lseats_free replaces move.w 740(a6),d0 / sub.w
+* 744(a6),d0 in L7822c (the game's own passenger adverts) and gives d0 =
+* free places, cabins and berths together.
 Lseats_figures:
 		movem.w	738(a6),d2-3/a2-3
-		move.l	a0,-(a7)
+		movem.l	d0-1,-(a7)
+		bsr.s	Lberths_used
+		suba.w	d0,a3
+		movem.l	(a7)+,d0-1
+		rts
+
+* Places in use split between Sleeper Berths and cabins (744(a6) counts
+* both, the game books places without saying which): shuttle runs (flags
+* bit 0) take berths first, other passengers cabins first, and whoever
+* does not fit takes the other kind.
+* Out: d0.w = berths in use, d1.w = berths fitted (0 or SH_SEATS).
+Lberths_used:
+		movem.l	d2-3/d7/a0,-(a7)
+		moveq	#0,d1
 		movea.l	674(a6),a0
 		btst	#4,159(a0)
-		beq.s	lsf_none
-		addq.w	#SH_SEATS,d3
-lsf_none:
-		movea.l	(a7)+,a0
+		beq.s	lbu_count
+		moveq	#SH_SEATS,d1
+* d2 = shuttle-run passengers aboard ((low byte >> 2) + 1 each; bit 5 set
+* = not passengers, as the game's own count skips them)
+lbu_count:
+		moveq	#0,d2
+		lea	11960(a6),a0
+		move.w	11930(a6),d7
+		bra.s	lbu_next
+lbu_entry:
+		moveq	#0,d3
+		move.b	3(a0),d3
+		btst	#0,d3
+		beq.s	lbu_skip
+		btst	#5,d3
+		bne.s	lbu_skip
+		lsr.w	#2,d3
+		addq.w	#1,d3
+		add.w	d3,d2
+lbu_skip:
+		lea	16(a0),a0
+lbu_next:
+		dbra	d7,lbu_entry
+* berths = shuttle + (others not fitting the cabins), at most fitted / used
+		move.w	744(a6),d0
+		sub.w	d2,d0
+		bpl.s	lbu_others
+		moveq	#0,d0
+lbu_others:
+		sub.w	740(a6),d0
+		bpl.s	lbu_over
+		moveq	#0,d0
+lbu_over:
+		add.w	d2,d0
+		cmp.w	744(a6),d0
+		ble.s	lbu_used
+		move.w	744(a6),d0
+lbu_used:
+		cmp.w	d1,d0
+		ble.s	lbu_end
+		move.w	d1,d0
+lbu_end:
+		movem.l	(a7)+,d2-3/d7/a0
 		rts
+
+* Ship screen figures, from L7f55c (d0 = $9c38, d1 = cash, d2/d3 = cargo /
+* cabins remaining, a2/a3 used): the game's block one line higher (the
+* screen ends at y 168), then the Berths row under it.
+Lship_figures:
+		move.w	#$be,d5
+		move.w	#$80,d6
+		moveq	#15,d4
+		moveq	#0,d7
+		jsr	A5_FmtDrawStrShadowed(a5)
+		bsr.w	Lberths_used
+		move.w	d1,d2
+		sub.w	d0,d2
+		ext.l	d2
+		moveq	#0,d3
+		move.w	d0,d3
+		move.w	#SH_STR_BERTHS,d0
+		move.w	#$be,d5
+		move.w	#$9e,d6
+		moveq	#15,d4
+		moveq	#0,d7
+		jmp	A5_FmtDrawStrShadowed(a5)
 
 Lseats_free:
 		move.w	740(a6),d0
@@ -68255,6 +68334,9 @@ Lshuttle_string_table:
 		dc.w	lsh_s_soon-Lshuttle_string_table
 		dc.w	lsh_s_later-Lshuttle_string_table
 		dc.w	lsh_s_row-Lshuttle_string_table
+		dc.w	lsh_s_none-Lshuttle_string_table
+* ^^ SH_STR_PORT is made in lss_port
+		dc.w	lsh_s_berths-Lshuttle_string_table
 lsh_s_ad:
 		dc.b	"SHUTTLE: "
 		dc.b	$ff,$30,$19
@@ -68303,6 +68385,12 @@ lsh_s_row:
 		dc.b	$ff,$92,$3,$fd,$28,$ff,$30,$2,$fd,$32
 		dc.b	"*",$ff,$99,$e2
 		dc.b	$fd,$51,$24,$ff,$30,$3,$0,$0
+* ^^ pad to an even length
+* SH_STR_BERTHS: ship screen Berths row (d2 = remaining, d3 = used) under
+* the game's Cabins row ($9c38), same columns
+lsh_s_berths:
+		dc.b	"Berths"
+		dc.b	$fd,$75,$ff,$30,$2,$fd,$7e,$ff,$30,$3,$0,$0
 * ^^ pad to an even length
 
 * Replaces moveq #0,d2 / move.b d4,d2 / lsr.w #2,d2 / addq.w #1,d2 in the

@@ -17,8 +17,15 @@ built-in drive takes 4 t) and reverse/vertical thrust -1635 -> -2500 (it could n
 
 Equipment flag bit 20 of the ship's equipment long (`158(ship)`), 2 t, 100 credits, sold everywhere.
 Four places for passengers, on top of cabins (`740(a6)`), for shuttle runs and the game's own passenger
-adverts. The cabin figure under the station and ship screens counts them (`Lseats_figures`), and the
-game's passenger advert checks them (`Lseats_free`).
+adverts. The game's passenger advert checks free cabins and berths together (`Lseats_free`).
+
+**Cabins and Berths figures.** The game keeps one count of places used (`744(a6)`) and does not say which
+kind a passenger is in, so `Lberths_used` works the split out from the passenger list: shuttle runs
+(flags bit 0) take berths first, other passengers cabins first, and whoever does not fit takes the other
+kind. The Cabins figures under the station (comms) and ship screens are cabins only (`Lseats_figures`
+takes the berths in use off). The ship screen draws its block one line higher (the screen ends at y 168)
+with a Berths row under Cabins (`Lship_figures`, string `$99e3`); the station screen has no room and shows
+cabins only.
 
 ## 3. Shuttle runs
 
