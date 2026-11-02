@@ -63,11 +63,15 @@ bool cheat_ship_position(double km[3]);
 /* The ship's distance from the centre of `body` (an object's address) over the body's radius,
  * exact (the 64-bit positions); 0 unless the body is the ship's frame parent. */
 double cheat_ship_height_ratio(unsigned body);
+bool cheat_ship_body_vector(unsigned body, double out[3]);
+void cheat_object_axes(unsigned obj, double col[3][3]);
+bool cheat_ship_object(unsigned *ship_obj);
 void cheat_ship_set_position(const double km[3]);
 /* Moves the ship `km` further from (or, negative, nearer to) its frame parent */
 void cheat_ship_move_out(double km);
 /* Zero velocity relative to the frame parent */
 void cheat_ship_stop(void);
+void cheat_ship_yaw(double deg);
 
 /* The system's named bodies: planets, moons, stars and stations. `radius_km` is the planet's
  * (0.0 for a station, whose field means something else) */
@@ -105,6 +109,20 @@ typedef struct
 } CheatDust;
 /* The space dust objects (state $60), by slot */
 int cheat_dust(CheatDust *out, int max);
+
+typedef struct
+{
+	int slot;
+	double rel_km[3]; /* asteroid minus ship, root-frame axes */
+	int b95;          /* the distance byte at +95 the despawn tests (>= $10: removed) */
+} CheatAsteroid;
+/* The asteroids (state $58), by slot */
+/* Select a star on the galaxy map (as a click does) and start a real jump to it */
+const char *cheat_select_system(unsigned id);
+int cheat_hyperspace(void);
+int cheat_asteroids(CheatAsteroid *out, int max);
+/* Set the ship's velocity (raw longs at +98, fraction cleared) */
+void cheat_ship_set_velocity(const int raw[3]);
 
 /* The ship's current target (the object the panel shows and a missile goes for): the slot of its
  * object, 0 for none */

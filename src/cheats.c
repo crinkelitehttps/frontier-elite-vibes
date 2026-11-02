@@ -357,6 +357,60 @@ double cheat_ship_height_ratio(unsigned body)
 	return sqrt(d2) / radius;
 }
 
+/* The ship's position relative to `body` (its frame parent), negated: the body's centre as seen from the ship, in
+ * mm, in the body's own axes. Exact (the game's own planet position is rounded per pass). */
+bool cheat_ship_body_vector(unsigned body, double out[3])
+{
+	u32 me = ship();
+	if (!me || !body)
+		return false;
+	int parent = (u8)rdbyte(me + OBJ_PARENT);
+	if (parent < 1 || parent >= OBJECT_SLOTS || slot_object(parent) != body)
+		return false;
+	for (int k = 0; k < 3; k++)
+		out[k] = -(double)obj_pos(me, k);
+	return true;
+}
+
+/* An object's orientation as three unit columns (right, up, forward: words 0,3,6 / 1,4,7 / 2,5,8 of its matrix,
+ * Q15), made orthonormal in double (Gram-Schmidt: forward, then up, then right). The words are rounded to
+ * 3e-5 rad, so the raw matrix is not exactly a rotation. */
+void cheat_object_axes(unsigned obj, double col[3][3])
+{
+	double m[9];
+	for (int i = 0; i < 9; i++)
+		m[i] = (int16_t)rdword(obj + 2 * i) / 32768.0;
+	double r[3] = {m[0], m[3], m[6]}, u[3] = {m[1], m[4], m[7]}, f[3] = {m[2], m[5], m[8]};
+	double l = sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+	for (int k = 0; k < 3; k++)
+		f[k] /= l ? l : 1;
+	double d = u[0] * f[0] + u[1] * f[1] + u[2] * f[2];
+	for (int k = 0; k < 3; k++)
+		u[k] -= d * f[k];
+	l = sqrt(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+	for (int k = 0; k < 3; k++)
+		u[k] /= l ? l : 1;
+	d = r[0] * f[0] + r[1] * f[1] + r[2] * f[2];
+	double d2 = r[0] * u[0] + r[1] * u[1] + r[2] * u[2];
+	for (int k = 0; k < 3; k++)
+		r[k] -= d * f[k] + d2 * u[k];
+	l = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+	for (int k = 0; k < 3; k++)
+		r[k] /= l ? l : 1;
+	for (int k = 0; k < 3; k++)
+	{
+		col[0][k] = r[k];
+		col[1][k] = u[k];
+		col[2][k] = f[k];
+	}
+}
+
+bool cheat_ship_object(unsigned *ship_obj)
+{
+	*ship_obj = ship();
+	return *ship_obj != 0;
+}
+
 /* Applies `fn` to the position of the ship and of every object at the same spot */
 /* new_parent: the slot the ship (and what moves with it) becomes relative to, -1 to keep the parent */
 static void move_ship(const pos64 to[3], int new_parent)
@@ -413,6 +467,22 @@ void cheat_ship_move_out(double km)
 	for (int a = 0; a < 3; a++)
 		p[a] *= scale;
 	cheat_ship_set_position(p);
+}
+
+/* Turns the ship about its own up axis by `deg` (to starboard when positive), for tests */
+void cheat_ship_yaw(double deg)
+{
+	u32 me = ship();
+	if (!me)
+		return;
+	double a = deg * 3.14159265358979323846 / 180, cs = cos(a), sn = sin(a);
+	for (int k = 0; k < 3; k++)
+	{
+		double r = (int16_t)rdword(me + 6 * k) / 32768.0, f = (int16_t)rdword(me + 6 * k + 4) / 32768.0;
+		double nr = cs * r - sn * f, nf = sn * r + cs * f;
+		wrword(me + 6 * k, (u16)(int16_t)lround(nr * 32768.0 > 32767 ? 32767 : nr * 32768.0));
+		wrword(me + 6 * k + 4, (u16)(int16_t)lround(nf * 32768.0 > 32767 ? 32767 : nf * 32768.0));
+	}
 }
 
 void cheat_ship_stop(void)
@@ -573,6 +643,42 @@ int cheat_ships(CheatShip *out)
 	}
 	qsort(out, n, sizeof(*out), ship_nearer);
 	return n;
+}
+
+int cheat_asteroids(CheatAsteroid *out, int max)
+{
+	if (!ship())
+		return 0;
+	pos64 base[3], me[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	for (int a = 0; a < 3; a++)
+		me[a] = base[a] + obj_pos(ship(), a);
+	int n = 0;
+	for (int i = 1; i < OBJECT_SLOTS && n < max; i++)
+	{
+		u32 o = slot_object(i);
+		if (o == ship() || !rdbyte(FE2_big_space + i) || (u8)rdbyte(o + OBJ_STATE) != 0x58)
+			continue;
+		pos64 at[3];
+		abs_pos((u8)rdbyte(o + OBJ_PARENT), at);
+		for (int a = 0; a < 3; a++)
+			out[n].rel_km[a] = (double)(at[a] + obj_pos(o, a) - me[a]) / MM_PER_KM;
+		out[n].slot = i;
+		out[n].b95 = (signed char)rdbyte(o + 95);
+		n++;
+	}
+	return n;
+}
+
+void cheat_ship_set_velocity(const int raw[3])
+{
+	if (!ship())
+		return;
+	for (int a = 0; a < 3; a++)
+	{
+		wrlong(ship() + OBJ_VEL + 4 * a, raw[a]);
+		wrword(ship() + OBJ_VEL_FRAC + 2 * a, 0);
+	}
 }
 
 int cheat_dust(CheatDust *out, int max)
@@ -753,6 +859,44 @@ const char *cheat_enter_system(unsigned id)
 	}
 	fe2vm_end_keep();
 	return NULL;
+}
+
+/* Pick a star as the galaxy map does when it is clicked: the selection (948) and the
+ * distance to it (L849a2 -> 1044), leaving where the player is (936) alone */
+const char *cheat_select_system(unsigned id)
+{
+	fe2vm_regs r;
+	fe2vm_begin();
+	memset(&r, 0, sizeof(r));
+	r.d[0] = 2;
+	r.d[1] = id;
+	if (game_call(FE2_L83b46, &r) || (int)r.d[0] == -1)
+	{
+		fe2vm_end();
+		return "No such system.";
+	}
+	for (int i = 0; i < 3; i++)
+		wrlong(a6(A6_GALMAP_SEL_POS) + 4 * i, (int)r.d[1 + i]);
+	wrbyte(a6(977), (u8)rdbyte(a6(977)) | 0x80); /* "a star is selected" (L842b4), the jump icon and L814dc test it */
+	u32 number = r.d[7], type = r.d[6];
+	memset(&r, 0, sizeof(r));
+	r.d[5] = number;
+	r.d[6] = type;
+	game_call(FE2_L849a2, &r);
+	fe2vm_end_keep();
+	return NULL;
+}
+
+/* Start a hyperspace jump to the selected star: the galaxy module's entry 8 (L814dc), with its own
+ * state, range and fuel checks. Returns the flight state after (8 = in hyperspace) */
+int cheat_hyperspace(void)
+{
+	fe2vm_regs r;
+	fe2vm_begin();
+	memset(&r, 0, sizeof(r));
+	game_call((u32)rdlong(a6(140)) + 8, &r);
+	fe2vm_end_keep();
+	return (u8)rdbyte(a6(704));
 }
 
 void cheat_broadcast_event(int event)

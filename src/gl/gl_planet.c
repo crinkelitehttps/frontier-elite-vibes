@@ -4,6 +4,7 @@
  * when that shape can't be read.
  */
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -365,6 +366,104 @@ static void exact_distance(NativePlanet *n)
 		n->pos[i] *= k;
 }
 
+/* The game's planet position and axes come rounded (steps of ~500 km at Earth's centre, and 190 km from
+ * the 16-bit words of each), so the ground under the eye jumped by that much while the height stayed smooth,
+ * most when the ship pitched. Both are rebuilt from the ship's exact position and its matrix made orthonormal
+ * in double: in the planet's frame the sub-eye point is then just the exact position's direction. */
+static void exact_view(double pos[3], float axes[9], unsigned obj)
+{
+	double r[3], col[3][3];
+	unsigned me;
+	double len = sqrt(pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]);
+	if (len <= 0 || !cheat_ship_object(&me) || !cheat_ship_body_vector(obj, r))
+		return;
+	double rl = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
+	if (rl <= 0)
+		return;
+	/* the ship's axes, orthonormal in double: column i = (right, up, forward)[i] in the ship's frame, which is
+	 * the planet's own (the game's surface axes are this matrix transposed, but skewed by ~3 mrad) */
+	cheat_object_axes(me, col);
+	double e[3], a[3][3]; /* e: centre in ship axes; a[j]: the planet's axis j in ship axes */
+	for (int c = 0; c < 3; c++)
+	{
+		e[c] = (col[c][0] * r[0] + col[c][1] * r[1] + col[c][2] * r[2]) / rl;
+		for (int j = 0; j < 3; j++)
+			a[j][c] = col[c][j];
+	}
+	/* The game's position has z flipped against its axes (the shader flips it back): work in the axes' view. The
+	 * view (front, rear, side) is a signed permutation of the ship's axes: take the one that agrees with the
+	 * game's own vector. */
+	double gp[3] = {pos[0] / len, pos[1] / len, -pos[2] / len};
+	/* The direction alone can't tell them apart when two of its components are equal (a swapped view fits as
+	 * well, and the ground came out inverted on and off while the ship turned); the game's three surface axes
+	 * can: score a view by how well its axes agree with them as well. */
+	double ga[3][3];
+	for (int j = 0; j < 3; j++)
+	{
+		double l = sqrt(axes[3 * j] * axes[3 * j] + axes[3 * j + 1] * axes[3 * j + 1] + axes[3 * j + 2] * axes[3 * j + 2]);
+		for (int k = 0; k < 3; k++)
+			ga[j][k] = l > 0 ? axes[3 * j + k] / l : 0;
+	}
+	static const int perm[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+	double best = -2, bestscore = -10;
+	int bp = 0, bs = 0;
+	for (int pi = 0; pi < 6; pi++)
+		for (int sg = 0; sg < 8; sg++)
+		{
+			double d = 0, score = 0;
+			for (int k = 0; k < 3; k++)
+			{
+				double sgn = sg >> k & 1 ? -1.0 : 1.0;
+				d += sgn * e[perm[pi][k]] * gp[k];
+				for (int j = 0; j < 3; j++)
+					score += sgn * a[j][perm[pi][k]] * ga[j][k];
+			}
+			score += d;
+			if (score > bestscore)
+			{
+				bestscore = score;
+				best = d;
+				bp = pi;
+				bs = sg;
+			}
+		}
+	/* within ~14 mrad (the ship's matrix is a frame ahead or behind the game's camera while it turns); else
+	 * not the ship's own view */
+	if (best < 1 - 1e-4)
+		return;
+	double v[3], w[3][3];
+	for (int k = 0; k < 3; k++)
+	{
+		double sgn = bs >> k & 1 ? -1.0 : 1.0;
+		v[k] = sgn * e[perm[bp][k]];
+		for (int j = 0; j < 3; j++)
+			w[j][k] = sgn * a[j][perm[bp][k]];
+	}
+	/* Turn all of it about the eye, by the little that takes v to the game's own direction (its camera, which
+	 * the ship's matrix leads or lags by a frame): the planet's centre then sits where the game has it, and
+	 * the surface axes turn with it, so the point under the eye stays the exact one. */
+	double k[3] = {v[1] * gp[2] - v[2] * gp[1], v[2] * gp[0] - v[0] * gp[2], v[0] * gp[1] - v[1] * gp[0]};
+	double s = sqrt(k[0] * k[0] + k[1] * k[1] + k[2] * k[2]), c = v[0] * gp[0] + v[1] * gp[1] + v[2] * gp[2];
+	if (s > 1e-12)
+	{
+		for (int i = 0; i < 3; i++)
+			k[i] /= s;
+		for (int j = 0; j < 3; j++)
+		{
+			double kw = k[0] * w[j][0] + k[1] * w[j][1] + k[2] * w[j][2];
+			double cr[3] = {k[1] * w[j][2] - k[2] * w[j][1], k[2] * w[j][0] - k[0] * w[j][2], k[0] * w[j][1] - k[1] * w[j][0]};
+			for (int i = 0; i < 3; i++)
+				w[j][i] = w[j][i] * c + cr[i] * s + k[i] * kw * (1 - c);
+		}
+	}
+	pos[0] = gp[0] * len;
+	pos[1] = gp[1] * len;
+	pos[2] = -gp[2] * len;
+	for (int j = 0; j < 3; j++)
+		for (int i = 0; i < 3; i++)
+			axes[3 * j + i] = (float)w[j][i];
+}
+
 static void record_native(const PlanetDesc *p)
 {
 	if (native_mode() != 2)
@@ -385,6 +484,15 @@ static void record_native(const PlanetDesc *p)
 	n->stand_in = false;
 	float pos[3], v[3];
 	vec3i_to_f(p->pos, pos);
+	float axes[9];
+	memcpy(axes, p->axes, sizeof axes);
+	if (ahead && game_screen() == SCREEN_FLIGHT && game_flight_view() != VIEW_EXTERNAL)
+	{
+		double dp[3] = {pos[0], pos[1], pos[2]};
+		exact_view(dp, axes, obj);
+		for (int k = 0; k < 3; k++)
+			pos[k] = (float)dp[k];
+	}
 	cockpit_pass_to_view(pos, v);
 	for (int k = 0; k < 3; k++)
 		n->pos[k] = v[k];
@@ -393,7 +501,7 @@ static void record_native(const PlanetDesc *p)
 	n->shrink = native_frame_shrink(a6);
 	cockpit_pass_to_view(p->light, n->light);
 	for (int c = 0; c < 3; c++)
-		pass_to_view_game(&p->axes[3 * c], &n->axes[3 * c]);
+		pass_to_view_game(&axes[3 * c], &n->axes[3 * c]);
 	n->light_col = p->light_col;
 	n->obj_col = p->obj_col;
 	memcpy(n->palette, p->palette, sizeof n->palette);

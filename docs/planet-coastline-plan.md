@@ -1,6 +1,6 @@
 # Plan: sharp, steady coastlines that gain detail as you approach
 
-Status 2026-11-01: phase 1 implemented (untested visually, uncommitted); phases 0, 2, 3 not started. Background (data format, the fractal, the current texture
+Status 2026-11-02: phase 0 done (see its Findings); phase 1 implemented (untested visually, uncommitted); phases 0, 2, 3 not started. Background (data format, the fractal, the current texture
 and shader): `docs/planet-textures.md`; read sections 3, 5 and 6 of it first.
 
 ## Goal
@@ -63,6 +63,25 @@ make any jiggle **more** visible, not less.
      moves the ground in and out, not sideways; it should not cause sideways jiggle but log it anyway.
 4. Note that the cockpit's turned passes (`pass_to_view_game`) rotate `axes` too; whatever is fixed must be
    applied in both `draw_planet()` and `planet_native_draw()` paths (`SphereIn.axes`).
+
+**Findings and fix (2026-11-01/02, done, user-tested on saves `jiggle`, `jiggle2`, `jiggle3`):** the jiggle was **not** the
+orientation words alone. The game's planet position (`PlanetDesc.pos`) is rounded (steps of ~8e-5 rad, hundreds of km at
+Earth's centre) and its surface axes (`A6-36`) are rounded and skewed by ~3 mrad separately, so the point under the eye
+jumped by tens to hundreds of km while the height stayed smooth, most when the ship pitched or turned.
+- In a ship whose frame parent is the planet, the ship's position and matrix are in the **planet's own frame**, and the
+  game's surface axes are the ship's matrix transposed (x ~0.985). So the sub-eye point is just the direction of the
+  exact 64-bit position, and the matrix cancels if both the centre and the axes are built from the same one.
+- `exact_view()` in `gl_planet.c` (called from `record_native`, own flight views only, ahead pass, parent == planet):
+  builds the centre direction and the axes from the exact position and the ship's matrix made orthonormal in double
+  (`cheat_object_axes`), picks the view (a signed permutation of the ship's axes) by matching the game's position
+  **and** its axes, then turns both about the eye by the little (<= ~3.5 mrad) that puts the centre where the game's own
+  camera has it (the ship's matrix leads or lags the camera by a frame while turning).
+- Pitfalls found on the way: the game's position has z flipped against its axes (match in the axes' convention); matching
+  on the position alone is ambiguous when two components of the direction are equal (inverted terrain on and off);
+  never fall back to the game's skewed axes mid-turn.
+- Test aids: script command `yaw DEG` (turns the ship about its up axis), saves `jiggle*`.
+- Not done: the planet's own spin steps (16-bit words, ~190 km) were never seen; other views/planets/stand-in
+  (remembered) planets not examined.
 
 Done when: the logged sub-eye point moves smoothly (no steps above a metre or so) and the user sees no jiggle.
 

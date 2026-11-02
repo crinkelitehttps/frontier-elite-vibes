@@ -12,11 +12,14 @@
  *     wait SECONDS
  *   moving (the cheat menu's Location section, cheats.h)
  *     enter ID           make the system with this id (hex, as in tools/galaxy_catalog) the current one
+ *     select ID          pick this system on the galaxy map (as a click does)
+ *     jump               start a real hyperspace jump to the selected system (the game's checks)
  *     event N            send event N to the game's modules (16: hyperspace arrival, makes pirates)
  *     goto NAME KM       KM above planet NAME's surface, or from station NAME; NAME may be
  *                        @planet, @star, @station for the first of that kind
  *     pos X Y Z          km from the centre of the body the ship is relative to
  *     stop               zero velocity
+ *     yaw DEG            turn the ship about its up axis, to starboard when positive
  *   the ship
  *     refuel, repair, cash CREDITS
  *   input
@@ -29,6 +32,9 @@
  *     ships              the other ships, nearest first (the menu's ship log)
  *     peek [b|w|l] ADDR  read game memory (ADDR: a number, or a6+N for a game global)
  *     poke [b|w|l] ADDR VALUE
+ *     astlog N [VX VY VZ] for the next N host updates print one line each: game seconds, asteroid
+ *                        count/cap, then every asteroid (slot, km from the ship per axis, +95 byte);
+ *                        with VX VY VZ also hold the ship's raw velocity (+98) at that each update
  *     snap               write savs/SnapNN
  *     echo TEXT
  *     quit
@@ -309,6 +315,27 @@ static void cmd_dust(void)
 	say("%d dust", count);
 }
 
+static int astlog_left, astlog_hold, astlog_vel[3];
+
+static void astlog_poll(void)
+{
+	if (astlog_left <= 0)
+		return;
+	astlog_left--;
+	if (astlog_hold)
+		cheat_ship_set_velocity(astlog_vel);
+	CheatAsteroid a[CHEAT_SHIPS_MAX];
+	int n = cheat_asteroids(a, CHEAT_SHIPS_MAX);
+	double t = ((double)(uint32_t)rdlong(GAME_A6 + 528) * 4294967296.0 + (uint32_t)rdlong(GAME_A6 + 524)) / 49710.0;
+	char line[8192];
+	int len = snprintf(line, sizeof(line), "AST %.3f %d %d %d %d", t, (uint8_t)rdbyte(GAME_A6 + 13352),
+		(uint8_t)rdbyte(GAME_A6 + 13353), (int)(uint16_t)rdword(GAME_A6 + 14486), n);
+	for (int i = 0; i < n && len < (int)sizeof(line) - 64; i++)
+		len += snprintf(line + len, sizeof(line) - len, " %d:%.2f,%.2f,%.2f,%d", a[i].slot, a[i].rel_km[0],
+			a[i].rel_km[1], a[i].rel_km[2], a[i].b95);
+	say("%s", line);
+}
+
 static void cmd_bodies(void)
 {
 	CheatBody bodies[64];
@@ -378,6 +405,13 @@ static void run(char *line)
 		const char *why = cheat_enter_system((unsigned)strtoul(args, NULL, 16));
 		say("enter %s: %s", args, why ? why : "ok");
 	}
+	else if (!strcmp(line, "select"))
+	{
+		const char *why = cheat_select_system((unsigned)strtoul(args, NULL, 16));
+		say("select %s: %s (distance word %u)", args, why ? why : "ok", (unsigned)(uint32_t)rdlong(GAME_A6 + 1044));
+	}
+	else if (!strcmp(line, "jump"))
+		say("jump: flight state %d", cheat_hyperspace());
 	else if (!strcmp(line, "event"))
 		cheat_broadcast_event(atoi(args));
 	else if (!strcmp(line, "goto"))
@@ -390,6 +424,8 @@ static void run(char *line)
 	}
 	else if (!strcmp(line, "stop"))
 		cheat_ship_stop();
+	else if (!strcmp(line, "yaw"))
+		cheat_ship_yaw(atof(args));
 	else if (!strcmp(line, "refuel"))
 		cheat_refuel();
 	else if (!strcmp(line, "repair"))
@@ -422,6 +458,8 @@ static void run(char *line)
 		cmd_ships();
 	else if (!strcmp(line, "dust"))
 		cmd_dust();
+	else if (!strcmp(line, "astlog"))
+		astlog_hold = sscanf(args, "%d %d %d %d", &astlog_left, &astlog_vel[0], &astlog_vel[1], &astlog_vel[2]) == 4;
 	else if (!strcmp(line, "snap"))
 	{
 		char name[32];
@@ -500,6 +538,7 @@ static int wait_done(void)
 void script_poll(void)
 {
 	read_control();
+	astlog_poll();
 	for (int guard = 0; guard < 64; guard++)
 	{
 		if (waiting != IDLE)

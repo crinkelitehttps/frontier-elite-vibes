@@ -262,7 +262,7 @@ Both start from the same 92 points, so neither shows a better Earth.
 
 ## 7. What could make Earth better
 
-Ranked from least to most work. None is done.
+Ranked from least to most work. None is done. The chosen plan (options 2 and 3 as a clipmap, option 5 for Earth, plus a jiggle fix) is in `docs/planet-coastline-plan.md`.
 
 1. **Sharper edges, same shapes** (small): render the codes at 4096 x 2048 or more, or split 8 levels instead
    of 6. Sharper coasts close up, more fractal wiggle, still the 1980s continents. Memory: 8 MB per 4K code
