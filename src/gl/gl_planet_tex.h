@@ -52,6 +52,10 @@ typedef struct
 	bool lit_colours;              /* 8-15 are the game's (else copies of 0-7) */
 } PlanetSurface;
 
+/* Earth (model 72) is drawn from traced coastlines (gl_earth_outlines.h) instead of the game's 92 points;
+ * glfrontier.cfg planet_earth_outlines */
+extern bool planet_earth_outlines;
+
 /* Checks that `s` parses to exactly its length */
 bool planet_surface_valid(const PlanetSurface *s);
 /* The surface texture for `s`: for each of the feature code's bits 2, 3, 4

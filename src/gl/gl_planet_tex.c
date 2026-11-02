@@ -2,6 +2,9 @@
  * gl_planet_tex.c - see gl_planet_tex.h.
  */
 #include <math.h>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,6 +12,7 @@
 
 #include "gl_planet_tex.h"
 #include "main.h"
+#include "gl_earth_outlines.h"
 
 #define TEX_W 2048
 #define TEX_H 1024
@@ -60,6 +64,8 @@ typedef struct
 	float points[MAX_POINTS][3];
 	int n_points;
 } Parsed;
+
+bool planet_earth_outlines = true;
 
 static int s8(int b)
 {
@@ -180,6 +186,42 @@ bool planet_surface_valid(const PlanetSurface *s)
 {
 	static Parsed p;
 	return s->len > 0 && s->len <= PLANET_DATA_MAX && parse(s, &p);
+}
+
+/* Earth (model 72: 372 bytes, 11 outlines, 92 points): swap the outlines for the traced ones. Circles
+ * (ice caps) stay. Real (lat, lon) to the game's mirrored axes. */
+static void use_earth_outlines(const PlanetSurface *s, Parsed *p)
+{
+	if (!planet_earth_outlines || s->len != 372 || s->data[0] != 0x82 || s->data[1] != 0x26 || p->n_outlines != 11 ||
+		p->n_points != 92)
+		return;
+	int n = 0;
+	for (int f = 0; f < p->n_features; f++)
+		if (p->features[f].circle)
+			p->features[n++] = p->features[f];
+	p->n_features = n;
+	p->n_outlines = 0;
+	p->n_points = 0;
+	for (int r = 0; r < EARTH_N_RINGS; r++)
+	{
+		if (p->n_features >= MAX_FEATURES || p->n_points + earth_rings[r][1] > MAX_POINTS)
+			break;
+		Outline *o = &p->outlines[p->n_outlines];
+		o->code = 4;
+		o->detail = EARTH_DETAIL;
+		o->first = p->n_points;
+		o->count = earth_rings[r][1];
+		for (int i = 0; i < o->count; i++)
+		{
+			double lat = earth_points[earth_rings[r][0] + i][0] * M_PI / 180.0;
+			double lon = -earth_points[earth_rings[r][0] + i][1] * M_PI / 180.0;
+			float *v = p->points[p->n_points++];
+			v[0] = (float)(cos(lat) * sin(lon));
+			v[1] = (float)sin(lat);
+			v[2] = (float)(cos(lat) * cos(lon));
+		}
+		p->features[p->n_features++] = (Feature){false, p->n_outlines++};
+	}
 }
 
 /* ---- outlines ------------------------------------------------------------ */
@@ -417,6 +459,7 @@ static GLuint make_texture(const PlanetSurface *s)
 	static Parsed p;
 	if (!parse(s, &p))
 		return 0;
+	use_earth_outlines(s, &p);
 	Uint64 t0 = SDL_GetPerformanceCounter();
 	uint8_t *codes = calloc((size_t)TEX_W * TEX_H, 1);
 	uint8_t *ud = malloc((size_t)TEX_W * TEX_H * 3);

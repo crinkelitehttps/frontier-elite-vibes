@@ -169,8 +169,15 @@ static void capture_palette(PlanetDesc *p)
 				same++;
 			if (same == 16 && p->surface_ok)
 				return;
+			/* The game leaves colours its view doesn't use at 0 (the lit
+			 * table's ice, with the pole in view: black ice on the sphere):
+			 * keep the frame's own for those */
 			for (int k = 0; k < 16; k++)
-				p->palette[k] = (uint16_t)(p->list[i + 1 + k] & 0xfff);
+			{
+				uint16_t c = (uint16_t)(p->list[i + 1 + k] & 0xfff);
+				if (c || !p->surface_ok || !p->palette[k])
+					p->palette[k] = c;
+			}
 			return;
 		}
 		default:
@@ -813,7 +820,9 @@ static const char *FS_SPHERE =
 	"  if (uTextured != 0) {\n"
 	"    vec3 p = normalize(uToLocal * n);\n"
 	"    vec2 uv = vec2(atan(p.x, p.z) / 6.2831853 + 0.5, acos(clamp(p.y, -1.0, 1.0)) / 3.14159265);\n"
-	"    float lit = smoothstep(-0.03, 0.03, dot(normalize(n), uLightDir));\n"
+	/* a hard terminator, one pixel wide: the game's flat shaded look */
+	"    float ld = dot(normalize(n), uLightDir);\n"
+	"    float lit = clamp(ld / max(fwidth(ld), 1e-6) + 0.5, 0.0, 1.0);\n"
 	/* three signed distances (0.5 on the edge), one per colour bit: each bit's
 	 * coverage is about one pixel wide, whatever the zoom; the colour mixes
 	 * the eight palette entries by the coverages */
@@ -827,7 +836,7 @@ static const char *FS_SPHERE =
 		"    }\n"
 		"    fragColor = vec4(col, 1.0);\n"
 	"  } else\n"
-	"    fragColor = vec4(clamp(uAmbient + l * uDiffuse, 0.0, 1.0), 1.0);\n"
+	"    fragColor = vec4(clamp(uAmbient + (l > 0.0 ? 1.0 : 0.0) * uDiffuse, 0.0, 1.0), 1.0);\n"
 	"}\n";
 
 /* An atmosphere band: the directions between two angles from the planet's */

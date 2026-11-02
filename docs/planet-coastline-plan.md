@@ -284,3 +284,15 @@ makes low flight look right. Phase 3 can be done any time after phase 1.
 2. Earth's point budget is **about 1,000 points** (fits the original game's ~1,300-point format limit too,
    though this plan does not put it back into the game).
 3. Other planets: nothing to decide for phase 3 (model 72 is Earth only); phases 0-2 improve every planet.
+
+## Status (2026-11-02)
+
+Phase 3 is implemented, uncommitted, smoke-tested in a scratch build (`build-smoke`): `tools/planet_outlines/trace.py`
+(Natural Earth 1:110m, 49 rings simplified to 1,000 points, Antarctica and rings under 25,000 km² dropped; the
+Caspian is a hole) writes `src/gl/gl_earth_outlines.h` (real lat/lon). `use_earth_outlines()` in `gl_planet_tex.c`
+swaps model 72's 11 outlines for them (circles kept) when `planet_earth_outlines=1` (default; glfrontier.cfg).
+The frame mapping was checked with `trace.py --game-hex HEX --overlay PNG` (HEX = `devtools/models/praw 72`
+output): the game's red coarse outlines follow the traced green ones. Detail byte is `--detail 1` (first-level
+wiggle about 6 km, for edges around 150 km): tune by eye. Not done: phase 2 (clipmap).
+
+Fix 2026-11-02 (save `colorinv`): with the pole in view the game's 2D colour list (PL_COLOURS) holds 0 for colours its view doesn't use, here the lit table's ice (entries 10, 11): the sphere drew black ice. `capture_palette` in gl_planet.c now keeps the frame's own colour where the list gives 0 and the frame's isn't.

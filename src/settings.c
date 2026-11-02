@@ -19,6 +19,7 @@
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
+#include "gl/gl_planet_tex.h"
 #include "gl/gl_mapscreen.h"
 #include "gl/gl_native.h"
 #include "gl/gl_screen_place.h"
@@ -51,6 +52,7 @@ typedef struct
 	int cockpit_ship_live;
 	int cockpit_fov;
 	int own_hud;
+	int planet_earth_outlines;
 	int headtrack;
 	int headtrack_port;
 	int vr;
@@ -97,6 +99,7 @@ static const struct
 	{"cockpit_ship_live", offsetof(Settings, cockpit_ship_live)},
 	{"cockpit_fov", offsetof(Settings, cockpit_fov)},
 	{"own_hud", offsetof(Settings, own_hud)},
+	{"planet_earth_outlines", offsetof(Settings, planet_earth_outlines)},
 	{"headtrack", offsetof(Settings, headtrack)},
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
 	{"vr", offsetof(Settings, vr)},
@@ -213,6 +216,7 @@ static Settings current(void)
 	s.cockpit_ship_live = cockpit_ship_live;
 	s.cockpit_fov = cockpit_fov;
 	s.own_hud = own_hud;
+	s.planet_earth_outlines = planet_earth_outlines;
 	s.headtrack = headtrack_enabled;
 	s.headtrack_port = headtrack_port;
 	s.vr = settings_vr_arg >= 0 ? file_vr : vr_enabled;
@@ -264,6 +268,7 @@ static void apply(const Settings *s)
 	if (s->cockpit_fov >= 30 && s->cockpit_fov <= 120)
 		cockpit_fov = s->cockpit_fov;
 	own_hud = s->own_hud != 0;
+	planet_earth_outlines = s->planet_earth_outlines != 0;
 	headtrack_enabled = s->headtrack != 0;
 	if (s->headtrack_port > 0 && s->headtrack_port < 65536)
 		headtrack_port = s->headtrack_port;
