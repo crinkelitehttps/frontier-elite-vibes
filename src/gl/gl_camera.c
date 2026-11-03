@@ -420,6 +420,10 @@ static void batch_hcalls(void)
 	hcalls[0x8a] = cam_no; /* Call_ScreenLeave */
 	hcalls[0x8b] = cam_no; /* Call_StationResume */
 	hcalls[0x8c] = cam_no; /* Call_ScreenWorld */
+	/* the host scenery's loop in the object loop (Lvirt_a) runs until this answers 0: left
+	 * to cam_nothing it never ended */
+	hcalls[0x9e] = cam_no; /* Call_VirtNext */
+	hcalls[0x9f] = cam_no; /* Call_ScenDrive */
 }
 
 /* =========================================================================
