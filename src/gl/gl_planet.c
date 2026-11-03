@@ -107,6 +107,9 @@ static void capture_list(PlanetDesc *p, int n)
  * planet routine (fuck_planet), whose frame (A3) has been given back: its
  * first words still hold the colours and the data's size, and A5 has gone
  * just past the data. */
+static uint32_t sea_obj[4];
+static PlanetSurface sea_surface[4];
+
 static void capture_surface(PlanetDesc *p)
 {
 	PlanetSurface *s = &p->surface;
@@ -128,6 +131,39 @@ static void capture_surface(PlanetDesc *p)
 	for (int i = 0; i < 16; i++)
 		s->colours[i] = (uint16_t)(STMemory_ReadWord(a3 + 2 * (uint32_t)(s->lit_colours ? i : i & 7)) & 0xfff);
 	p->surface_ok = planet_surface_valid(s);
+	if (p->surface_ok)
+	{
+		/* kept for planet_is_sea, by planet object */
+		static int next;
+		int k = -1;
+		for (int i = 0; i < 4; i++)
+			if (sea_obj[i] == obj)
+				k = i;
+		if (k < 0)
+		{
+			k = next;
+			next = (next + 1) & 3;
+		}
+		sea_obj[k] = obj;
+		sea_surface[k] = *s;
+	}
+}
+
+/* Game thread: 1 if the point `rel` (mm, game axes, from the centre of the planet object `obj`) is sea, 0 if
+ * not, -1 if unknown (the planet's surface not seen yet, or no outlines) */
+int planet_is_sea(uint32_t obj, const double rel[3])
+{
+	for (int i = 0; i < 4; i++)
+		if (sea_obj[i] == obj)
+		{
+			double l = sqrt(rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]);
+			if (l <= 0)
+				return -1;
+			/* the game's own axes (checked on Earth: London land, 20 E on the equator land, 20 W sea) */
+			float v[3] = {(float)(rel[0] / l), (float)(rel[1] / l), (float)(rel[2] / l)};
+			return planet_surface_is_sea(&sea_surface[i], v);
+		}
+	return -1;
 }
 
 /* The colours the game fills this planet with (its 2D shape's first colour

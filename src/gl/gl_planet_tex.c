@@ -454,13 +454,12 @@ static void fill_circle(uint8_t *codes, uint8_t *ud, const float c[3], float cos
 
 /* ---- the texture ---------------------------------------------------------- */
 
-static GLuint make_texture(const PlanetSurface *s)
+/* The feature codes (and the unsigned edge distances) of the planet's surface; the caller frees both. */
+static bool build_grids(const PlanetSurface *s, Parsed *p, uint8_t **codes_out, uint8_t **ud_out)
 {
-	static Parsed p;
-	if (!parse(s, &p))
-		return 0;
-	use_earth_outlines(s, &p);
-	Uint64 t0 = SDL_GetPerformanceCounter();
+	if (!parse(s, p))
+		return false;
+	use_earth_outlines(s, p);
 	uint8_t *codes = calloc((size_t)TEX_W * TEX_H, 1);
 	uint8_t *ud = malloc((size_t)TEX_W * TEX_H * 3);
 	if (ud)
@@ -473,7 +472,7 @@ static GLuint make_texture(const PlanetSurface *s)
 		free(codes);
 		free(ud);
 		free(sp.pts);
-		return 0;
+		return false;
 	}
 	/* the radius word as the game normalises it: top bit at 14 */
 	unsigned rw = s->radius_word ? s->radius_word : 0x4000;
@@ -484,11 +483,11 @@ static GLuint make_texture(const PlanetSurface *s)
 	sp.scale = 16384.0f / (float)rw;
 	sp.rng = s->seed;
 
-	for (int f = 0; f < p.n_features; f++)
+	for (int f = 0; f < p->n_features; f++)
 	{
-		if (p.features[f].circle)
+		if (p->features[f].circle)
 		{
-			const Circle *c = &p.circles[p.features[f].index];
+			const Circle *c = &p->circles[p->features[f].index];
 			/* the game draws each as four edges (start vertex, three
 			 * arcs and the close) and moves its sequence once per edge */
 			for (int k = 0; k < (c->both ? 2 : 1); k++)
@@ -503,10 +502,10 @@ static GLuint make_texture(const PlanetSurface *s)
 			}
 			continue;
 		}
-		const Outline *o = &p.outlines[p.features[f].index];
+		const Outline *o = &p->outlines[p->features[f].index];
 		sp.n = 0;
 		sp.detail = o->detail;
-		const float(*pts)[3] = (const float(*)[3])p.points[o->first];
+		const float(*pts)[3] = (const float(*)[3])p->points[o->first];
 		out_point(&sp, pts[0]);
 		for (int i = 1; i <= o->count; i++)
 			split_edge(&sp, pts[i - 1], pts[i % o->count], 0);
@@ -515,6 +514,18 @@ static GLuint make_texture(const PlanetSurface *s)
 		fill_polygon(codes, ud, sp.pts, sp.n, o->code);
 	}
 	free(sp.pts);
+	*codes_out = codes;
+	*ud_out = ud;
+	return true;
+}
+
+static GLuint make_texture(const PlanetSurface *s)
+{
+	static Parsed p;
+	Uint64 t0 = SDL_GetPerformanceCounter();
+	uint8_t *codes, *ud;
+	if (!build_grids(s, &p, &codes, &ud))
+		return 0;
 
 	/* signed distances: 127.5 on the edge, 128..255 inside, 0..127 outside */
 	for (size_t i = 0; i < (size_t)TEX_W * TEX_H; i++)
@@ -599,4 +610,55 @@ void planet_tex_shutdown(void)
 		cache[i].key = 0;
 		cache[i].tex = 0;
 	}
+}
+
+/* ---- land/sea lookup on the CPU ------------------------------------------ */
+
+#define SEA_SLOTS 4
+
+static struct
+{
+	uint32_t key;
+	uint8_t *codes; /* TEX_W * TEX_H feature codes */
+	bool has_land;  /* the planet has outlines: code 0 is then its sea */
+} sea_cache[SEA_SLOTS];
+static int sea_next;
+
+/* 1 for sea (the base region of a planet with outlines), 0 for land, ice, craters; -1 when the planet has no
+ * outlines or its surface can't be read. v: a direction in the planet's own axes (as the texture's). */
+int planet_surface_is_sea(const PlanetSurface *s, const float v[3])
+{
+	uint32_t key = surface_key(s);
+	int slot = -1;
+	for (int i = 0; i < SEA_SLOTS; i++)
+		if (sea_cache[i].key == key)
+			slot = i;
+	if (slot < 0)
+	{
+		static Parsed p;
+		uint8_t *codes, *ud;
+		slot = sea_next;
+		sea_next = (sea_next + 1) % SEA_SLOTS;
+		free(sea_cache[slot].codes);
+		sea_cache[slot].codes = NULL;
+		sea_cache[slot].key = key;
+		if (build_grids(s, &p, &codes, &ud))
+		{
+			free(ud);
+			sea_cache[slot].codes = codes;
+			sea_cache[slot].has_land = p.n_outlines > 0;
+		}
+	}
+	if (!sea_cache[slot].codes || !sea_cache[slot].has_land)
+		return -1;
+	float x, y;
+	to_tex(v, &x, &y);
+	int ix = (int)x % TEX_W, iy = (int)y;
+	if (ix < 0)
+		ix += TEX_W;
+	if (iy < 0)
+		iy = 0;
+	if (iy >= TEX_H)
+		iy = TEX_H - 1;
+	return (sea_cache[slot].codes[iy * TEX_W + ix] & 0x1c) == 0;
 }

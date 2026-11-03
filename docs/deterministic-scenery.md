@@ -43,6 +43,17 @@ Nothing depends on the direction of travel: a copy exists if it is within the ra
 model's own limits. `scenery_radius_km` (glfrontier.cfg, default 80, 0 = none) is the one number; at 80 km there are
 about 50-70 copies. The object cap and `scenery_rear_limit` no longer matter for these (real objects are deleted at once).
 
+## 2a. Sea: clouds only
+
+Over the planet's sea only cloud fields are made. `Call_ScenNext` asks `planet_is_sea` (`gl_planet.c`; it keeps the
+surface data the planet draw captured, per planet object, and `planet_surface_is_sea` in `gl_planet_tex.c` looks the
+point up in the same feature-code grid the native texture is made from) whether the cell's point is in the base
+region of a planet that has outlines (code 0, the colour the continents sit in). If so, the kind becomes the first
+entry of the planet type's row (`Lscen_rows`, the game's kind table) whose model is 99 (`$c6`, clouds); a row with
+none makes no feature there. Planets without outlines are not tested. The direction is the point's game
+position as it is (checked on Earth: London and 20 E on the equator are land, 20 W is sea; a z flip, as `exact_view`
+uses, gave sea at London). [inferred] That code 0 is the liquid on every planet with outlines is not checked.
+
 ## 3. Limits
 
 - Cells are made every frame the object loop runs with the ship in flight and "dust and clouds" on, at any altitude and in

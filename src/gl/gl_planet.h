@@ -68,6 +68,7 @@ typedef struct
 	int16_t list[];    /* list_len words; colour tables already hold rgb444 */
 } PlanetDesc;
 
+int planet_is_sea(uint32_t obj, const double rel[3]);
 void gl_planet_init(void);
 void gl_planet_shutdown(void);
 

@@ -231,6 +231,7 @@
 #define FE2_Lscen_t1                                 0x56432 /* Lscen_t1 */
 #define FE2_Lscen_t2                                 0x56438 /* Lscen_t2 */
 #define FE2_Lscen_ray                                0x56464 /* Lscen_ray */
+#define FE2_Lscen_rows                               0x5652a /* Lscen_rows */
 #define FE2_L62270_rts                               0x5696a /* L62270_rts */
 #define FE2_GenAsteroids                             0x56bec /* L624f2_GenAsteroids */
 #define FE2_PlayerControlUpdate                      0x56d00 /* L62606_PlayerControlUpdate */

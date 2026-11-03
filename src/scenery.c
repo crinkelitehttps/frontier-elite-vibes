@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "game_state.h"
+#include "gl/gl_planet.h"
 #include "host.h"
 #include "main.h"
 #include "scenery.h"
@@ -323,6 +324,23 @@ void Call_ScenNext(void)
 		len = sqrt(len);
 		if (len < 1)
 			continue;
+		/* over liquid sea only clouds: the kind becomes the first cloud of the planet type's row, none: no feature */
+		uint32_t kind = (h >> 8) & 7;
+		int row_i = (int)(uint16_t)rdword(planet + 90) - 0x7a;
+		if (row_i >= 0 && row_i <= 30 && planet_is_sea(planet, p) > 0)
+		{
+			uint32_t row = FE2_Lscen_rows + (uint32_t)(int32_t)(int16_t)rdword(FE2_Lscen_rows + (uint32_t)row_i);
+			uint32_t pick = 8;
+			for (uint32_t k = 0; k < 8 && pick == 8; k++)
+				if ((uint16_t)rdword(row + 4 * ((kind + k) & 7)) == 0xc6)
+					pick = (kind + k) & 7;
+			if (pick == 8)
+			{
+				tried_add(key);
+				continue;
+			}
+			kind = pick;
+		}
 		double up[3], origin[3];
 		for (int a = 0; a < 3; a++)
 		{
@@ -338,7 +356,7 @@ void Call_ScenNext(void)
 		SetReg(REG_D4, (int32_t)(-up[1] * 16384.0));
 		SetReg(REG_D5, (int32_t)(-up[2] * 16384.0));
 		wrlong(FE2_Lscen_h, (int32_t)h);
-		wrlong(FE2_Lscen_hk, (int32_t)(((h >> 8) & 7) * 4)); /* the kind: one of the planet type's 8 */
+		wrlong(FE2_Lscen_hk, (int32_t)(kind * 4)); /* the kind: one of the planet type's 8 */
 		wrlong(FE2_Lscen_ha, (int32_t)mix32(h, 0x3333));
 		tried_add(key);
 		pending_key = key;

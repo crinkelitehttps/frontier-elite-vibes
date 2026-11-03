@@ -66,5 +66,7 @@ bool planet_surface_valid(const PlanetSurface *s);
  * Made on first use and kept; 0 if it can't be made. Needs the GL context. */
 GLuint planet_surface_texture(const PlanetSurface *s);
 void planet_tex_shutdown(void);
+/* 1: the direction `v` (planet axes) is sea, 0: not, -1: the planet has no outlines or can't be read. CPU only. */
+int planet_surface_is_sea(const PlanetSurface *s, const float v[3]);
 
 #endif /* GL_PLANET_TEX_H */
