@@ -95,6 +95,32 @@ HOOKS = [
 ]
 
 
+# Byte signatures taken from fe2.s.bin ("??" = bytes of a relocated address,
+# which differ between releases): 12 bytes of context before and after each
+# hook, and 24 bytes at the start of each original routine the new code jumps
+# to. They are searched for in the executable, so the hooks and those routines
+# are found wherever the release has put them (the retail disk's FRONTIER.PRG
+# has the same code as fe2.s.bin about 0xb900 bytes further in).
+HOOK_SIG = [
+    "eea0eea1eea27c00de463607e243d647966900b04a69007a670000d448ae0007",
+    "????4a40670a5347d0406afa5247e2483200670000b4c1c0d0804840",
+    "670a5347d0406afa5247e2484ca90060007a4a40671a9c4748459a45e485",
+    "c6c5d68396434843cac5da83d081d082b085620001d24cdf00385c8f1c29",
+    "00dc4a68011667102e2e386ee28f9f68011664264268011608000001670c",
+    "00284cdf0240be576f72707208340004000056c8fff8670000543f006100",
+    "6100059208ae000000814e75b4a8000457cf00cc66ea4aa8000c664a48e70180",
+    "9c433a2e28c09c45e4459c45bc7c00086e0e422801194229006155466b00",
+]
+HOOK_CTX = 12
+TARGET_SIG = {   # name: (signature, offset in CAVE of the long to fill in)
+    "L44af8": ("d040224cd2fb00044e75007400d401f20310042e054c066a", 0x60),
+    "l7ee06": ("66ea4aa8000c664a48e7018070fd78ff0828000600026618", 0x90),
+    "l7edb4": ("b83c001c6604e099600ae40c48845244996e02e848e74180", 0xa0),
+    "l7ee7e": ("41e800100828000700026600ff66b4a8000457cfffec6600", 0xa6),
+    "L43926": ("de5f51476b3ce24764085247e240e241e24248a7e0004eb9", 0xf6),
+}
+
+
 def fail(msg):
     sys.exit("patch_atari: " + msg)
 
@@ -161,6 +187,22 @@ def find_unique(text, orig, ctx_before, ctx_after, masked):
     return hits
 
 
+def find_sig(text, sig, masked):
+    """Offsets where the signature matches (wildcards and relocated bytes of
+    the executable ignored)."""
+    pat = [None if sig[i:i + 2] == "??" else int(sig[i:i + 2], 16) for i in range(0, len(sig), 2)]
+    first = next(k for k, v in enumerate(pat) if v is not None)
+    hits = []
+    i = text.find(bytes([pat[first]]))
+    while i >= 0:
+        lo = i - first
+        if lo >= 0 and lo + len(pat) <= len(text) and all(
+                v is None or text[lo + k] == v for k, v in enumerate(pat)):
+            hits.append(lo)
+        i = text.find(bytes([pat[first]]), i + 1)
+    return hits
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("input")
@@ -194,18 +236,10 @@ def main():
     sites = {}
     plan = []
     for idx, (name, orig, hint, new) in enumerate(HOOKS):
-        around = 8
-        cb = bytes(d[HEADER + hint - around:HEADER + hint]) if hint >= around else b""
-        ca = bytes(d[HEADER + hint + len(orig):HEADER + hint + len(orig) + around])
-        # context for the search is taken from the file at the hint offset
-        # only if the original bytes are there; otherwise search without
-        if bytes(text[hint:hint + len(orig)]) == orig:
-            hits = find_unique(bytes(text), orig, cb, ca, masked)
-        else:
-            hits = find_unique(bytes(text), orig, b"", b"", masked)
-        if len(hits) != 1:
-            fail("%s: found %d places for %s (expected exactly 1); this executable is "
-                 "not one this patch knows" % (name, len(hits), orig.hex()))
+        hits = [h + HOOK_CTX for h in find_sig(bytes(text), HOOK_SIG[idx], masked)]
+        if len(hits) != 1 or bytes(text[hits[0]:hits[0] + len(orig)]) != orig:
+            fail("%s: found %d places (expected exactly 1); this executable is "
+                 "not one this patch knows" % (name, len(hits)))
         sites[idx] = hits[0]
         plan.append((name, hits[0], orig, new))
 
@@ -229,6 +263,11 @@ def main():
         text[at:at + len(orig)] = nb
         new_relocs.extend(at + o for o in absolute)
     code = bytearray(CAVE)
+    for tname, (tsig, coff) in TARGET_SIG.items():
+        th = find_sig(bytes(text), tsig, masked)
+        if len(th) != 1:
+            fail("original routine %s: found %d places (expected exactly 1)" % (tname, len(th)))
+        code[coff:coff + 4] = struct.pack(">L", th[0])
     new_relocs.extend(base + o for o in CAVE_RELOCS)
     print("  new code: %d bytes at $%05x, relocations at %s" % (
         len(code), base, ", ".join("$%x" % (base + o) for o in CAVE_RELOCS)))
