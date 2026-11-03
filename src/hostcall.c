@@ -9,6 +9,8 @@
  *   0x60-0x79  renderer hooks (renderer.h)
  */
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <SDL.h>
 #include <string.h>
 
@@ -19,6 +21,7 @@
 #include "gl/gl_hud.h"
 #include "gl/gl_native.h"
 #include "host.h"
+#include "cheats.h"
 #include "game_state.h"
 #include "hostcall.h"
 #include "input.h"
@@ -27,11 +30,13 @@
 #include "mods.h"
 #include "netplay.h"
 #include "renderer.h"
+#include "scenery.h"
 #include "screen_text.h"
 #include "shortcut.h"
 #include "script.h"
 #include "station_resume.h"
 #include "strafe.h"
+#include "spawn_log.h"
 #include "time_guard.h"
 
 /* D0.b = exception number, A0 = handler */
@@ -91,6 +96,7 @@ static void Call_HostUpdate(void)
 	station_resume_poll();
 	script_poll();
 	time_guard_update();
+	spawn_log_update();
 	PROF_END(PS_UPDATES, t);
 }
 
@@ -158,6 +164,30 @@ void Call_TargetRange(void)
 {
 	int e = target_range_au > 0 ? (int)floor(log2(target_range_au * MM_PER_AU)) - 14 : -32768;
 	SetReg(REG_D0, (uint16_t)(int16_t)e);
+}
+
+/* Scenery behind the ship despawns earlier (Lscen_despawn in fe2.s): the limit for the distance byte
+   at +95 (the game's own is 15), 0 = off. The game's own value for the ones ahead. */
+int scenery_rear_limit = 14;
+
+/* How many surface scenery objects the spawner keeps (the game's own cap is 15;
+   Lscen_cap in fe2.s). The 68k table holds 114 object slots shared with ships. */
+int scenery_cap = 15;
+
+void Call_ScenCap(void)
+{
+	SetReg(REG_D0, scenery_cap);
+}
+
+void Call_ScenRear(void)
+{
+	SetReg(REG_D0, scenery_rear_limit);
+}
+
+/* d0 = 1 when the object in a0 lies behind the ship (along its velocity, or its nose when it is slow) */
+void Call_ScenBehind(void)
+{
+	SetReg(REG_D0, cheat_scenery_behind((uint32_t)GetReg(REG_A0)) ? 1 : 0);
 }
 
 void Call_SmokeVel(void)
@@ -537,6 +567,13 @@ HOSTCALL hcalls[] = {
 	[0x96] = Call_SmokeVel,
 	[0x97] = Call_MineRadius,
 	[0x98] = Call_TargetRange,
+	[0x99] = Call_ScenRear,
+	[0x9a] = Call_ScenBehind,
+	[0x9b] = Call_ScenCap,
+	[0x9c] = Call_ScenNext,
+	[0x9d] = Call_ScenMade,
+	[0x9e] = Call_VirtNext,
+	[0x9f] = Call_ScenDrive,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

@@ -241,6 +241,9 @@ void page_settings()
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::SliderInt("##mineradius", &mine_radius_m, 10, 2000, "mine goes off within %d m", ImGuiSliderFlags_Logarithmic);
 	}
+	ImGui::TextWrapped("Surface scenery (buildings, rocks) kept around the ship at one time; the game's own is 15");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##scenerycap", &scenery_cap, 1, 60, "%d objects");
 
 	ui_heading("Detail");
 	ImGui::TextWrapped("Model detail kept to this many times farther than the game's Shape detail option (buildings, stations, ships; native scene only)");

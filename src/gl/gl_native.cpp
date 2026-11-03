@@ -23,6 +23,7 @@ extern "C"
 #include "game_state.h"
 #include "host.h"
 #include "main.h"
+#include "scenery.h"
 }
 
 #include "fe2core.h"
@@ -456,8 +457,9 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 	/* Already captured from another pass. Objects made up on the stack
 	 * (the hangar's) share addresses, but within one pass. */
 	int pass = scene_cur_pass();
+	uint32_t eff = scenery_virtual_id() ? 0xf0000000u + scenery_virtual_id() : addr;
 	for (int i = 0; i < rec.n; i++)
-		if (rec.obj[i].addr == addr && rec.obj[i].model == model && rec.obj[i].table == table &&
+		if (rec.obj[i].addr == eff && rec.obj[i].model == model && rec.obj[i].table == table &&
 			rec.obj[i].pass != pass)
 			return false;
 	return rec.n < MAX_OBJECTS;
@@ -502,7 +504,8 @@ static void capture_light(uint32_t a6, float light[3], uint16_t tint[8])
 static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int model)
 {
 	int pass = scene_cur_pass();
-	o.addr = addr;
+	/* the host's scenery copies share one buffer: each has an address of its own */
+	o.addr = scenery_virtual_id() ? 0xf0000000u + scenery_virtual_id() : addr;
 	o.table = table;
 	o.subtable = (uint32_t)rdlong(FE2_game_data);
 	o.pass = pass;

@@ -228,6 +228,9 @@
 #define FE2_mod_player                               0x55b62 /* L61468_mod_player */
 #define FE2_mod3_fn24_PlayerPhysics                  0x561ec /* L61af2_mod3_fn24_PlayerPhysics */
 #define FE2_mod3_fn16                                0x56218 /* L61b1e_mod3_fn16 */
+#define FE2_Lscen_t1                                 0x56432 /* Lscen_t1 */
+#define FE2_Lscen_t2                                 0x56438 /* Lscen_t2 */
+#define FE2_Lscen_ray                                0x56464 /* Lscen_ray */
 #define FE2_L62270_rts                               0x5696a /* L62270_rts */
 #define FE2_GenAsteroids                             0x56bec /* L624f2_GenAsteroids */
 #define FE2_PlayerControlUpdate                      0x56d00 /* L62606_PlayerControlUpdate */
@@ -437,5 +440,20 @@
 #define FE2_Lshuttle_roster                          0xa9ee0 /* Lshuttle_roster */
 #define FE2_Lshuttle_click_game                      0xa9f0c /* Lshuttle_click_game */
 #define FE2_Lshuttle_modstr                          0xa9f12 /* Lshuttle_modstr */
+#define FE2_Lscen_despawn                            0xa9f30 /* Lscen_despawn */
+#define FE2_Lscen_pick                               0xa9f58 /* Lscen_pick */
+#define FE2_Lscen_again                              0xa9f5c /* Lscen_again */
+#define FE2_Lscen_made                               0xa9f94 /* Lscen_made */
+#define FE2_Lscen_r1                                 0xa9fbe /* Lscen_r1 */
+#define FE2_Lscen_r2                                 0xa9fc4 /* Lscen_r2 */
+#define FE2_Lscen_idle                               0xa9fce /* Lscen_idle */
+#define FE2_Lscen_drive                              0xa9fd0 /* Lscen_drive */
+#define FE2_Lvirt_a                                  0xa9fee /* Lvirt_a */
+#define FE2_Lscen_v                                  0xaa02c /* Lscen_v */
+#define FE2_Lscen_h                                  0xaa05c /* Lscen_h */
+#define FE2_Lscen_hk                                 0xaa060 /* Lscen_hk */
+#define FE2_Lscen_ha                                 0xaa064 /* Lscen_ha */
+#define FE2_Lvirt_obj                                0xaa068 /* Lvirt_obj */
+#define FE2_Lscen_cap                                0xaa188 /* Lscen_cap */
 
 #endif /* FE2_LABELS_H */

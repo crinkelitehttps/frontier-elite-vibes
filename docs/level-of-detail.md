@@ -181,6 +181,10 @@ the crowd of ships parked at a starport) at random ray hits on the planet, about
 than 15 temporary objects exist. Each one's module (`L759dc`) removes it when `95(obj) >= $f` (d7 >= 15, about
 134 km of largest coordinate). There is no fade: objects pop in at the spawn point and out at the limit.
 
+[mod] Ground scenery is no longer made by the spawner into the object slots: the host keeps a copy of every feature
+within `scenery_radius_km` of the ship and the object loop draws them through `L390f2`, so each is shown, dotted or
+dropped by the model's own limits, by distance from the ship alone. See `docs/deterministic-scenery.md`.
+
 The issue 3 work-in-progress (cap 40, try rate `$8000`, despawn `$12`, spawn direction biased ahead) is in
 `git stash@{0}`, not in the current asm.
 

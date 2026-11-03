@@ -181,6 +181,16 @@ Call_SmokeVel	equ	$96
 Call_MineRadius	equ	$97
 * Target range: the farthest an object is still placed on the screen, d0 = exponent (glfrontier.cfg target_range_au).
 Call_TargetRange	equ	$98
+* Scenery behind the ship despawns earlier (glfrontier.cfg scenery_rear_limit).
+Call_ScenRear	equ	$99
+Call_ScenBehind	equ	$9a
+* Surface scenery: how many objects the spawner keeps, d0 = the cap (glfrontier.cfg scenery_cap).
+Call_ScenCap	equ	$9b
+* Surface scenery kept by the host (src/scenery.c): the next cell, the object made, the next copy to draw.
+Call_ScenNext	equ	$9c
+Call_ScenMade	equ	$9d
+Call_VirtNext	equ	$9e
+Call_ScenDrive	equ	$9f
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -26639,8 +26649,8 @@ L44420_star_light_tint_tables:
 
 L44480:
 		bset	#$1,A6_game_flags(a6)
-		bsr.w	L44252
-		move.w	d0,-(a7)
+* The host's scenery: hook, same size. See Lvirt_a at the end of the file.
+		jsr	Lvirt_a
 		move.w	#$72,d0
 	l44490:	btst	#$3,0(a4,d0.w)
 		dbne	d0,l44490
@@ -40610,7 +40620,8 @@ L61cf4:
 		nop
 	l61d00:	cmpi.l	#$1312d00,692(a6)
 		bhi.w	l61ef2
-	l61d0c:	cmpi.w	#$f,596(a6)
+* Scenery cap from the host. Hook, same size. See Lscen_cap at the end.
+	l61d0c:	jsr	Lscen_cap
 		bge.w	l61ef2
 		tst.b	A6_opt_dust_n_clouds(a6)
 		beq.w	l61ef2
@@ -40619,28 +40630,35 @@ L61cf4:
 		jsr	Ldust_gate
 		nop
 		jsr	A5_2RandInts(a5)
-		cmp.w	#$3332,d0
+		cmp.w	#$ffff,d0
 		bhi.w	l61ef2
-		jsr	A5_2RandInts(a5)
-		move.w	d0,d2
-		jsr	A5_2RandInts(a5)
-		jsr	768(a5)
-		movem.l	98(a0),d0-2
-		asl.l	#8,d0
-		asl.l	#8,d1
-		asl.l	#8,d2
-		move.w	2(a0),d6
-		swap	d6
-		asr.l	#6,d6
-		add.l	d6,d0
-		move.w	8(a0),d6
-		swap	d6
-		asr.l	#6,d6
-		add.l	d6,d1
-		move.w	14(a0),d6
-		swap	d6
-		asr.l	#6,d6
-		add.l	d6,d2
+* Deterministic scenery: hook, same size (56 bytes). The stubs are the calls
+* for the two random numbers further down. See Lscen_pick at the end of the file.
+		jmp	Lscen_idle
+Lscen_t1:
+		jmp	Lscen_r1
+Lscen_t2:
+		jmp	Lscen_r2
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+Lscen_ray:
 		move.b	670(a6),d6
 		movea.w	#$1a84,a2
 		move.l	#$3ffffff,d7
@@ -40675,7 +40693,7 @@ L61e30:
 		dc.b	$ff,$80,$ff,$80,$ff,$80,$ff,$80,$ff,$80,$ff,$e0,$ff,$e0,$ff,$a0
 		dc.b	$ff,$a0,$ff,$e0,$ff,$a0,$ff,$a0,$ff,$c0,$ff,$c0,$ff,$c0,$ff,$c0
 	l61e50:	move.w	L61e30(pc,d0.w),d2
-		jsr	A5_2RandInts(a5)
+		jsr	Lscen_t1(pc)
 		andi.w	#$1c,d0
 		add.w	d0,d2
 		movem.w	L61e30(pc,d2.w),d1-2
@@ -40686,7 +40704,7 @@ L61e30:
 		move.b	#$b,94(a1)
 		move.b	#$54,211(a1)
 		move.w	#$ffff,122(a1)
-		jsr	A5_2RandInts(a5)
+		jsr	Lscen_t2(pc)
 		move.l	d0,118(a1)
 		jsr	A5_MakeRotXYMatrix(a5)
 		movem.w	16252(a6),d0-2
@@ -40716,8 +40734,10 @@ L61e30:
 		ble.s	l61ef4
 	l61ee0:	movea.l	(a7)+,a0
 		movem.l	16282(a6),d0-5
-		movem.l	d0-5,44(a1)
-		clr.b	19(a1)
+* The new object goes to the host: hook, same size. See Lscen_made at the end of the file.
+		jsr	Lscen_made
+		nop
+		nop
 	l61ef2:	rts
 
 	l61ef4:	btst	#$0,893(a6)
@@ -40730,8 +40750,10 @@ L61e30:
 	l61f06:	move.w	#$c6,90(a1)
 		movea.l	(a7)+,a0
 		movem.l	16282(a6),d0-5
-		movem.l	d0-5,44(a1)
-		clr.b	19(a1)
+* The new object goes to the host too: hook, same size (see Lscen_made at the end of the file).
+		jsr	Lscen_made
+		nop
+		nop
 		rts
 
 L61f20:
@@ -51915,9 +51937,11 @@ L759cc:
 		jmp	468(a5)
 
 L759dc:
-		cmpi.b	#$f,95(a0)
-		blt.s	l759ca
-		jmp	474(a5)
+* Scenery behind the ship goes earlier. Hook, same size. See Lscen_despawn at the end of the file.
+		jmp	Lscen_despawn
+		nop
+		nop
+		nop
 
 L759e8:
 		bsr.w	L75248
@@ -69192,3 +69216,172 @@ lshuttle_modstr_afmu:
 		jmp	lafmu_strings_ours
 lshuttle_modstr_game:
 		jmp	lafmu_strings_game
+
+******************************************************************************
+* Scenery despawn (L759dc), nearer for objects behind the ship so that new ones
+* can be made ahead before the ship gets there (docs/level-of-detail.md
+* section 6). 95(a0) is the object's distance exponent less its size. At $f or
+* over the object always goes (the game's own rule). Between the host's limit
+* (glfrontier.cfg scenery_rear_limit; Call_ScenRear: d0 = the limit, 0 off)
+* and $f it goes only when the host says it lies behind the ship (d0 = 1 from
+* Call_ScenBehind, a0 = the object).
+******************************************************************************
+Lscen_despawn:
+		cmpi.b	#$f,95(a0)
+		bge.s	lscen_kill
+		movem.l	d0-1,-(a7)
+		hcall	#Call_ScenRear
+		tst.w	d0
+		beq.s	lscen_keep
+		cmp.b	95(a0),d0
+		bgt.s	lscen_keep
+		movem.l	(a7)+,d0-1
+lscen_kill:
+		jmp	474(a5)
+lscen_keep:
+		movem.l	(a7)+,d0-1
+		rts
+
+******************************************************************************
+* Scenery from the host (src/scenery.c). The spawner (L61cf4) no longer picks
+* its own places: Lscen_pick asks the host for the next cell of the ground
+* around the ship (nearest first), gets the ray that places it, and lets the
+* game's own code make the object (kind, matrix, height). Lscen_made then hands
+* the new object to the host, which keeps a copy and the game deletes it, so no
+* object slot is used. Each frame Lvirt_a draws the host's copies near the ship
+* through L390f2, like objects of the table: shown by distance alone, with the
+* model's own limits (docs/deterministic-scenery.md).
+******************************************************************************
+* In: a0 the player's ship, a1 the planet. Out (hcall Call_ScenNext): d6 = 0 no
+* cell, else d0-2 the ray's origin (from the player, mm), d3-5 its direction,
+* Lscen_h/hk/ha the numbers the spawner's two random numbers return. d7 = 1 on
+* the first call of a frame.
+Lscen_pick:
+		moveq	#1,d7
+		bra.s	lscen_pk
+Lscen_again:
+		moveq	#0,d7
+lscen_pk:
+		moveq	#0,d0
+		move.b	68(a0),d0
+		beq.s	lscen_fail
+		move.l	d7,-(a7)
+		move.l	a0,-(a7)
+		jsr	516(a5)
+		movea.l	a0,a1
+		movea.l	(a7)+,a0
+		move.l	(a7)+,d7
+		move.w	90(a1),d0
+		cmpi.w	#$7a,d0
+		blt.s	lscen_fail
+		cmpi.w	#$98,d0
+		bhi.s	lscen_fail
+		hcall	#Call_ScenNext
+		tst.w	d6
+		beq.s	lscen_fail
+		jmp	Lscen_ray
+lscen_fail:
+		rts
+
+* The spawner made the object a1 (replaces its last two instructions): the host
+* copies it, the game deletes it, and the spawner goes on while the host has
+* more cells for this frame (d6 from the host)
+Lscen_made:
+		movem.l	d0-5,44(a1)
+		clr.b	19(a1)
+		hcall	#Call_ScenMade
+		move.w	d6,-(a7)
+		move.l	a0,-(a7)
+		movea.l	a1,a0
+		jsr	474(a5)
+		movea.l	(a7)+,a0
+		move.w	(a7)+,d6
+		tst.w	d6
+		beq.s	lscen_mdone
+		addq.l	#4,a7
+		jmp	Lscen_again
+lscen_mdone:
+		rts
+
+* The two random numbers of the feature, from the host: Lscen_r1 in place of the
+* one that picks the kind (d0 low bits), Lscen_r2 of the one for the clouds and
+* turn (d0 = the hash, d1 the second angle). Both as A5_2RandInts.
+Lscen_r1:
+		move.l	Lscen_hk(pc),d0
+		rts
+Lscen_r2:
+		move.l	Lscen_h(pc),d0
+		move.l	Lscen_ha(pc),d1
+		rts
+
+* The old spawner no longer places scenery: the object loop does (Lscen_drive).
+Lscen_idle:
+		rts
+
+* Once per run of the object loop, whatever the spawner's own rules say (altitude,
+* chance, mode): while the player's ship is in flight, the host makes the features of
+* the ground within its radius (Lscen_pick and on). Call_ScenDrive: a0 = the player's
+* ship and d6 = 1 when the object table in a4 is the flight's.
+Lscen_drive:
+		movem.l	a3-6,-(a7)
+		hcall	#Call_ScenDrive
+		tst.w	d6
+		beq.s	lscen_dr_done
+		tst.b	A6_opt_dust_n_clouds(a6)
+		beq.s	lscen_dr_done
+		jsr	Lscen_pick
+lscen_dr_done:
+		movem.l	(a7)+,a3-6
+		rts
+
+* The object loop (L44480), after its first two instructions: the host's copies
+* of the scenery near the camera are drawn, each through L390f2 as a stack copy
+* of an object is (L44480 does that for flagged objects). Replaces
+* "bsr L44252, move.w d0,-(a7)": d0 is the word it puts on the stack.
+Lvirt_a:
+		jsr	L44252
+		movem.l	d0-7/a0-2,-(a7)
+		bsr.w	Lscen_drive
+		moveq	#1,d6
+lvirt_next:
+		hcall	#Call_VirtNext
+		tst.w	d0
+		beq.s	lvirt_done
+		movem.l	a3-6,-(a7)
+		lea	Lvirt_obj(pc),a6
+		move.w	18(a7),114(a6)
+		jsr	L390f2
+		movem.l	(a7)+,a3-6
+		moveq	#0,d6
+		bra.s	lvirt_next
+lvirt_done:
+		movem.l	(a7)+,d0-7/a0-2
+		movea.l	(a7)+,a2
+		move.w	d0,-(a7)
+		jmp	(a2)
+
+Lscen_v:
+		dc.l	0,0,0,0,0,0,0,0,0,0,0,0
+Lscen_h:
+		dc.l	0
+Lscen_hk:
+		dc.l	0
+Lscen_ha:
+		dc.l	0
+* The object being drawn (286 bytes used)
+Lvirt_obj:
+		dc.l	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+******************************************************************************
+* Surface scenery cap. Replaces "cmpi.w #$f,596(a6)" before the "bge" in the
+* scenery spawner (L61cf4): 596(a6) is the count of temporary objects, the game's
+* own cap is 15. Leaves the flags of "count - cap" for the bge.
+* (glfrontier.cfg scenery_cap; Call_ScenCap: d0 = the cap)
+******************************************************************************
+Lscen_cap:
+		movem.l	d0-1,-(a7)
+		hcall	#Call_ScenCap
+		move.w	596(a6),d1
+		cmp.w	d0,d1
+		movem.l	(a7)+,d0-1
+		rts

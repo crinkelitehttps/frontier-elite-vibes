@@ -670,6 +670,108 @@ int cheat_asteroids(CheatAsteroid *out, int max)
 	return n;
 }
 
+int cheat_scenery(CheatScenery *out, int max)
+{
+	if (!ship())
+		return 0;
+	pos64 base[3], me[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	for (int a = 0; a < 3; a++)
+		me[a] = base[a] + obj_pos(ship(), a);
+	int n = 0;
+	for (int i = 1; i < OBJECT_SLOTS && n < max; i++)
+	{
+		u8 flags = (u8)rdbyte(FE2_big_space + i);
+		u32 o = slot_object(i);
+		if (o == ship() || !(flags & 0x20) || (u8)rdbyte(o + OBJ_TYPE) != OBJ_MODULE_SHIPS)
+			continue;
+		CheatScenery *s = &out[n++];
+		s->slot = i;
+		s->model = (u16)rdword(o + OBJ_MODEL) / 2;
+		s->sig = (u32)rdlong(o + 118);
+		s->exponent = (int16_t)rdword(o + 88);
+		s->b95 = (signed char)rdbyte(o + 95);
+		s->parent = (u8)rdbyte(o + OBJ_PARENT);
+		pos64 at[3];
+		abs_pos(s->parent, at);
+		for (int a = 0; a < 3; a++)
+		{
+			s->rel_km[a] = (double)(at[a] + obj_pos(o, a) - me[a]) / MM_PER_KM;
+			s->pos_km[a] = (double)obj_pos(o, a) / MM_PER_KM;
+		}
+		s->type = (u8)rdbyte(o + OBJ_TYPE);
+		s->flags = flags;
+		s->state = (u8)rdbyte(o + OBJ_STATE);
+		s->class_ = (u8)rdbyte(o + OBJ_CLASS);
+		s->height_km = 0;
+		s->parent_name[0] = 0;
+		if (s->parent > 0 && s->parent < OBJECT_SLOTS)
+		{
+			u32 p = slot_object(s->parent);
+			copy_text(s->parent_name, sizeof s->parent_name, p + OBJ_NAME);
+			double radius = ((double)(u16)rdword(p + OBJ_RADIUS_HI) + (double)(u32)rdlong(p + OBJ_RADIUS_LO) / 4294967296.0) * 4294.967296;
+			if (radius > 0)
+				s->height_km = sqrt(s->pos_km[0] * s->pos_km[0] + s->pos_km[1] * s->pos_km[1] + s->pos_km[2] * s->pos_km[2]) - radius;
+		}
+	}
+	return n;
+}
+
+bool cheat_scenery_behind(unsigned obj)
+{
+	u32 me = ship();
+	if (!me || !obj)
+		return false;
+	pos64 mine[3], base[3], theirs[3];
+	abs_pos((u8)rdbyte(me + OBJ_PARENT), base);
+	abs_pos((u8)rdbyte(obj + OBJ_PARENT), theirs);
+	double rel[3], dir[3], vlen = 0;
+	for (int a = 0; a < 3; a++)
+	{
+		mine[a] = base[a] + obj_pos(me, a);
+		rel[a] = (double)(theirs[a] + obj_pos(obj, a) - mine[a]);
+		dir[a] = (double)rdlong(me + OBJ_VEL + 4 * a);
+		vlen += dir[a] * dir[a];
+	}
+	if (vlen < 50.0 * 50.0) /* under about 20 m/s: the velocity says little */
+	{
+		CheatPlayerMotion m;
+		cheat_player_motion(&m);
+		for (int a = 0; a < 3; a++)
+			dir[a] = m.axis[2][a];
+	}
+	return rel[0] * dir[0] + rel[1] * dir[1] + rel[2] * dir[2] < 0;
+}
+
+bool cheat_player_motion(CheatPlayerMotion *out)
+{
+	u32 me = ship();
+	if (!me)
+		return false;
+	out->parent = (u8)rdbyte(me + OBJ_PARENT);
+	for (int a = 0; a < 3; a++)
+	{
+		out->vel_mps[a] = (double)rdlong(me + OBJ_VEL + 4 * a) * 0.3884;
+		out->up_km[a] = (double)obj_pos(me, a) / MM_PER_KM;
+	}
+	out->alt_m = (double)(u32)rdlong(FE2_a6_base + 692) / 1000.0;
+	out->raw_speed = (long)rdlong(FE2_a6_base + 688);
+	/* the matrix: three rows of three words at +0, +6, +12; a column is one of the ship's axes */
+	for (int c = 0; c < 3; c++)
+	{
+		double len = 0;
+		for (int r = 0; r < 3; r++)
+		{
+			out->axis[c][r] = (double)(int16_t)rdword(me + 6 * r + 2 * c);
+			len += out->axis[c][r] * out->axis[c][r];
+		}
+		len = sqrt(len);
+		for (int r = 0; r < 3 && len > 0; r++)
+			out->axis[c][r] /= len;
+	}
+	return true;
+}
+
 void cheat_ship_set_velocity(const int raw[3])
 {
 	if (!ship())

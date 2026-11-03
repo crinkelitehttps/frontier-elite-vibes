@@ -16,6 +16,7 @@
 
 #include "audio.h"
 #include "freecam.h"
+#include "scenery.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
@@ -30,6 +31,7 @@
 #include "mods.h"
 #include "renderer.h"
 #include "settings.h"
+#include "scenery.h"
 #include "time_guard.h"
 #include "touch_input.h"
 #include "vr.h"
@@ -74,6 +76,9 @@ typedef struct
 	int mine_radius;
 	int time_guard;
 	int target_range_au;
+	int scenery_rear_limit;
+	int scenery_cap;
+	int scenery_radius_km;
 	int native_detail_boost;
 	int camera_zoom_max;
 	int volume;
@@ -121,6 +126,9 @@ static const struct
 	{"mine_radius", offsetof(Settings, mine_radius)},
 	{"time_guard_seconds", offsetof(Settings, time_guard)},
 	{"target_range_au", offsetof(Settings, target_range_au)},
+	{"scenery_rear_limit", offsetof(Settings, scenery_rear_limit)},
+	{"scenery_cap", offsetof(Settings, scenery_cap)},
+	{"scenery_radius_km", offsetof(Settings, scenery_radius_km)},
 	{"native_detail_boost", offsetof(Settings, native_detail_boost)},
 	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
 	{"volume", offsetof(Settings, volume)},
@@ -238,6 +246,9 @@ static Settings current(void)
 	s.mine_radius = mine_radius_m;
 	s.time_guard = time_guard_seconds;
 	s.target_range_au = target_range_au;
+	s.scenery_rear_limit = scenery_rear_limit;
+	s.scenery_cap = scenery_cap;
+	s.scenery_radius_km = scenery_radius_km;
 	s.native_detail_boost = native_detail_boost;
 	s.camera_zoom_max = camera_zoom_max;
 	s.volume = audio_volume;
@@ -300,6 +311,12 @@ static void apply(const Settings *s)
 		mine_radius_m = s->mine_radius;
 	if (s->time_guard >= 0 && s->time_guard <= 120)
 		time_guard_seconds = s->time_guard;
+	if (s->scenery_rear_limit >= 0 && s->scenery_rear_limit <= 15)
+		scenery_rear_limit = s->scenery_rear_limit;
+	if (s->scenery_cap >= 1 && s->scenery_cap <= 60)
+		scenery_cap = s->scenery_cap;
+	if (s->scenery_radius_km >= 0 && s->scenery_radius_km <= 1000)
+		scenery_radius_km = s->scenery_radius_km;
 	if (s->target_range_au >= 0 && s->target_range_au <= 100)
 		target_range_au = s->target_range_au;
 	if (s->native_detail_boost >= 0 && s->native_detail_boost <= 8)

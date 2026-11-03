@@ -121,6 +121,39 @@ typedef struct
 const char *cheat_select_system(unsigned id);
 int cheat_hyperspace(void);
 int cheat_asteroids(CheatAsteroid *out, int max);
+
+/* The temporary objects the scenery spawner makes (buildings, clouds, the crowd at a station): objects with
+ * the temporary flag in the big space and module $b. For spawn_log.c. */
+typedef struct
+{
+	int slot;
+	int model;         /* model number (the word at +90 / 2) */
+	unsigned sig;      /* the random long at +118, set when it is made: tells a reused slot apart */
+	int exponent;      /* the size exponent word at +88 */
+	int b95;           /* the distance byte at +95 the despawn test reads */
+	int parent;        /* frame parent's slot */
+	double rel_km[3];  /* object minus ship, root-frame axes */
+	double pos_km[3];  /* object's position from its parent's centre */
+	double height_km;  /* its distance from the parent's centre minus the parent's radius (0 if no radius) */
+	int type, flags, state, class_; /* bytes +94 (module), the slot's flag byte, +211, +236 */
+	char parent_name[24];
+} CheatScenery;
+int cheat_scenery(CheatScenery *out, int max);
+
+/* True when the object lies behind the ship: along its velocity, or along its nose when it is slow */
+bool cheat_scenery_behind(unsigned obj);
+
+/* The player's motion, for spawn_log.c */
+typedef struct
+{
+	int parent;         /* the ship's frame parent (slot) */
+	double vel_mps[3];  /* velocity, root frame axes (the raw longs at +98 are 0.3884 m/s each) */
+	double alt_m;       /* the game's altitude word at 692(a6), mm / 1000 */
+	long raw_speed;     /* 688(a6), the number the HUD speed comes from */
+	double up_km[3];    /* ship position from the parent's centre, km */
+	double axis[3][3];  /* the ship's own x, y, z axes in the parent frame, unit length */
+} CheatPlayerMotion;
+bool cheat_player_motion(CheatPlayerMotion *out);
 /* Set the ship's velocity (raw longs at +98, fraction cleared) */
 void cheat_ship_set_velocity(const int raw[3]);
 
