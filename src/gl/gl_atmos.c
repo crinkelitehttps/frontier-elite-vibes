@@ -224,7 +224,12 @@ void Nu_AtmosBand(void)
 	b->inner = scale_so_far;
 	scale_so_far *= scale;
 	b->outer = scale_so_far;
-	b->rgb = dyn_colour(GetReg(REG_D6) & 0xffff);
+	/* The colour the game asked for, not the one its slot holds: L2ec48_AllocDynCol hands back a fixed palette
+	 * entry for a colour that has one (aaa: slot $fc), which isn't in the dynamic table, and the innermost band
+	 * came out black near Earth (save Snap20). Lcockpit_band's caller pushed a5 just past the band's colour word
+	 * before the jsr; the brightness the game adds to it is 204(a3). */
+	uint32_t a5 = (uint32_t)STMemory_ReadLong((uint32_t)GetReg(REG_A7) + 4);
+	b->rgb = (STMemory_ReadWord(a5 - 2) + STMemory_ReadWord((uint32_t)GetReg(REG_A3) + 204)) & 0xfff;
 	b->planet = -1;
 	b->draw = false;
 	SoftNode *s = scene_current_soft_node();
@@ -371,7 +376,9 @@ static bool copy_band(uint32_t p, SoftNode *s)
 		p += 2 + args * 2;
 		if (op == OP_FILL)
 		{
-			rec.arena[n - 1] = (int16_t)dyn_colour(rec.arena[n - 1]);
+			/* a band whose colour Nu_AtmosBand took has it right (a fixed palette entry isn't in the table) */
+			rec.arena[n - 1] = (int16_t)(s->shell >= 0 && s->shell < rec.n_bands ? rec.bands[s->shell].rgb
+																			  : dyn_colour(rec.arena[n - 1]));
 			rec.arena_used = n;
 			s->band = start;
 			return true;
