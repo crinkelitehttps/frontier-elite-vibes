@@ -78,6 +78,7 @@
 #define BANDS_MAX    256      /* a frame's, all passes */
 #define PLANETS_MAX  16
 #define HELD_FRAMES  120 /* publishes bands are kept for, as gl_planet.c's NATIVE_REMEMBER */
+#define BARE_FRAMES  8   /* frames in a row with the horizon in view but no bands before the held ones go */
 
 
 /* This frame's bands in 3D (cockpit only). Not every pass the game draws
@@ -159,16 +160,22 @@ void atmos_publish(void)
 	 * whose only pass is the game camera's when it has the planet without
 	 * its horizon (nose up: save "Flicker3"), and those whose capture pass
 	 * was aimed at something else and only caught a big planet's middle
-	 * (save "flashing": over Mars, passes towards its far moons). Only a
-	 * pass that had the planet's horizon well in view and made no bands
-	 * says there are none. */
-	static int held_age = HELD_FRAMES;
+	 * (save "flashing": over Mars, passes towards its far moons). Only
+	 * passes that had the planet's horizon well in view and made no bands
+	 * say there are none (in the cockpit capture passes only, see
+	 * atmos_place_bands), and only BARE_FRAMES frames of them in a row: the
+	 * game makes the bands in some views of the same horizon and not in
+	 * others (save "Snap02", 10000 km over Earth: the capture pass aimed at
+	 * it made them, the game camera's with Earth just below the middle did
+	 * not), so the bands blinked off two frames in three. */
+	static int held_age = HELD_FRAMES, bare = 0;
 	if (rec.n_bands > 0)
 	{
 		copy_atmos(&held, &rec);
 		held_age = 0;
+		bare = 0;
 	}
-	else if (horizon_puts == 0 && held_age < HELD_FRAMES)
+	else if (held_age < HELD_FRAMES && (horizon_puts == 0 || ++bare < BARE_FRAMES))
 	{
 		held_age++;
 		copy_atmos(&pub, &held);
@@ -243,7 +250,10 @@ void atmos_place_bands(const float centre[3], float radius)
 		for (int i = 0; i < held.n_planets; i++)
 			if (fabsf(held.planets[i].radius - radius) <= radius * 1e-3f)
 				banded = true;
-		if (banded && fabs(off - a) < CLASSIC_FOV * 0.5 * GLM_PI / 180.0)
+		/* ... and in the cockpit only a capture pass, aimed at the planet: the game camera's makes bands for
+		 * some directions and not others (save "Snap02", Earth just below the middle from 10000 km) */
+		bool aimed = cockpit_turned_pass() || !cockpit_active();
+		if (banded && aimed && fabs(off - a) < CLASSIC_FOV * 0.5 * GLM_PI / 180.0)
 			horizon_puts++;
 	}
 	if (first_pending < rec.n_bands)
