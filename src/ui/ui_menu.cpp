@@ -253,7 +253,7 @@ void page_settings()
 	snprintf(boost_fmt, sizeof boost_fmt, native_detail_boost ? "x%d farther" : "game's distances", 1 << native_detail_boost);
 	ImGui::SliderInt("##detailboost", &native_detail_boost, 0, 8, boost_fmt);
 	wrapped_checkbox("Cloud shadows fall away from the sun (native scene)", &native_cloud_shadows);
-	wrapped_checkbox("Ship shadows on the ground and stations (experiment, native scene)", &ship_shadows);
+	wrapped_checkbox("Ship shadows on the ground and stations (native scene)", &ship_shadows);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

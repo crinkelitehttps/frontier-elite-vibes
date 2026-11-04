@@ -1,6 +1,6 @@
 # Ship shadows (experiment)
 
-Native scene only. Off by default: glfrontier.cfg `ship_shadows=1` (SETTINGS page checkbox), or `GLF_SHIP_SHADOWS=1/0`
+Native scene only. On by default: glfrontier.cfg `ship_shadows=0` turns it off (SETTINGS page checkbox), or `GLF_SHIP_SHADOWS=1/0`
 overrides. Code: `src/gl/gl_shadow.c`, receivers in `gl_draw.c` (flat shader) and `gl_planet.c` (sphere shader),
 casters chosen in `gl_native.cpp` (`setup_shadows`).
 

@@ -9,7 +9,7 @@
 #include "gl_shadow.h"
 #include "main.h"
 
-bool ship_shadows;
+bool ship_shadows = true;
 
 #define MAP_SIZE   1024
 #define DEPTH_SPAN 200.0f /* the map's depth reaches this many radii of the ships along the light */
