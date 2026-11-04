@@ -4,7 +4,8 @@
  *
  * Keys: Ctrl-V on / off, Esc off, W/S forward / back, A/D left / right,
  * R/F up / down, arrows (or mouse with a button held) look, Q/E roll,
- * +/- or mouse wheel speed, Shift fast, H hide / show the help box.
+ * +/- or mouse wheel speed, Shift fast, H hide / show the help box,
+ * 0 (or P) hold the game, 1-5 let it run at the game's rates 1x-10000x.
  *
  * Touch controls (when they are on): drag on the left half moves (a
  * thumbstick that starts where you press), drag on the right half looks,
@@ -34,6 +35,8 @@ void freecam_update(void);
 
 /* speed multiplier as a power of two, for the overlay */
 int freecam_speed_level(void);
+/* 0 the game is held, 1-5 it runs at its rates 1x .. 10000x (keys 0-5) */
+int freecam_time_level(void);
 extern bool freecam_invert_y;
 /* The help box while the free camera is on (H) */
 extern bool freecam_show_help;

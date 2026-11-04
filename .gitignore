@@ -6,3 +6,4 @@ build-android
 build-original
 __pycache__
 temp
+build-smoke

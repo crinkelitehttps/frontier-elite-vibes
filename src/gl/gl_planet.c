@@ -18,6 +18,7 @@
 #include "game_state.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
+#include "gl_shadow.h"
 #include "main.h"
 #include "m68000.h"
 
@@ -791,6 +792,7 @@ static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
 	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
+	GLint shadow_on, shadow_u, shadow_v, shadow_d, shadow_dark, shadow_bias, shadow, to_view, view_r;
 } us;
 static struct
 {
@@ -821,11 +823,23 @@ static const char *FS_SPHERE =
 	"uniform mat3 uToLocal;\n" /* eye space -> the planet's axes */
 	"uniform vec3 uPalette[16];\n" /* by code / 4: dark 0-7, lit 8-15 */
 	"uniform float uFlat;\n" /* the sphere drawn is this many times the planet (draw_sphere) */
+	/* ship shadows (gl_shadow.h): the map, the rows of the view -> map matrix, and the
+	 * eye -> view turn and size of the unit the sphere is drawn in */
+	"uniform float uShadowOn;\n"
+	"uniform vec4 uShadowU;\n"
+	"uniform vec4 uShadowV;\n"
+	"uniform vec4 uShadowD;\n"
+	"uniform float uShadowDark;\n"
+	"uniform float uShadowBias;\n"
+	"uniform sampler2DShadow uShadow;\n"
+	"uniform mat3 uToView;\n"
+	"uniform float uViewR;\n"
 	"out vec4 fragColor;\n"
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
 	"  float b = dot(d, uCentre);\n"
 	"  vec3 n;\n"
+	"  float tt = 0.0;\n"
 	"  if (uFlat > 1.0) {\n"
 	/* flattened, the eye just over a huge sphere: b and uC are both tiny
 	 * near the horizon, so b^2 - uC rather than 1 - |c x d|^2, and the
@@ -833,6 +847,7 @@ static const char *FS_SPHERE =
 	"    float disc = b * b - uC;\n"
 	"    if (disc < 0.0 || b <= 0.0) discard;\n"
 	"    float t = uC / (b + sqrt(disc));\n"
+	"    tt = t;\n"
 	/* the point is as far over the ground from the one under the eye as on
 	 * the planet itself, so its surface and light are the planet's there:
 	 * its normal turned uFlat times as far from straight up */
@@ -851,8 +866,17 @@ static const char *FS_SPHERE =
 	"  float t = (uC > 0.0) ? b - s : b + s;\n" /* outside: near hit; inside: far hit */
 	"  if (t <= 0.0) discard;\n"
 	"  n = t * d - uCentre;\n"
+	"  tt = t;\n"
 	"  }\n"
 	"  float l = max(dot(normalize(n), uLightDir), 0.0);\n"
+	/* in a ship's shadow, on the lit side */
+	"  float sh = 1.0;\n"
+	"  if (uShadowOn > 0.5 && l > 0.0) {\n"
+	"    vec3 pv = (uToView * (tt * d)) * uViewR;\n"
+	"    vec3 s = vec3(dot(uShadowU.xyz, pv) + uShadowU.w, dot(uShadowV.xyz, pv) + uShadowV.w, dot(uShadowD.xyz, pv) + uShadowD.w);\n"
+	"    if (s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
+	"      sh = mix(uShadowDark, 1.0, texture(uShadow, vec3(s.xy, min(s.z, 1.0) - uShadowBias)));\n"
+	"  }\n"
 	"  if (uTextured != 0) {\n"
 	"    vec3 p = normalize(uToLocal * n);\n"
 	"    vec2 uv = vec2(atan(p.x, p.z) / 6.2831853 + 0.5, acos(clamp(p.y, -1.0, 1.0)) / 3.14159265);\n"
@@ -870,9 +894,9 @@ static const char *FS_SPHERE =
 		"      float wt = ((k & 1) != 0 ? c.x : 1.0 - c.x) * ((k & 2) != 0 ? c.y : 1.0 - c.y) * ((k & 4) != 0 ? c.z : 1.0 - c.z);\n"
 		"      if (wt > 0.0) col += wt * mix(uPalette[k], uPalette[k + 8], lit);\n"
 		"    }\n"
-		"    fragColor = vec4(col, 1.0);\n"
+		"    fragColor = vec4(col * sh, 1.0);\n"
 	"  } else\n"
-	"    fragColor = vec4(clamp(uAmbient + (l > 0.0 ? 1.0 : 0.0) * uDiffuse, 0.0, 1.0), 1.0);\n"
+	"    fragColor = vec4(clamp(uAmbient + (l > 0.0 ? 1.0 : 0.0) * uDiffuse, 0.0, 1.0) * sh, 1.0);\n"
 	"}\n";
 
 /* An atmosphere band: the directions between two angles from the planet's */
@@ -910,6 +934,15 @@ void gl_planet_init(void)
 	us.to_local = glGetUniformLocation(sphere_prog, "uToLocal");
 	us.palette = glGetUniformLocation(sphere_prog, "uPalette");
 	us.flat = glGetUniformLocation(sphere_prog, "uFlat");
+	us.shadow_on = glGetUniformLocation(sphere_prog, "uShadowOn");
+	us.shadow_u = glGetUniformLocation(sphere_prog, "uShadowU");
+	us.shadow_v = glGetUniformLocation(sphere_prog, "uShadowV");
+	us.shadow_d = glGetUniformLocation(sphere_prog, "uShadowD");
+	us.shadow_dark = glGetUniformLocation(sphere_prog, "uShadowDark");
+	us.shadow_bias = glGetUniformLocation(sphere_prog, "uShadowBias");
+	us.shadow = glGetUniformLocation(sphere_prog, "uShadow");
+	us.to_view = glGetUniformLocation(sphere_prog, "uToView");
+	us.view_r = glGetUniformLocation(sphere_prog, "uViewR");
 
 	static const float quad[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
 	glGenVertexArrays(1, &quad_vao);
@@ -942,7 +975,9 @@ typedef struct
 	float c;
 	float light[3], diffuse[3], ambient[3];
 	float flat;
-	GLuint surface; /* 0: plain */
+	float to_view[9]; /* eye space -> view space (the head's turn undone), column major */
+	float view_r;     /* view units to the unit the sphere is drawn in */
+	GLuint surface;   /* 0: plain */
 	float to_local[9];
 	float palette[16][3];
 } SpherePass;
@@ -960,6 +995,24 @@ static void planet_sphere_pass(const void *data)
 	glUniform3fv(us.diffuse, 1, p->diffuse);
 	glUniform3fv(us.ambient, 1, p->ambient);
 	glUniform1i(us.textured, p->surface != 0);
+	/* the ships' shadows, near the ground */
+	const float *sm = gl_shadow_matrix();
+	GLuint stex = sm ? gl_shadow_texture() : 0;
+	glUniform1f(us.shadow_on, stex ? 1.0f : 0.0f);
+	if (stex)
+	{
+		glActiveTexture(GL_TEXTURE0 + 5);
+		glBindTexture(GL_TEXTURE_2D, stex);
+		glActiveTexture(GL_TEXTURE0);
+		glUniform1i(us.shadow, 5);
+		glUniform4fv(us.shadow_u, 1, sm);
+		glUniform4fv(us.shadow_v, 1, sm + 4);
+		glUniform4fv(us.shadow_d, 1, sm + 8);
+		glUniform1f(us.shadow_dark, gl_shadow_dark());
+		glUniform1f(us.shadow_bias, gl_shadow_bias());
+		glUniformMatrix3fv(us.to_view, 1, GL_FALSE, p->to_view);
+		glUniform1f(us.view_r, p->view_r);
+	}
 	if (p->surface)
 	{
 		glActiveTexture(GL_TEXTURE0);
@@ -1135,6 +1188,11 @@ static void draw_sphere(const SphereIn *in)
 	pass->c = flat > 1 ? (float)((2 * h * r + h * h) / (r * r))
 					   : (float)(c[0] * c[0] + c[1] * c[1] + c[2] * c[2] - 1.0);
 	pass->flat = (float)flat;
+	/* view = H^T eye: column j of the GL matrix holds head.m[i * 4 + j] over i */
+	for (int j = 0; j < 3; j++)
+		for (int i = 0; i < 3; i++)
+			pass->to_view[j * 3 + i] = head.m[i * 4 + j];
+	pass->view_r = (float)r;
 
 	memcpy(pass->light, light, sizeof(pass->light));
 	vec3_normalize(pass->light);

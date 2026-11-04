@@ -46,7 +46,7 @@ In the front flight view the game is shown from a seat in the ship: the world fi
 
 ### Free camera
 
-Pauses the game and lets you fly a camera around, e.g. to look at your ship. Start it with Ctrl-V or the FREE CAMERA button in the emulator menu (the cog, also in the touch dropdown).
+Holds the game (or lets it run at a time rate you pick, see below) and lets you fly a camera around, e.g. to look at your ship. Start it with Ctrl-V or the FREE CAMERA button in the emulator menu (the cog, also in the touch dropdown).
 
 * W/S, A/D	- Forward / back, left / right.
 * R/F	- Up / down (or Page Up / Page Down).
@@ -54,7 +54,10 @@ Pauses the game and lets you fly a camera around, e.g. to look at your ship. Sta
 * Q/E	- Roll.
 * +/- or mouse wheel	- Speed (each step doubles or halves it), Shift for 8x.
 * H	- Hide / show the help box.
+* 0 or P	- Hold the game (the default when the camera starts). 1-5: let it run at the game's own rates, 1x to 10000x (its Shift+F1-F5 keys, so it refuses and steps down exactly as in flight, for instance while the engines burn or when a ship closes in).
 * Esc or Ctrl-V	- Back to the game.
+
+With the 3D cockpit on (Ctrl-K, the default) the free camera is shown through the cockpit renderer: the whole window, the control panel floating below, head tracking still turning the view. Without it, the classic 4:3 external view.
 
 On touch screens: drag on the left half to move (a thumbstick that starts under your finger), drag on the right half to look, and use the on-screen buttons for up / down, roll, speed, help and exit.
 

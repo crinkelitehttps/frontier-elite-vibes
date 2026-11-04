@@ -12,11 +12,17 @@
 
 #include "freecam.h"
 #include "game_state.h"
+#include "gl/gl_cockpit.h"
 #include "host.h" /* rdbyte, wrbyte, ... */
 #include "main.h"
 #include "renderer.h" /* game area, screen_w / screen_h */
 
 #define A6_TIME_ACCEL 14482 /* A6_time_accel: game time per frame, 0 = stopped */
+#define A6_MODAL          598   /* byte: bit 0 a modal screen, which takes keys itself */
+#define A6_SCANCODE_ASCII 16336 /* the game's key queue, as time_guard.c pushes a key */
+#define A6_PUSHED_ASCII   16337
+#define A6_RATE_INDEX     14486 /* word: 0, 3, 7, 10, 12 for 1x to 10000x, 18 hyperspace */
+#define KEY_1X            0xc1  /* Shift+F1 .. Shift+F5: the game's five rates */
 
 /* Lfreecam_state: byte active, byte unused, 3x3 matrix words, 3 offset longs */
 #define STATE_ACTIVE FE2_Lfreecam_active
@@ -51,6 +57,11 @@ static double pos[3];
 static double axis[3][3];
 static int speed_level;
 static int saved_time_accel, saved_view;
+/* 0: the game is held (A6_time_accel zeroed every tick); 1-5: it runs at the
+ * game's own rate 1x .. 10000x (set with its Shift+F1-5 keys, so its panel,
+ * its time guard and its refusals all work as in flight) */
+static int time_level;
+static int pending_key;
 static int look_dx, look_dy;
 static int mouse_buttons;
 static Uint32 last_ticks;
@@ -149,6 +160,8 @@ static void start(void)
 	saved_time_accel = rdlong(GAME_A6 + A6_TIME_ACCEL);
 	saved_view = (u8)rdbyte(GAME_A6 + A6_3DVIEW_MODE);
 	speed_level = 0;
+	time_level = 0;
+	pending_key = 0;
 	look_dx = look_dy = 0;
 	mouse_buttons = 0;
 	memset(pointers, 0, sizeof(pointers));
@@ -164,7 +177,9 @@ static void start(void)
 static void stop(void)
 {
 	wrbyte(STATE_ACTIVE, 0);
-	wrlong(GAME_A6 + A6_TIME_ACCEL, saved_time_accel);
+	/* held: the rate it had; running: the game's own */
+	if (!time_level)
+		wrlong(GAME_A6 + A6_TIME_ACCEL, saved_time_accel);
 	wrbyte(GAME_A6 + A6_3DVIEW_MODE, saved_view);
 	SDL_SetRelativeMouseMode(SDL_FALSE);
 	active = false;
@@ -181,6 +196,16 @@ int freecam_speed_level(void)
 	return speed_level;
 }
 
+/* What the game is doing: it may refuse (or its time guard take back) a rate, so once the
+ * key has gone in its own rate index says (0, 3, 7, 10, 12 for 1x .. 10000x) */
+int freecam_time_level(void)
+{
+	if (!time_level || pending_key)
+		return time_level;
+	int index = (s16)rdword(GAME_A6 + A6_RATE_INDEX);
+	return index >= 12 ? 5 : index >= 10 ? 4 : index >= 7 ? 3 : index >= 3 ? 2 : 1;
+}
+
 bool freecam_toggle(void)
 {
 	if (active)
@@ -193,6 +218,13 @@ bool freecam_toggle(void)
 /* =========================================================================
  * Input
  * ========================================================================= */
+/* 0 holds the game, 1-5 run it at its rates */
+static void set_time_level(int level)
+{
+	time_level = level;
+	pending_key = level ? KEY_1X + level - 1 : 0;
+}
+
 static void change_speed(int steps)
 {
 	speed_level += steps;
@@ -420,6 +452,25 @@ bool freecam_handle_event(const SDL_Event *event)
 		case SDLK_h:
 			freecam_show_help = !freecam_show_help;
 			break;
+		case SDLK_0:
+		case SDLK_KP_0:
+		case SDLK_p:
+			set_time_level(0);
+			break;
+		case SDLK_1:
+		case SDLK_2:
+		case SDLK_3:
+		case SDLK_4:
+		case SDLK_5:
+			set_time_level(event->key.keysym.sym - SDLK_0);
+			break;
+		case SDLK_KP_1:
+		case SDLK_KP_2:
+		case SDLK_KP_3:
+		case SDLK_KP_4:
+		case SDLK_KP_5:
+			set_time_level(event->key.keysym.sym - SDLK_KP_1 + 1);
+			break;
 		case SDLK_EQUALS:
 		case SDLK_PLUS:
 		case SDLK_KP_PLUS:
@@ -517,9 +568,20 @@ void freecam_update(void)
 			pos[i] = -MAX_OFFSET;
 	}
 
-	/* keep the game paused and out of the cockpit */
-	wrlong(GAME_A6 + A6_TIME_ACCEL, 0);
-	wrbyte(GAME_A6 + A6_3DVIEW_MODE, VIEW_EXTERNAL);
+	/* a rate asked for goes in as the game's own key, when its queue is free */
+	if (pending_key && !(rdbyte(GAME_A6 + A6_MODAL) & 1) && !rdbyte(GAME_A6 + A6_SCANCODE_ASCII))
+	{
+		wrbyte(GAME_A6 + A6_PUSHED_ASCII, pending_key);
+		wrbyte(GAME_A6 + A6_SCANCODE_ASCII, 0xff);
+		pending_key = 0;
+	}
+	/* held, and out of the cockpit */
+	if (!time_level)
+		wrlong(GAME_A6 + A6_TIME_ACCEL, 0);
+	/* With the cockpit renderer on, the free camera is seen through it (wide, the
+	 * panel and head tracking as in the front view); the classic layout, the
+	 * external view, without */
+	wrbyte(GAME_A6 + A6_3DVIEW_MODE, cockpit_enabled && use_renderer != R_OLD ? VIEW_FRONT : VIEW_EXTERNAL);
 	write_state();
 }
 
@@ -531,6 +593,11 @@ bool freecam_active(void)
 }
 
 int freecam_speed_level(void)
+{
+	return 0;
+}
+
+int freecam_time_level(void)
 {
 	return 0;
 }

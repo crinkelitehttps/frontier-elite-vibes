@@ -35,6 +35,7 @@
 #include "galaxy/fe2vm.h"
 #include "gamepad.h"
 #include "game_state.h"
+#include "gl_shadow.h"
 #include "headtrack.h"
 #include "input.h"
 #include "host.h" /* rdword, wrword */
@@ -459,7 +460,7 @@ static void build_planes(void)
 bool cockpit_game_frame(void)
 {
 	game_active = cockpit_enabled && use_renderer != R_OLD && game_screen() == SCREEN_FLIGHT &&
-				  game_flight_view() == VIEW_FRONT && !freecam_active();
+				  game_flight_view() == VIEW_FRONT;
 	return game_active;
 }
 
@@ -1244,8 +1245,23 @@ bool cockpit_turned_pass(void)
 	return turned;
 }
 
+static bool own_added;
+
+bool cockpit_own_ship_added(void)
+{
+	return own_added;
+}
+
 void Call_CockpitBackground(void)
 {
+	/* the front view leaves the player's ship out (the slot at A6+608 the object loop
+	 * skips); with ship shadows on, the loop gets it too, as a caster */
+	own_added = false;
+	if (drawing_pass >= 0 && gl_shadow_wanted() && rdbyte(GAME_A6 + 608))
+	{
+		wrbyte(GAME_A6 + 608, 0);
+		own_added = true;
+	}
 	/* the atmosphere bands go just in front of the stars (gl_atmos.c) */
 	if (drawing_pass >= 0)
 		scene_insert_after_background(PRIM_ATMOS);

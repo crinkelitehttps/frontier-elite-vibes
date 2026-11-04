@@ -79,6 +79,12 @@ typedef struct
 } GdDepth;
 void gd_set_depth(const GdDepth *d);
 
+/* Ship shadows (gl_shadow.h): vertices emitted until the next call look the
+ * shadow map up in the flat shader. `m` is the 3x4 matrix (rows u, v, depth)
+ * from the point passed to gd_tri etc. (before the modelview) to the map's
+ * coordinates; NULL = off (the default at the start of every frame) */
+void gd_set_shadow(const float m[12]);
+
 /* Modelview stack */
 void gd_push(void);
 void gd_pop(void);

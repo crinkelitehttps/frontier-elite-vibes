@@ -27,6 +27,7 @@ extern "C"
 #include "custom_ships.h"
 #include "mods.h"
 #include "freecam.h"
+#include "gl/gl_shadow.h"
 #include "gamepad.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
@@ -251,6 +252,8 @@ void page_settings()
 	char boost_fmt[48];
 	snprintf(boost_fmt, sizeof boost_fmt, native_detail_boost ? "x%d farther" : "game's distances", 1 << native_detail_boost);
 	ImGui::SliderInt("##detailboost", &native_detail_boost, 0, 8, boost_fmt);
+	wrapped_checkbox("Cloud shadows fall away from the sun (native scene)", &native_cloud_shadows);
+	wrapped_checkbox("Ship shadows on the ground and stations (experiment, native scene)", &ship_shadows);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);
@@ -957,7 +960,14 @@ void ui_freecam_overlay(void)
 	ImGui::SetNextWindowPos(game_pos(160, top), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 	ImGui::SetNextWindowSize(game_size(200, 0));
 	ImGui::SetNextWindowBgAlpha(0.6f);
-	if (ImGui::Begin("FREE CAMERA - GAME PAUSED", nullptr, flags))
+	static const char *const rates[] = {"1x", "10x", "100x", "1000x", "10000x"};
+	const int time_level = freecam_time_level();
+	char title[64];
+	if (time_level)
+		snprintf(title, sizeof title, "FREE CAMERA - TIME %s###freecam", rates[time_level - 1]);
+	else
+		snprintf(title, sizeof title, "FREE CAMERA - GAME PAUSED###freecam");
+	if (ImGui::Begin(title, nullptr, flags))
 	{
 		int level = freecam_speed_level();
 		if (level >= 0)
@@ -965,7 +975,8 @@ void ui_freecam_overlay(void)
 		else
 			ImGui::Text("Speed 1/%d", 1 << -level);
 		ImGui::TextWrapped("WASD move, R/F up/down, arrows or mouse drag look, Q/E roll, "
-						   "+/- or wheel speed, Shift fast, H hide this, Esc or Ctrl-V exit");
+						   "+/- or wheel speed, Shift fast, 0 hold the game, 1-5 time rates, "
+						   "H hide this, Esc or Ctrl-V exit");
 	}
 	ImGui::End();
 }

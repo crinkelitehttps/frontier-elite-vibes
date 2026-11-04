@@ -115,6 +115,10 @@ int native_mode(void);
  * (docs/level-of-detail.md section 4) */
 extern int native_detail_boost;
 
+/* Cloud shadows cast along the light (glfrontier.cfg cloud_shadows) instead of
+ * straight down; GLF_CLOUD_SHADOWS=0/1 overrides, =2 logs the sun's height */
+extern bool native_cloud_shadows;
+
 #ifdef __cplusplus
 }
 #endif

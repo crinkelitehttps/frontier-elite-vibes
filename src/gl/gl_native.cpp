@@ -20,6 +20,7 @@ extern "C"
 #include "gl_native.h"
 #include "gl_planet.h"
 #include "gl_scene.h"
+#include "gl_shadow.h"
 #include "game_state.h"
 #include "host.h"
 #include "main.h"
@@ -344,6 +345,7 @@ struct Object
 	/* The temporaries the model starts with (-64(a6)): t0 is cleared, the
 	 * others are what is left there, which models like the cities use */
 	uint16_t t[8];
+	bool own_added = false; /* the player's ship, put in for the ship shadows only (cockpit_own_ship_added) */
 };
 
 /* A body too far away for its model, which L390f2 draws as a disc instead
@@ -469,6 +471,7 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 static uint32_t far_a6, far_addr;
 
 int native_detail_boost = 2;
+bool native_cloud_shadows = true;
 /* Every far body's radius, by object (game thread): a planet's size before
  * its planet has been seen close up (native_capture_dirs) */
 static std::unordered_map<uint32_t, float> far_radius;
@@ -525,6 +528,7 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 		cockpit_pass_to_view(col, o.cols[c]);
 	}
 	capture_light(a6, o.light, o.tint);
+	o.own_added = cockpit_own_ship_added() && addr == game_player_ship();
 	for (int j = 0; j < NUM_VARS; j++)
 		o.vars[j] = (uint16_t)rdword(addr + 114 + 2 * (uint32_t)j);
 	for (int j = 0; j < 8; j++)
@@ -1128,6 +1132,8 @@ struct Node
 };
 struct Drawn
 {
+	/* the player's own ship for its shadow: not drawn */
+	bool hide = false;
 	std::vector<Node> nodes;
 	std::vector<Seg> wire; /* the wireframe: outlines and lines */
 	std::vector<Dot> wire_dots;
@@ -1819,6 +1825,53 @@ struct Runner
 		r.voff += (int16_t)(param(r, (w0 >> 5) & 0xff) << 2) >> 2;
 	}
 
+	/* Cloud shadows cast by the light (native_cloud_shadows; GLF_CLOUD_SHADOWS=2 logs). The
+	 * game puts a cloud field's shadow (model 206, a flat copy of the cloud's
+	 * outline) straight below its cloud (model 98): the vertex ten ids before
+	 * the shadow's is the cloud's, the same place at the cloud's height.
+	 * Here the shadow is moved to where the cloud's ray along the light
+	 * vector (o.light, away from the light, view space) meets the field's
+	 * ground plane (the field's y axis is up). Without light from above (the
+	 * night side, the sun on the horizon) there is no shadow: false. */
+	bool cloud_shadow_org(const Run &r, int model, int vid, P3 &org) const
+	{
+		static const char *env = getenv("GLF_CLOUD_SHADOWS");
+		const int mode = env ? atoi(env) : native_cloud_shadows;
+		if (!mode || model != 206 || wire || sky)
+			return true;
+		auto top = vertex(r, vid - 10);
+		auto gp = r.c->model.vertex_pos(vid);
+		auto tp = r.c->model.vertex_pos(vid - 10);
+		if (!top || !gp || !tp || std::fabs(gp->x - tp->x) > 0.5f || std::fabs(gp->z - tp->z) > 0.5f || tp->y <= gp->y)
+			return true;
+		P3 up = r.ax[1];
+		float ul = std::sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
+		if (ul <= 0)
+			return true;
+		float lu = 0, du = 0;
+		P3 d;
+		for (int j = 0; j < 3; j++)
+		{
+			up[j] /= ul;
+			d[j] = (*top)[j] - org[j];
+			lu += o.light[j] * up[j];
+			du += d[j] * up[j];
+		}
+		/* the sun's height above the horizon: -lu (sin of it) */
+		if (mode == 2)
+		{
+			static int n;
+			if (n++ % 600 == 0)
+				log_printf("cloud shadow: sun elevation %.1f deg, cloud %.0f above\n",
+						   std::asin(std::max(-1.0f, std::min(1.0f, -lu))) * 57.2958f, du);
+		}
+		if (-lu < 0.12f) /* below about 7 degrees: no shadow */
+			return false;
+		for (int j = 0; j < 3; j++)
+			org[j] += d[j] - du / lu * o.light[j];
+		return true;
+	}
+
 	/* a sub-model call (L3c928, L3c8d8): op $0e, or $1b with a scale and
 	 * a colour */
 	void call(const Run &r, const fe2::Instr &ins, int depth)
@@ -1838,6 +1891,8 @@ struct Runner
 				new_node(zkey(*org), false, *org).planet = true;
 			return;
 		}
+		if (!cloud_shadow_org(r, (w[0] >> 5) & 0x7ff, fe2::s8(w[1]), *org))
+			return;
 		Run c;
 		c.c = child;
 		c.org = *org;
@@ -2152,10 +2207,59 @@ void run_objects(bool wire)
 		else
 			run_object(o, drawn[(size_t)i], wire, false);
 		drawn[(size_t)i].shrink = o.shrink;
+		drawn[(size_t)i].hide = o.own_added;
 	}
 }
 
 void sort_nodes(std::vector<Node> &nodes);
+
+/* Ship shadows (gl_shadow.h): the ships in view cast, the rest of the scene
+ * receives (not the ships themselves). Shrunk (far) objects stay out, their
+ * space is not the others'. A flyable ship's model is 10-41. */
+std::vector<float> shadow_tris;
+std::vector<char> shadow_caster;
+bool shadow_on = false;
+
+void setup_shadows(bool wire)
+{
+	gl_shadow_clear();
+	shadow_on = false;
+	shadow_caster.assign(drawn.size(), 0);
+	if (wire || !gl_shadow_wanted())
+		return;
+	shadow_tris.clear();
+	const Object *first = nullptr;
+	for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
+	{
+		const Object &o = shown->obj[i];
+		const Drawn &d = drawn[i];
+		if (o.table != o.subtable || o.model < 10 || o.model > 41 || d.shrink != 1.0f)
+			continue;
+		shadow_caster[i] = 1;
+		if (!first)
+			first = &o;
+		for (const Node &n : d.nodes)
+			if (!n.under)
+				for (const Tri &t : n.tris)
+					for (const P3 &p : t.p)
+						shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+	}
+	if (first)
+		shadow_on = gl_shadow_set(first->light, shadow_tris.data(), shadow_tris.size() / 9);
+	static const bool dbg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
+	static int frames;
+	if (dbg && frames++ % 100 == 0)
+	{
+		int casters = 0, hidden = 0;
+		for (size_t i = 0; i < drawn.size(); i++)
+		{
+			casters += shadow_caster[i];
+			hidden += drawn[i].hide;
+		}
+		log_printf("ship shadows: %d objects, %d casters (%d own, hidden), %zu triangles, map %d\n", shown->n, casters,
+				   hidden, shadow_tris.size() / 9, (int)shadow_on);
+	}
+}
 
 /* This frame's objects run (native_draw_sky does it first, native_draw
  * otherwise), each with the clip w it spans */
@@ -2221,6 +2325,7 @@ void prepare(bool wire)
 					span(s.p);
 			}
 	}
+	setup_shadows(wire);
 }
 
 void draw_segs(const std::vector<Seg> &segs)
@@ -2673,7 +2778,7 @@ extern "C" void native_draw(void)
 	 * slice with near ones. */
 	std::vector<Drawn *> placed;
 	for (Drawn &d : drawn)
-		if (d.far > 1.0f && !d.back)
+		if (d.far > 1.0f && !d.back && !d.hide)
 			placed.push_back(&d);
 	std::sort(placed.begin(), placed.end(),
 			  [](const Drawn *a, const Drawn *b) { return a->near * a->shrink < b->near * b->shrink; });
@@ -2698,20 +2803,31 @@ extern "C" void native_draw(void)
 	 * what is drawn on them in 3D. Returns whether it drew any. */
 	for (Drawn *d : placed)
 		sort_nodes_view(d->nodes);
-	std::vector<std::pair<float, const Node *>> unders; /* true key, node */
+	struct Under
+	{
+		float key; /* true key */
+		const Node *node;
+		bool recv; /* receives the ships' shadows */
+	};
+	const float *shadow_m = shadow_on ? gl_shadow_matrix() : nullptr;
+	auto receives = [&](const Drawn *d) {
+		return shadow_m && d->shrink == 1.0f && !shadow_caster[(size_t)(d - drawn.data())];
+	};
+	std::vector<Under> unders;
 	for (const Drawn *d : placed)
 		for (const Node &n : d->nodes)
 			if (n.under)
-				unders.push_back({n.dist * d->shrink, &n});
-	std::stable_sort(unders.begin(), unders.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+				unders.push_back({n.dist * d->shrink, &n, receives(d)});
+	std::stable_sort(unders.begin(), unders.end(), [](const Under &a, const Under &b) { return a.key > b.key; });
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
-		if (next_under >= unders.size() || unders[next_under].first <= beyond)
+		if (next_under >= unders.size() || unders[next_under].key <= beyond)
 			return false;
 		gd_set_depth(nullptr);
-		for (; next_under < unders.size() && unders[next_under].first > beyond; next_under++)
+		for (; next_under < unders.size() && unders[next_under].key > beyond; next_under++)
 		{
-			const Node *n = unders[next_under].second;
+			const Node *n = unders[next_under].node;
+			gd_set_shadow(unders[next_under].recv ? shadow_m : nullptr);
 			for (const Tri &t : n->tris)
 			{
 				set_colour(t.colour);
@@ -2720,6 +2836,7 @@ extern "C" void native_draw(void)
 			draw_segs(n->segs);
 			draw_dots(n->dots);
 		}
+		gd_set_shadow(nullptr);
 		return true;
 	};
 
@@ -2749,12 +2866,14 @@ extern "C" void native_draw(void)
 			depth.write = false;
 			depth.depth_only = false;
 			gd_set_depth(&depth);
+			const bool recv = receives(&d);
 			for (const Node &n : d.nodes)
 			{
 				if (n.under)
 					continue;
 				if (draw_unders(n.dist * d.shrink))
 					gd_set_depth(&depth);
+				gd_set_shadow(recv ? shadow_m : nullptr);
 				for (const Tri &t : n.tris)
 				{
 					set_colour(t.colour);
@@ -2763,6 +2882,7 @@ extern "C" void native_draw(void)
 				draw_segs(n.segs);
 				draw_dots(n.dots);
 			}
+			gd_set_shadow(nullptr);
 			/* ...then its depth, to hide what is behind it of the others */
 			depth.write = true;
 			depth.depth_only = true;

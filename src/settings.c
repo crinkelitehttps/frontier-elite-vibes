@@ -24,6 +24,7 @@
 #include "gl/gl_mapscreen.h"
 #include "gl/gl_native.h"
 #include "gl/gl_screen_place.h"
+#include "gl/gl_shadow.h"
 #include "hostcall.h"
 #include "gl/gl_camera.h"
 #include "main.h"
@@ -80,6 +81,8 @@ typedef struct
 	int scenery_cap;
 	int scenery_radius_km;
 	int native_detail_boost;
+	int cloud_shadows;
+	int ship_shadows;
 	int camera_zoom_max;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
@@ -130,6 +133,8 @@ static const struct
 	{"scenery_cap", offsetof(Settings, scenery_cap)},
 	{"scenery_radius_km", offsetof(Settings, scenery_radius_km)},
 	{"native_detail_boost", offsetof(Settings, native_detail_boost)},
+	{"cloud_shadows", offsetof(Settings, cloud_shadows)},
+	{"ship_shadows", offsetof(Settings, ship_shadows)},
 	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
@@ -250,6 +255,8 @@ static Settings current(void)
 	s.scenery_cap = scenery_cap;
 	s.scenery_radius_km = scenery_radius_km;
 	s.native_detail_boost = native_detail_boost;
+	s.cloud_shadows = native_cloud_shadows;
+	s.ship_shadows = ship_shadows;
 	s.camera_zoom_max = camera_zoom_max;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
@@ -319,6 +326,8 @@ static void apply(const Settings *s)
 		scenery_radius_km = s->scenery_radius_km;
 	if (s->target_range_au >= 0 && s->target_range_au <= 100)
 		target_range_au = s->target_range_au;
+	native_cloud_shadows = s->cloud_shadows != 0;
+	ship_shadows = s->ship_shadows != 0;
 	if (s->native_detail_boost >= 0 && s->native_detail_boost <= 8)
 		native_detail_boost = s->native_detail_boost;
 	if (s->camera_zoom_max >= 2 && s->camera_zoom_max <= 1048576)
