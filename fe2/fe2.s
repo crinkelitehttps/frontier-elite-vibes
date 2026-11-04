@@ -26027,8 +26027,15 @@ L43ed6:
 		asr.l	d7,d2
 		moveq	#0,d6
 	l43f5a:	add.w	d6,d7
+* Gravity fix (52b2a35, see Lgrav_norm at the end of the file).
+* Here d7 = e, the exponent of the normalised position: d0-d2 = position / 2^e.
+* Keep e in d3 for Lgrav_norm. The original code here set d3 = 1.5*e - 176(a1),
+* which nothing read (d3 is reloaded at l44014). The bra.s + jmp pair below
+* takes the same 8 bytes so no later address moves.
 		move.w	d7,d3
 		bra.s	l43f64
+* Trampoline: the bsr.s further down can't reach the end of the file, so it
+* calls this jmp instead.
 lgrav_t1:	jmp	Lgrav_norm
 	l43f64:
 		tst.w	122(a1)
@@ -26037,9 +26044,14 @@ lgrav_t1:	jmp	Lgrav_norm
 		jsr	L368d6_VectorLen
 		tst.w	d0
 		beq.s	l43f88
+* Normalise |r| (d0 from VectorLen): shift it up until bit 15 is set, taking
+* one off the exponent d7 per shift.
 	l43f7e:	subq.w	#1,d7
 		add.w	d0,d0
 		bpl.s	l43f7e
+* Was "addq.w #1,d7 / lsr.w #1,d0" (step back one shift). Lgrav_norm does that
+* and also works out sigma, the net shift count, into d3. bsr.s + nop keep the
+* original 4 bytes.
 		bsr.s	lgrav_t1
 		nop
 	l43f88:	move.w	d0,d1
@@ -26047,6 +26059,8 @@ lgrav_t1:	jmp	Lgrav_norm
 		muls	d0,d0
 		add.l	d0,d0
 		swap	d0
+* r^2 mantissa above; the exponent is doubled here. This is the bug: see
+* Lgrav_norm. The r^3 multiply below adds nothing more to the exponent.
 		add.w	d7,d7
 		muls	d1,d0
 		add.l	d0,d0
@@ -26058,6 +26072,8 @@ lgrav_t1:	jmp	Lgrav_norm
 		bpl.s	l43fa0
 		addq.w	#1,d7
 		lsr.w	#1,d0
+* Was "movem.w 122(a1),d5-6" (parent mass: mantissa d5, exponent d6), same 6
+* bytes. Lgrav_mass loads it and adds the correction from d3 to the exponent.
 	l43faa:	jsr	Lgrav_mass
 		tst.w	d0
 		beq.s	l43fce
@@ -67192,12 +67208,41 @@ Lpos_player:
 lpos_player_done:
 		rts
 
-* Gravity (L43ed6) fix: the r^3 exponent is built from 2*e, not 3*e, so the
-* pull is wrong by 2^-sigma, sigma = how far |r| was shifted up to normalise
-* it. The error steps by 2 wherever the position exponent e changes. Lgrav_norm
-* (called from the normalisation loop; d3 holds e) leaves sigma-1 in d3 and
-* Lgrav_mass applies it to the exponent, so the pull always matches sigma = 1
-* (the old e = 19 behaviour).
+* Gravity (L43ed6) fix, commit 52b2a35, GitHub issue 13.
+*
+* What L43ed6 does: a = M * r_vec / |r|^3 for an object orbiting its parent,
+* in floating point built by hand (16-bit mantissa + exponent):
+*   1. Shift the 64-bit position down until it fits in 16 bits: d0-d2 hold
+*      position / 2^e (e in d7).
+*   2. |r| = VectorLen(d0-d2), then shift it up sigma places so its top bit is
+*      set: |r| = mantissa * 2^(e - sigma).
+*   3. Cube it, divide the mass M (122(a1)) by it, multiply by d0-d2 and add
+*      the result to the velocity.
+* Because step 3 multiplies by d0-d2 (position / 2^e), not the real position,
+* the r^3 exponent it needs is 3*(e - sigma) - e = 2e - 3*sigma. The code
+* doubles d7 instead, giving 2*(e - sigma) = 2e - 2*sigma: the e part is right
+* but sigma is counted twice instead of three times. So the pull comes out as
+* the true value times 2^-sigma.
+*
+* Why it shows: sigma depends on how the position happened to normalise in
+* step 1, which depends on where the ship is. Normally sigma = 1; when every
+* coordinate's high long folds to 0/-1 (inside about +-4300 km of the planet
+* centre on each axis, e.g. low orbit round Merlin) e drops by one and sigma
+* changes, so gravity jumps to 2x there. Orbits that dip into that region get
+* kicked; low orbits fall in.
+*
+* Why not apply the full 2^sigma: the game's masses (and the host's gravity
+* constant in orbit_calc, gl_hud.c) were tuned against the usual sigma = 1
+* result, so the "correct" maths would double gravity everywhere. Instead the
+* fix keeps the sigma = 1 result for every position: it multiplies the pull by
+* 2^(sigma - 1).
+*
+* Lgrav_norm: called at the end of the |r| normalisation loop with d3 = e and
+* d7 = e - sigma - 1. Does the two instructions it replaced (step back one
+* shift: d7 = e - sigma), then sets d3 = e - d7 - 1 = sigma - 1.
+* Lgrav_mass: loads the mass as before (d5 mantissa, d6 exponent) and adds
+* sigma - 1 to its exponent. d3 is not touched in between (VectorLen and the
+* r^3 code don't use it).
 Lgrav_norm:
 		addq.w	#1,d7
 		lsr.w	#1,d0
