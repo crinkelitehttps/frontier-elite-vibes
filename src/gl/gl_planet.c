@@ -451,26 +451,39 @@ static void exact_view(double pos[3], float axes[9], unsigned obj)
 	static const int perm[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
 	double best = -2, bestscore = -10;
 	int bp = 0, bs = 0;
-	for (int pi = 0; pi < 6; pi++)
-		for (int sg = 0; sg < 8; sg++)
-		{
-			double d = 0, score = 0;
-			for (int k = 0; k < 3; k++)
+	/* The front and rear views are known: the ship's axes as they are, or turned half round its up axis (x and z
+	 * negated). Scored, the game's surface axes could win the wrong one: 22000 km over Earth they were some 50
+	 * degrees off after a few degrees of yaw, a view that failed the check below, and the planet was drawn with
+	 * those axes, its ice cap tilted towards or away from the eye with the ship's heading (saves Snap03/04). */
+	FlightView view = game_flight_view();
+	if (view == VIEW_FRONT || view == VIEW_REAR)
+	{
+		bs = view == VIEW_REAR ? 5 : 0;
+		best = 0;
+		for (int k = 0; k < 3; k++)
+			best += (bs >> k & 1 ? -1.0 : 1.0) * e[k] * gp[k];
+	}
+	else
+		for (int pi = 0; pi < 6; pi++)
+			for (int sg = 0; sg < 8; sg++)
 			{
-				double sgn = sg >> k & 1 ? -1.0 : 1.0;
-				d += sgn * e[perm[pi][k]] * gp[k];
-				for (int j = 0; j < 3; j++)
-					score += sgn * a[j][perm[pi][k]] * ga[j][k];
+				double d = 0, score = 0;
+				for (int k = 0; k < 3; k++)
+				{
+					double sgn = sg >> k & 1 ? -1.0 : 1.0;
+					d += sgn * e[perm[pi][k]] * gp[k];
+					for (int j = 0; j < 3; j++)
+						score += sgn * a[j][perm[pi][k]] * ga[j][k];
+				}
+				score += d;
+				if (score > bestscore)
+				{
+					bestscore = score;
+					best = d;
+					bp = pi;
+					bs = sg;
+				}
 			}
-			score += d;
-			if (score > bestscore)
-			{
-				bestscore = score;
-				best = d;
-				bp = pi;
-				bs = sg;
-			}
-		}
 	/* within ~14 mrad (the ship's matrix is a frame ahead or behind the game's camera while it turns); else
 	 * not the ship's own view */
 	if (best < 1 - 1e-4)
