@@ -424,15 +424,27 @@ static void exact_view(double pos[3], float axes[9], unsigned obj)
 	double rl = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]);
 	if (rl <= 0)
 		return;
-	/* the ship's axes, orthonormal in double: column i = (right, up, forward)[i] in the ship's frame, which is
-	 * the planet's own (the game's surface axes are this matrix transposed, but skewed by ~3 mrad) */
+	/* the ship's axes, orthonormal in double: column i = (right, up, forward)[i] in the ship's frame. Within the
+	 * zone the game switches at (1.25 radii for Earth) that frame turns with the planet, and the planet's axes
+	 * are the frame's own; outside it is fixed and the planet's own matrix turns its surface. Without that the
+	 * map was a whole turn of the planet's spin out (38.6 degrees at the time of save Snap17) and jumped by
+	 * that much as the ship crossed the zone's edge (saves Snap17/Snap18). */
 	cheat_object_axes(me, col);
+	double p[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}; /* p[j]: the planet's axis j in the ship's frame */
+	if (!cheat_ship_in_body_frame())
+	{
+		double pc[3][3];
+		cheat_object_axes(obj, pc);
+		for (int j = 0; j < 3; j++)
+			for (int k = 0; k < 3; k++)
+				p[j][k] = pc[j][k];
+	}
 	double e[3], a[3][3]; /* e: centre in ship axes; a[j]: the planet's axis j in ship axes */
 	for (int c = 0; c < 3; c++)
 	{
 		e[c] = (col[c][0] * r[0] + col[c][1] * r[1] + col[c][2] * r[2]) / rl;
 		for (int j = 0; j < 3; j++)
-			a[j][c] = col[c][j];
+			a[j][c] = col[c][0] * p[j][0] + col[c][1] * p[j][1] + col[c][2] * p[j][2];
 	}
 	/* The game's position has z flipped against its axes (the shader flips it back): work in the axes' view. The
 	 * view (front, rear, side) is a signed permutation of the ship's axes: take the one that agrees with the
@@ -452,9 +464,8 @@ static void exact_view(double pos[3], float axes[9], unsigned obj)
 	double best = -2, bestscore = -10;
 	int bp = 0, bs = 0;
 	/* The front and rear views are known: the ship's axes as they are, or turned half round its up axis (x and z
-	 * negated). Scored, the game's surface axes could win the wrong one: 22000 km over Earth they were some 50
-	 * degrees off after a few degrees of yaw, a view that failed the check below, and the planet was drawn with
-	 * those axes, its ice cap tilted towards or away from the eye with the ship's heading (saves Snap03/04). */
+	 * negated). Scored instead, a wrong view could win (saves Snap03/04, when the planet's spin was still left
+	 * out above and its axes disagreed with the game's), fail the check below and leave the game's axes. */
 	FlightView view = game_flight_view();
 	if (view == VIEW_FRONT || view == VIEW_REAR)
 	{

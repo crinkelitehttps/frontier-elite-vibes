@@ -405,6 +405,12 @@ void cheat_object_axes(unsigned obj, double col[3][3])
 	}
 }
 
+bool cheat_ship_in_body_frame(void)
+{
+	u32 me = ship();
+	return me && (u8)rdbyte(me + 69) == 255;
+}
+
 bool cheat_ship_object(unsigned *ship_obj)
 {
 	*ship_obj = ship();

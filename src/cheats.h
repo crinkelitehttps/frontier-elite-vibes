@@ -65,6 +65,10 @@ bool cheat_ship_position(double km[3]);
 double cheat_ship_height_ratio(unsigned body);
 bool cheat_ship_body_vector(unsigned body, double out[3]);
 void cheat_object_axes(unsigned obj, double col[3][3]);
+/* True when the ship's position is in its parent body's own turning frame (frame byte 255: within the zone the
+ * game switches at, 1.25 radii for Earth), false when in the parent's fixed axes, which the body's matrix turns
+ * against */
+bool cheat_ship_in_body_frame(void);
 bool cheat_ship_object(unsigned *ship_obj);
 void cheat_ship_set_position(const double km[3]);
 /* Moves the ship `km` further from (or, negative, nearer to) its frame parent */
