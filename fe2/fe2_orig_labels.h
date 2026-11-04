@@ -131,7 +131,7 @@
 #define FE2_ProjectCylinder_2                        0x305b4 /* L3be90_ProjectCylinder_2 */
 #define FE2_ProjectVectorText                        0x30df4 /* L3c676_ProjectVectorText */
 #define FE2_ProjectRankBitmapText                    0x30fa6 /* L3c828_ProjectRankBitmapText */
-#define FE2_ProjectCloudShadowPos                    0x3109c /* L3c8d8_ProjectCloudShadowPos */
+#define FE2_ProjectScaledSubModel                    0x3109c /* L3c8d8_ProjectScaledSubModel */
 #define FE2_ObjEnd                                   0x312a0 /* L3cadc_ObjEnd */
 #define FE2_InterpretByteCode                        0x313f0 /* L3cc2c_InterpretByteCode */
 #define FE2_ProjectPlanet                            0x3156c /* L3cd9c_ProjectPlanet */

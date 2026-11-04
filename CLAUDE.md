@@ -13,14 +13,17 @@ The repo lives inside a "play folder" (`..`, not a git repo) holding saves, `glf
 There is no test suite; changes are checked by building and running the game.
 
 ```sh
-# Original (unmodded) game code — the variant this fork actually uses and ships
-cmake -S . -B build-original -G Ninja -DCMAKE_BUILD_TYPE=Release -DGLF_MODDED_FE2=OFF
-cmake --build build-original -j$(nproc)
-../glfrontier.sh            # runs build-original/GLFrontier from the play folder (saves/cfg live there)
+# Modded game code (fe2/fe2_modded.s: Brett's AFMU, free camera, custom ships) — what we build and run by default
+cmake -S . -B build-modded -G Ninja -DCMAKE_BUILD_TYPE=Release -DGLF_MODDED_FE2=ON
+cmake --build build-modded -j$(nproc)
+../glfrontier.sh            # runs build-modded/GLFrontier from the play folder (saves/cfg live there)
 ../build-and-run.sh         # build + run in one go
+
+# Original (unmodded) game code, for comparing or for releases
+cmake -S . -B build-original -G Ninja -DCMAKE_BUILD_TYPE=Release -DGLF_MODDED_FE2=OFF
 ```
 
-Default `GLF_MODDED_FE2=ON` builds `fe2/fe2_modded.s` (Brett's mods: AFMU, free camera, custom ships). Host code that uses mod labels must be inside `#if FE2_USE_MODDED` with a fallback, or the original build breaks. Build both variants when touching shared host code.
+Both `fe2/fe2.s` (original) and `fe2/fe2_modded.s` carry every hook and fix of ours (native scene, scenery, netplay, missions...): since 2026-11-04 the modded file has the same ones, so **a change to the game code is made in both files** and `build_fe2.py --variant all` regenerates both. Put new code at the end of each file. Host code that uses mod labels must be inside `#if FE2_USE_MODDED` with a fallback, or the original build breaks. Build both variants when touching shared host code.
 
 Release packaging (play-folder scripts): `../build-windows.sh` / `../package-windows.sh [vibes-N]` (mingw-w64 cross build into `../build-win64`, zip into `../releases`), `../package-linux.sh [vibes-N]` (builds committed HEAD in docker ubuntu:22.04 for glibc 2.34). Package templates are in `../release-files/`.
 
@@ -71,10 +74,10 @@ A catalog of 135 systems that cover every star, planet, moon and starport kind a
 
 ## Testing
 
-`../devtools/README.md` documents the test harness: `t.sh` drives a **separate** instance by PID (`BIN=` picks the binary — use a scratch build dir, not `build-original`, while the user may be playing), plus `tospace.sh`/`climb.sh`/`space.sh` flight scripts, `ot.py` fake OpenTrack, `vpad.py` virtual pad, Monado qwerty for VR, and model dump tools in `devtools/models`. Before chasing a visual "bug" in native mode, compare against `GLF_NATIVE_SCENE=0` at the same window size.
+`../devtools/README.md` documents the test harness: `t.sh` drives a **separate** instance by PID (`BIN=` picks the binary — use a scratch build dir, not `build-modded`, while the user may be playing), plus `tospace.sh`/`climb.sh`/`space.sh` flight scripts, `ot.py` fake OpenTrack, `vpad.py` virtual pad, Monado qwerty for VR, and model dump tools in `devtools/models`. Before chasing a visual "bug" in native mode, compare against `GLF_NATIVE_SCENE=0` at the same window size.
 
 ## Working conventions (from the user)
 
 - Don't modernise the codebase; match surrounding style (`.clang-format`).
 - Commit only when asked; committing straight to `main` is fine.
-- The user tests visuals in-game faster than automated screenshots — build into `build-original` and let them look rather than burning effort on self-testing.
+- The user tests visuals in-game faster than automated screenshots — build into `build-modded` and let them look rather than burning effort on self-testing.

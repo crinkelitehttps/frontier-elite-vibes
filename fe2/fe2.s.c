@@ -27078,7 +27078,7 @@ extern void __F84322 ();
 #define __Dl3c8b4 (0x31038)
 #define __D31086 (0x31086)
 #define __Dl3c8d6 (0x3109a)
-#define __DL3c8d8_ProjectCloudShadowPos (0x3109c)
+#define __DL3c8d8_ProjectScaledSubModel (0x3109c)
 #define __D310b6 (0x310b6)
 #define __Dl3c8f2 (0x310b6)
 #define __Dl3c906 (0x310ca)
@@ -322079,7 +322079,7 @@ __Nl3c8d6:
 	jdest = rdlong (Regs[15]._u32);
 	Regs[15]._s32 += 4;
 	goto jumptable;
-__NL3c8d8_ProjectCloudShadowPos:
+__NL3c8d8_ProjectScaledSubModel:
 	case (0x3109c):
 	#ifdef M68K_DEBUG
 		line_no = 15968;

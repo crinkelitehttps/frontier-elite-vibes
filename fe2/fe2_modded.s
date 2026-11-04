@@ -196,6 +196,9 @@ Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
 Call_KillLog	equ	$8f
 Call_ProxLog	equ	$93
+* Network play: a hit on the other player's ghost, damage to apply to ours (src/netplay.c)
+Call_NetDamage	equ	$94
+Call_NetPending	equ	$95
 
 * don't change. it won't work yet.
 SCR_W			equ	320
@@ -11200,16 +11203,19 @@ L39426_PutGameData3DObj:
 		move.l	a4,-212(a6)
 		clr.w	-156(a6)
 		clr.w	-192(a6)
-		bsr.w	L39646_3DObjClipOffscreen
-		bne.s	l394ae
+* Native scene: hook, same size as the code it replaced (6 bytes). See
+* Lnative_clip2 at the end of the file.
+		jsr	Lnative_clip2
 		clr.w	-64(a6)
 		move.w	#$111,-154(a6)
 		movem.w	L60e2_lighting_vector,d0-2
 		movem.w	d0-2,-198(a6)
 		movem.l	L60f6_light_tint_table,d0-3
 		movem.l	d0-3,-104(a6)
-		bsr.w	L39546_CalcRotViewNLight
-		bsr.w	L3e14e_SetupNProjectObj
+* Native scene: hook, same size as the code it replaced (8 bytes). See
+* Lnative_object2 at the end of the file.
+		jsr	Lnative_object2
+		nop
 		tst.w	L385e4_3dview_word1
 		beq.s	l394ae
 		movea.l	L385c8_primitives_end,a0
@@ -16113,7 +16119,7 @@ L3c82a:
 		
 	l3c8d6:	rts
 
-L3c8d8_ProjectCloudShadowPos:
+L3c8d8_ProjectScaledSubModel:
 		move.w	(a5)+,d7
 		move.w	d7,d0
 		ext.w	d0
@@ -18514,7 +18520,7 @@ L3e10e:
 		dc.w	L3ab42_ProjectBlobs-L3e10e
 		dc.w	L3c556-L3e10e
 		dc.w	L3a0f4-L3e10e
-		dc.w	L3c8d8_ProjectCloudShadowPos-L3e10e
+		dc.w	L3c8d8_ProjectScaledSubModel-L3e10e
 		dc.w	L3c4ac-L3e10e
 		dc.w	L3cc2c_InterpretByteCode-L3e10e
 		dc.w	L39ea0-L3e10e
@@ -19879,6 +19885,7 @@ L3f566:
 		adda.w	26(a3),a3
 		move.l	272(a0),d7
 
+Lnet_collide_begin:
 L3f8fe:
 		bsr.w	L3fa8e
 		bmi.w	l3fa14
@@ -19942,6 +19949,7 @@ L3f8fe:
 		jmp	Lpol_dmg2
 	l3f9d0:	move.b	16014(a6),d0
 		rts
+Lnet_collide_end:
 
 	l3f9d6:	movem.l	98(a0),d0-2
 	l3f9dc:	asr.l	#2,d0
@@ -26921,8 +26929,12 @@ L4477c:
 	l447ba:	rts
 
 L447bc_DoPhysics:
-		move.l	a4,14462(a6)
-		movem.l	d2-3,-(a7)
+* Replaces move.l a4,14462(a6) and movem.l d2-3,-(a7) (8 bytes): Lnet_physics
+* at the end of the file does both, then applies the damage the other player
+* has sent (network play).
+		jmp	Lnet_physics
+		nop
+Lnet_physics_cont:
 		move.w	#$72,d0
 	l447c8:	btst	#$0,0(a4,d0.w)
 		dbne	d0,l447c8
@@ -27271,8 +27283,11 @@ L44c4a:
 		rts
 
 L44c96:
-		move.l	a2,-(a7)
-		movem.l	a3-4/d7/a0-1/d0,-(a7)
+* Replaces move.l a2,-(a7) and movem.l a3-4/d7/a0-1/d0,-(a7) (6 bytes):
+* Lnet_damage at the end of the file tells the host about the hit (network
+* play), then does both.
+		jmp	Lnet_damage
+Lnet_damage_cont:
 		moveq	#0,d1
 	l44c9e:	btst	#$2,17(a6,d1.w)
 		beq.s	l44cbc
@@ -68196,6 +68211,7 @@ Lframe_cand:
 		rts
 
 
+
 * HUD altitude readout (the "Alt. ... m" of the flight display, L6366c's
 * neighbourhood). The original shows it only up to 60 km (a 16 bit number of
 * metres), the rest of the time the distance-only line. Over a star or a gas
@@ -69431,3 +69447,69 @@ Lscen_cap:
 		cmp.w	d0,d1
 		movem.l	(a7)+,d0-1
 		rts
+
+******************************************************************************
+* Native scene: the same for objects drawn by L39426_PutGameData3DObj, from
+* whichever model table is in use (the hangar and launch lift come from the
+* intro's). In place of "bsr.w L39546_CalcRotViewNLight / bsr.w
+* L3e14e_SetupNProjectObj".
+******************************************************************************
+Lnative_object2:
+		hcall	#Nu_NativeObject
+		tst.w	Lnative_culled
+		bne.s	lnative_object2_culled
+		jsr	L39546_CalcRotViewNLight
+		jmp	L3e14e_SetupNProjectObj
+lnative_object2_culled:
+		clr.w	Lnative_culled
+		addq.l	#4,a7
+		jmp	l394ae
+
+******************************************************************************
+* Native scene: the same in L39426_PutGameData3DObj, whose matrix is ready
+* already. In place of "bsr.w L39646_3DObjClipOffscreen / bne.s l394ae".
+******************************************************************************
+Lnative_clip2:
+		jsr	L39646_3DObjClipOffscreen
+		bne.s	lnative_clip2_off
+		rts
+lnative_clip2_off:
+		hcall	#Nu_NativeCulled
+		tst.w	d0
+		bne.s	lnative_clip2_keep
+		addq.l	#4,a7
+		jmp	l394ae
+lnative_clip2_keep:
+		move.w	#1,Lnative_culled
+		rts
+
+******************************************************************************
+* Network play (src/netplay.c).
+*
+* Damage to a ship (L44c96, a1 = the ship, d0 = the damage, d7 = who did it).
+* The host looks at hits on the other player's ghost ship: a hit by our
+* ship's weapons (not a collision, both games work out those themselves)
+* is sent to the other player. The hit goes on in this game as before.
+Lnet_damage:
+		hcall	#Call_NetDamage
+		move.l	a2,-(a7)
+		movem.l	a3-4/d7/a0-1/d0,-(a7)
+		jmp	Lnet_damage_cont
+
+* DoPhysics' start: damage the other player's weapons did to our ship, sent
+* by their host (Call_NetPending: d0 = damage or 0, d7 = their slot here,
+* a1 = our ship).
+Lnet_physics:
+		move.l	a4,14462(a6)
+		movem.l	d2-3,-(a7)
+		movem.l	d0-1/d7/a0-1,-(a7)
+	lnet_phys_next:
+		hcall	#Call_NetPending
+		tst.w	d0
+		beq.s	lnet_phys_done
+		jsr	486(a5)
+		bra.s	lnet_phys_next
+	lnet_phys_done:
+		movem.l	(a7)+,d0-1/d7/a0-1
+		jmp	Lnet_physics_cont
+

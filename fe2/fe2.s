@@ -15964,7 +15964,7 @@ L3c82a:
 		
 	l3c8d6:	rts
 
-L3c8d8_ProjectCloudShadowPos:
+L3c8d8_ProjectScaledSubModel:
 		move.w	(a5)+,d7
 		move.w	d7,d0
 		ext.w	d0
@@ -18363,7 +18363,7 @@ L3e10e:
 		dc.w	L3ab42_ProjectBlobs-L3e10e
 		dc.w	L3c556-L3e10e
 		dc.w	L3a0f4-L3e10e
-		dc.w	L3c8d8_ProjectCloudShadowPos-L3e10e
+		dc.w	L3c8d8_ProjectScaledSubModel-L3e10e
 		dc.w	L3c4ac-L3e10e
 		dc.w	L3cc2c_InterpretByteCode-L3e10e
 		dc.w	L39ea0-L3e10e
