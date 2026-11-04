@@ -528,24 +528,25 @@ static void record_native(const PlanetDesc *p)
 	n->stand_in = false;
 	float pos[3], v[3];
 	vec3i_to_f(p->pos, pos);
-	float axes[9];
-	memcpy(axes, p->axes, sizeof axes);
-	if (ahead && game_screen() == SCREEN_FLIGHT && game_flight_view() != VIEW_EXTERNAL)
-	{
-		double dp[3] = {pos[0], pos[1], pos[2]};
-		exact_view(dp, axes, obj);
-		for (int k = 0; k < 3; k++)
-			pos[k] = (float)dp[k];
-	}
 	cockpit_pass_to_view(pos, v);
+	for (int c = 0; c < 3; c++)
+		pass_to_view_game(&p->axes[3 * c], &n->axes[3 * c]);
+	/* A capture pass's planet is as rounded as the game camera's (more: its camera too), so it gets the exact view
+	 * as well, once turned into the game camera's view: over London at 16 km its map was ~5 mrad (30 km) off the
+	 * game camera's (save "flickeri"). */
+	if (game_screen() == SCREEN_FLIGHT && game_flight_view() != VIEW_EXTERNAL)
+	{
+		double dp[3] = {v[0], v[1], v[2]};
+		exact_view(dp, n->axes, obj);
+		for (int k = 0; k < 3; k++)
+			v[k] = (float)dp[k];
+	}
 	for (int k = 0; k < 3; k++)
 		n->pos[k] = v[k];
 	n->radius = p->radius;
 	exact_distance(n);
 	n->shrink = native_frame_shrink(a6);
 	cockpit_pass_to_view(p->light, n->light);
-	for (int c = 0; c < 3; c++)
-		pass_to_view_game(&axes[3 * c], &n->axes[3 * c]);
 	n->light_col = p->light_col;
 	n->obj_col = p->obj_col;
 	memcpy(n->palette, p->palette, sizeof n->palette);
@@ -566,14 +567,39 @@ static void record_native(const PlanetDesc *p)
 	remember_known(n);
 }
 
-/* Q v: the object's turn since `old` was captured, Q = new old^T */
+/* The game's matrix words are rounded, so its columns are neither unit nor square to each other (about 1 in 120
+ * short): made a rotation, Gram-Schmidt in double */
+static void orthonormal(const float in[3][3], double out[3][3])
+{
+	for (int c = 0; c < 3; c++)
+	{
+		for (int k = 0; k < 3; k++)
+			out[c][k] = in[c][k];
+		for (int p = 0; p < c; p++)
+		{
+			double d = out[c][0] * out[p][0] + out[c][1] * out[p][1] + out[c][2] * out[p][2];
+			for (int k = 0; k < 3; k++)
+				out[c][k] -= d * out[p][k];
+		}
+		double l = sqrt(out[c][0] * out[c][0] + out[c][1] * out[c][1] + out[c][2] * out[c][2]);
+		for (int k = 0; k < 3; k++)
+			out[c][k] = l > 0 ? out[c][k] / l : 0;
+	}
+}
+
+/* Q v: the object's turn since `old` was captured, Q = new old^T. Both made rotations first: with the rounded
+ * words Q was no turn at all for a planet that hadn't moved but squashed and skewed it (the paused game), and a
+ * remembered planet's map lay about a degree off the captured one's: over Earth at 15 km the coast jumped
+ * between two shapes every frame (save "flickeri"). */
 static void turn_by(const float old_cols[3][3], const float cols[3][3], const float v[3], float out[3])
 {
-	float a[3];
+	double o[3][3], n[3][3], a[3];
+	orthonormal(old_cols, o);
+	orthonormal(cols, n);
 	for (int i = 0; i < 3; i++)
-		a[i] = old_cols[i][0] * v[0] + old_cols[i][1] * v[1] + old_cols[i][2] * v[2];
+		a[i] = o[i][0] * v[0] + o[i][1] * v[1] + o[i][2] * v[2];
 	for (int k = 0; k < 3; k++)
-		out[k] = cols[0][k] * a[0] + cols[1][k] * a[1] + cols[2][k] * a[2];
+		out[k] = (float)(n[0][k] * a[0] + n[1][k] * a[1] + n[2][k] * a[2]);
 }
 
 /* How long a remembered planet stands in, render frames */

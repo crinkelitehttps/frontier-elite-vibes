@@ -119,8 +119,10 @@ typedef struct
 } AtmosBuf;
 
 static AtmosBuf rec, pub, show;
+/* the last bands made, kept for the frames that make none (atmos_publish) */
+static AtmosBuf held;
 static int first_pending, planet_puts;
-/* ... of them with the planet's horizon well inside the pass's view */
+/* ... of them with the horizon of a planet whose bands are held well inside the pass's view */
 static int horizon_puts;
 static float scale_so_far = 1.0f;
 
@@ -160,7 +162,6 @@ void atmos_publish(void)
 	 * (save "flashing": over Mars, passes towards its far moons). Only a
 	 * pass that had the planet's horizon well in view and made no bands
 	 * says there are none. */
-	static AtmosBuf held;
 	static int held_age = HELD_FRAMES;
 	if (rec.n_bands > 0)
 	{
@@ -235,7 +236,14 @@ void atmos_place_bands(const float centre[3], float radius)
 	{
 		double off = acos(fmax(-1.0, fmin(1.0, -centre[2] / dist)));
 		double a = asin(fmin((double)radius / dist, 1.0));
-		if (fabs(off - a) < CLASSIC_FOV * 0.5 * GLM_PI / 180.0)
+		/* Only the held bands' own planet: another one's horizon in view (the Moon's whole disc, from a pass
+		 * aimed at it, over Earth) said nothing about Earth's haze but dropped it for a frame or two, the
+		 * bands blinking (save "flickeri") */
+		bool banded = false;
+		for (int i = 0; i < held.n_planets; i++)
+			if (fabsf(held.planets[i].radius - radius) <= radius * 1e-3f)
+				banded = true;
+		if (banded && fabs(off - a) < CLASSIC_FOV * 0.5 * GLM_PI / 180.0)
 			horizon_puts++;
 	}
 	if (first_pending < rec.n_bands)
