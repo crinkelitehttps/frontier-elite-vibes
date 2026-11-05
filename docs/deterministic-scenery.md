@@ -59,7 +59,9 @@ uses, gave sea at London). [inferred] That code 0 is the liquid on every planet 
 - **Land layer**: as before (fixed in the planet's frame, hash of planet and cell, 1 cell in 48), but now only the row's non-cloud
   kinds, and nothing over liquid sea (`planet_is_sea`). A land cell that would have been a cloud is no feature.
 - **Cloud layer**: its own hash (`seed` mixed with `0xc10d`), 1 cell in 48 (`CLOUD_DENSITY`), anywhere, sea or land; the kind is
-  the first model-`$c6` entry of the planet type's row (a row with none, the airless types, has no clouds). Its cells are in a
+  the first model-`$c6` entry of the planet type's row. A row with none but not the airless one (first entry `$ca`; e.g.
+  Mars' `$cc`/`$ce`/`$d0`) makes any of its kinds and `Call_ScenMade` sets the model to `$c6`, as the starport rule does; airless rows
+  have no clouds. Its cells are in a
   **wind frame**: the planet's frame turned about a fixed axis (from the planet's hash) by `wind * game time / radius`
   (`scenery_cloud_wind_mps`, cfg `cloud_wind_mps`, default 40 m/s; 0 = still; the clock is the day count at `A6+528` and time
   of day at `A6+524`). `scan_layer` looks for cells around the ship's place turned back into that frame, so the windward cells

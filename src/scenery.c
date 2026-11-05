@@ -32,6 +32,7 @@
 #define CLOUD_BIT     (1ull << 63) /* in a cell's key */
 #define CLOUD_DENSITY 48
 #define MODEL_CLOUD   0xc6
+#define MODEL_CRATER  0xca /* the airless types' rows */
 #define GAME_SECOND   49710.0
 #define A6_TIME       524 /* long: time of day, 49710 a second, wraps daily */
 #define A6_DAY        528 /* long: days */
@@ -497,7 +498,9 @@ void Call_ScenNext(void)
 	cache_rp = rp;
 	{
 		uint32_t row = kind_row(planet);
-		cache_clouds = false;
+		/* a row with a cloud field, or any row that is not the airless one (craters, kind $ca): a terraformed
+		   Mars has none of its own and had clouds only from the starport rule */
+		cache_clouds = row && (uint16_t)rdword(row) != MODEL_CRATER;
 		for (uint32_t k = 0; row && k < 8; k++)
 			if ((uint16_t)rdword(row + 4 * k) == MODEL_CLOUD)
 				cache_clouds = true;
@@ -570,12 +573,14 @@ void Call_ScenNext(void)
 			for (uint32_t k = 0; row && k < 8 && pick == 8; k++)
 				if ((uint16_t)rdword(row + 4 * ((kind + k) & 7)) == MODEL_CLOUD)
 					pick = (kind + k) & 7;
-			if (pick == 8)
+			/* none: the field is put in place of whatever the kind makes (Made), as the starport rule does */
+			if (pick != 8)
+				kind = pick;
+			else if ((uint16_t)rdword(row) == MODEL_CRATER)
 			{
 				tried_add(key);
 				continue;
 			}
-			kind = pick;
 		}
 		else if (row && ((uint16_t)rdword(row + 4 * kind) == MODEL_CLOUD || planet_is_sea(planet, p) > 0))
 		{
@@ -635,6 +640,11 @@ void Call_ScenMade(void)
 			if (mat_cols < 0)
 				detect_mat(tmpl[t].obj);
 			tmpl[t].cloud = (uint8_t)pending_cloud;
+			if (pending_cloud)
+			{
+				tmpl[t].obj[90] = 0;
+				tmpl[t].obj[91] = MODEL_CLOUD;
+			}
 			if (pending_cloud)
 				turn_obj(tmpl[t].obj, true); /* into the wind frame */
 			bpos_get(tmpl[t].obj, tmpl[t].pos);
