@@ -112,12 +112,12 @@ static GLuint cam_tex;
 #define HOST_SHOWN_CAMERA 1 /* host_shown_mask() */
 #define HOST_SHOWN_MENU   2
 static GLuint menu_req, menu_tex;
-static bool menu_on;
+static bool emu_menu_on;
 static float menu[4][3];
 
 static int host_shown_mask(void)
 {
-	return (cam_tex ? HOST_SHOWN_CAMERA : 0) | (menu_on ? HOST_SHOWN_MENU : 0);
+	return (cam_tex ? HOST_SHOWN_CAMERA : 0) | (emu_menu_on ? HOST_SHOWN_MENU : 0);
 }
 static GLuint blank_tex; /* the COMS screen with nothing yet on it */
 static bool flat_saved;  /* active, while cockpit_draw_flat */
@@ -320,7 +320,7 @@ void cockpit_menu_pointer(int hand, bool on, float u, float v, bool down)
 bool cockpit_menu_pointer_get(float *u, float *v, bool *down)
 {
 	int pick = -1;
-	for (int i = 0; menu_on && i < 2; i++)
+	for (int i = 0; emu_menu_on && i < 2; i++)
 		if (menu_ptr[i].on && (pick < 0 || (menu_ptr[i].down && !menu_ptr[pick].down)))
 			pick = i;
 	if (pick < 0)
@@ -681,7 +681,7 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	cam_tex = active && cockpit_camera ? camera_texture() : 0;
 	cam_on = cam_tex != 0;
 	menu_tex = active ? menu_req : 0;
-	menu_on = menu_tex != 0;
+	emu_menu_on = menu_tex != 0;
 	if (window_w > 0 && window_h > 0)
 		aspect = (float)window_w / (float)window_h;
 
@@ -1035,7 +1035,7 @@ void cockpit_draw(void)
 						   g == live || side_on[g] ? 1.0f : SUB_DIM, g == COCKPIT_SCREEN_COMS && (gl_screen_coms_clear() || sub_tex[g] == blank_tex));
 	if (cam_on)
 		queue_tex_quad(&cp, (const float(*)[3])cam, cam_tex, 0.0f, 1.0f, 1.0f, false);
-	if (menu_on) /* its texture is bottom up; what it doesn't cover is clear */
+	if (emu_menu_on) /* its texture is bottom up; what it doesn't cover is clear */
 		queue_tex_quad(&cp, (const float(*)[3])menu, menu_tex, 1.0f, 0.0f, 1.0f, true);
 	gd_pop();
 
@@ -1877,7 +1877,7 @@ bool cockpit_place_play(int place, float corners[4][3])
 {
 	if (place == PLACE_MENU)
 	{
-		if (!active || !menu_on)
+		if (!active || !emu_menu_on)
 			return false;
 		to_play((const float(*)[3])menu, corners);
 		return true;
