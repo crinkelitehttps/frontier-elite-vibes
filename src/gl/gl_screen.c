@@ -502,6 +502,19 @@ static void draw_orbit_button(void)
 		for (int x = ORBIT_BTN_X0; x <= ORBIT_BTN_X1; x++)
 			framebuf[y * SCR_W + x] =
 				(x == ORBIT_BTN_X0 || x == ORBIT_BTN_X1 || y == ORBIT_BTN_Y0 || y == ORBIT_BTN_Y1) ? edge : back;
+	/* the cog button: a square the button's height, at its right */
+	{
+		const unsigned int cback = toggle_m68k_menu ? 0xff006090 : 0xff302820;
+		for (int y = ORBIT_BTN_Y0; y <= ORBIT_BTN_Y1; y++)
+			for (int x = COG_BTN_X0; x <= COG_BTN_X1; x++)
+			{
+				bool border = x == COG_BTN_X0 || x == COG_BTN_X1 || y == ORBIT_BTN_Y0 || y == ORBIT_BTN_Y1;
+				int dx = x - (COG_BTN_X0 + COG_BTN_X1) / 2, dy = y - (ORBIT_BTN_Y0 + ORBIT_BTN_Y1) / 2;
+				int r2 = dx * dx + dy * dy;
+				bool lit = (r2 >= 2 && r2 <= 5) || r2 == 8 || (r2 == 9 && (dx == 0 || dy == 0));
+				framebuf[y * SCR_W + x] = border ? edge : lit ? text : cback;
+			}
+	}
 	const char *word = "ORBIT";
 	int x = ORBIT_BTN_X0 + 7;
 	for (const char *c = word; *c; c++)

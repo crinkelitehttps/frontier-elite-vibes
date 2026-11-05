@@ -19,6 +19,7 @@
 #include "m68000.h"
 #include "renderer.h"
 #include "screen_text.h"
+#include "main.h" /* toggle_m68k_menu */
 
 bool own_hud = true;
 bool orbit_display = false;
@@ -32,8 +33,15 @@ void hud_orbit_button_show(bool on)
 
 bool hud_orbit_button_press(int x, int y)
 {
-	if (!orbit_button_on || x < ORBIT_BTN_X0 || x > ORBIT_BTN_X1 || y < ORBIT_BTN_Y0 || y > ORBIT_BTN_Y1)
+	if (!orbit_button_on || x < ORBIT_BTN_X0 || x > COG_BTN_X1 || y < ORBIT_BTN_Y0 || y > ORBIT_BTN_Y1)
 		return false;
+	if (x >= COG_BTN_X0)
+	{
+		toggle_m68k_menu = !toggle_m68k_menu;
+		return true;
+	}
+	if (x > ORBIT_BTN_X1)
+		return true; /* the gap between them */
 	orbit_display = !orbit_display;
 	return true;
 }
