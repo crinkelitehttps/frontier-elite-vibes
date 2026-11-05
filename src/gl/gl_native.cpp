@@ -1887,7 +1887,7 @@ struct Runner
 				log_printf("cloud shadow: sun elevation %.1f deg, cloud %.0f above\n",
 						   std::asin(std::max(-1.0f, std::min(1.0f, -lu))) * 57.2958f, du);
 		}
-		if (-lu < 0.12f) /* below about 7 degrees: no shadow */
+		if (-lu < 0.06f) /* below about 3.4 degrees: no shadow */
 			return false;
 		for (int j = 0; j < 3; j++)
 			org[j] += d[j] - du / lu * o.light[j];

@@ -12,7 +12,7 @@
 bool ship_shadows = true;
 
 #define MAP_SIZE   1024
-#define DEPTH_SPAN 200.0f /* the map's depth reaches this many radii of the ships along the light */
+#define DEPTH_SPAN 1000.0f /* the map's depth reaches this many radii of the ships along the light */
 #define DARK       0.5f   /* the colour left in shadow */
 
 static GLuint tex, fbo, prog, vao, vbo;
