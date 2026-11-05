@@ -19,6 +19,15 @@ casters chosen in `gl_native.cpp` (`setup_shadows`).
 4. The planet's sphere shader works out the hit point in eye space, turns it back into view space (`uToView` = the
    head's turn transposed, `uViewR` = the sphere's unit) and looks the map up too, on the lit side only.
 
+Casters: only the ships near the nearest one (within 8 of its radii, at least 100 m) go into the map. The map is fitted
+round its casters, so with a second ship kilometres away every texel was metres wide: the shadow came out several
+times too big and in coarse blocks (Merlin, Snap21/22). Ships outside that reach neither cast nor are kept from receiving.
+
+Ground height on the planet: near the ground the drawn sphere can sit well above the scenery (a Merlin pad 258 m down had
+the sphere 16 m down), which made the shadow on it about 16 times too big. In the cockpit/front views the sphere shader
+scales the hit point along its ray by game altitude / sphere height (`shadow_k`, capped at 200), so the shadow falls on
+the ground the scenery stands on. `GLF_SHIP_SHADOWS=2` also logs the sphere's distance, radius and height.
+
 ## The player's own ship
 
 In the cockpit's front view the game skips the player's ship (the slot at A6+608 that the object loop compares with each

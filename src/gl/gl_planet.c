@@ -842,7 +842,7 @@ static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
 	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
-	GLint shadow_on, shadow_u, shadow_v, shadow_d, shadow_dark, shadow_bias, shadow, to_view, view_r;
+	GLint shadow_k, shadow_on, shadow_u, shadow_v, shadow_d, shadow_dark, shadow_bias, shadow, to_view, view_r;
 } us;
 static struct
 {
@@ -884,6 +884,7 @@ static const char *FS_SPHERE =
 	"uniform sampler2DShadow uShadow;\n"
 	"uniform mat3 uToView;\n"
 	"uniform float uViewR;\n"
+	"uniform float uShadowK;\n"
 	"out vec4 fragColor;\n"
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
@@ -922,7 +923,7 @@ static const char *FS_SPHERE =
 	/* in a ship's shadow, on the lit side */
 	"  float sh = 1.0;\n"
 	"  if (uShadowOn > 0.5 && l > 0.0) {\n"
-	"    vec3 pv = (uToView * (tt * d)) * uViewR;\n"
+	"    vec3 pv = (uToView * (tt * d)) * uViewR * uShadowK;\n"
 	"    vec3 s = vec3(dot(uShadowU.xyz, pv) + uShadowU.w, dot(uShadowV.xyz, pv) + uShadowV.w, dot(uShadowD.xyz, pv) + uShadowD.w);\n"
 	"    if (s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
 	"      sh = mix(uShadowDark, 1.0, texture(uShadow, vec3(s.xy, min(s.z, 1.0) - uShadowBias)));\n"
@@ -993,6 +994,7 @@ void gl_planet_init(void)
 	us.shadow = glGetUniformLocation(sphere_prog, "uShadow");
 	us.to_view = glGetUniformLocation(sphere_prog, "uToView");
 	us.view_r = glGetUniformLocation(sphere_prog, "uViewR");
+	us.shadow_k = glGetUniformLocation(sphere_prog, "uShadowK");
 
 	static const float quad[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
 	glGenVertexArrays(1, &quad_vao);
@@ -1027,6 +1029,7 @@ typedef struct
 	float flat;
 	float to_view[9]; /* eye space -> view space (the head's turn undone), column major */
 	float view_r;     /* view units to the unit the sphere is drawn in */
+	float shadow_k;   /* the ground the ships' shadows fall on is this many times as far below the eye as the sphere's */
 	GLuint surface;   /* 0: plain */
 	float to_local[9];
 	float palette[16][3];
@@ -1062,6 +1065,7 @@ static void planet_sphere_pass(const void *data)
 		glUniform1f(us.shadow_bias, gl_shadow_bias());
 		glUniformMatrix3fv(us.to_view, 1, GL_FALSE, p->to_view);
 		glUniform1f(us.view_r, p->view_r);
+		glUniform1f(us.shadow_k, p->shadow_k);
 	}
 	if (p->surface)
 	{
@@ -1214,6 +1218,12 @@ static void draw_sphere(const SphereIn *in)
 	float rect[4];
 	if (!screen_rect(pos, (float)r, rect))
 		return;
+	{
+		static int dn;
+		if (getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2 && dn++ % 200 < 2)
+			log_printf("sphere: dist %.0f radius %.0f h %.0f flat %.1f in-radius %.0f\n", dist, (double)in->radius, h,
+					   flat, (double)in->radius);
+	}
 
 	/* the head's turn in double: the centre may be millions of units off */
 	double c[3];
@@ -1243,6 +1253,17 @@ static void draw_sphere(const SphereIn *in)
 		for (int i = 0; i < 3; i++)
 			pass->to_view[j * 3 + i] = head.m[i * 4 + j];
 	pass->view_r = (float)r;
+	/* Near the ground the sphere can sit well above the ground the scenery
+	 * stands on (the planet's drawn radius is a 16 bit mantissa: a Merlin pad
+	 * 258 m down had the sphere 16 m down), and a shadow cast on it would be
+	 * that much too big. Cast it on the ground at the game's altitude. */
+	pass->shadow_k = 1.0f;
+	if (flat > 1 && h > 0 && STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) != VIEW_EXTERNAL)
+	{
+		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692);
+		if (alt > h)
+			pass->shadow_k = (float)(alt / h < 200 ? alt / h : 200);
+	}
 
 	memcpy(pass->light, light, sizeof(pass->light));
 	vec3_normalize(pass->light);

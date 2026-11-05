@@ -2228,21 +2228,76 @@ void setup_shadows(bool wire)
 	if (wire || !gl_shadow_wanted())
 		return;
 	shadow_tris.clear();
-	const Object *first = nullptr;
+	/* The map is fitted round the casters, so a ship far off would stretch it
+	 * and make every texel metres wide: only the ships near the nearest one
+	 * (within a few of its sizes, at least 100 m) cast */
+	struct Cand
+	{
+		size_t i;
+		P3 c;
+		float r;
+	};
+	std::vector<Cand> cands;
 	for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
 	{
 		const Object &o = shown->obj[i];
 		const Drawn &d = drawn[i];
 		if (o.table != o.subtable || o.model < 10 || o.model > 41 || d.shrink != 1.0f)
 			continue;
-		shadow_caster[i] = 1;
-		if (!first)
-			first = &o;
+		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
+		bool any = false;
 		for (const Node &n : d.nodes)
 			if (!n.under)
 				for (const Tri &t : n.tris)
 					for (const P3 &p : t.p)
-						shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+						for (int k = 0; k < 3; k++)
+						{
+							lo[k] = std::min(lo[k], p[k]);
+							hi[k] = std::max(hi[k], p[k]);
+							any = true;
+						}
+		if (!any)
+			continue;
+		Cand c = {i, {}, 0};
+		for (int k = 0; k < 3; k++)
+		{
+			c.c[k] = 0.5f * (lo[k] + hi[k]);
+			c.r += 0.25f * (hi[k] - lo[k]) * (hi[k] - lo[k]);
+		}
+		c.r = std::sqrt(c.r);
+		cands.push_back(c);
+	}
+	const Object *first = nullptr;
+	if (!cands.empty())
+	{
+		auto dist0 = [](const Cand &c) { return std::sqrt(c.c[0] * c.c[0] + c.c[1] * c.c[1] + c.c[2] * c.c[2]); };
+		size_t near = 0;
+		for (size_t k = 1; k < cands.size(); k++)
+			if (dist0(cands[k]) - cands[k].r < dist0(cands[near]) - cands[near].r)
+				near = k;
+		const float reach = std::max(8.0f * cands[near].r, 1.0e5f);
+		for (const Cand &c : cands)
+		{
+			float dx = c.c[0] - cands[near].c[0], dy = c.c[1] - cands[near].c[1], dz = c.c[2] - cands[near].c[2];
+			if (std::sqrt(dx * dx + dy * dy + dz * dz) + c.r > reach && &c != &cands[near])
+				continue;
+			shadow_caster[c.i] = 1;
+			{
+				static const bool dbg2 = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
+				static int fr;
+				if (dbg2 && fr++ % 100 < 3)
+					log_printf("shadow caster %zu model %d own %d shrink %.2f centre %.0f %.0f %.0f r %.0f\n", c.i,
+							   (int)shown->obj[c.i].model, (int)shown->obj[c.i].own_added, drawn[c.i].shrink, c.c[0],
+							   c.c[1], c.c[2], c.r);
+			}
+			if (!first)
+				first = &shown->obj[c.i];
+			for (const Node &n : drawn[c.i].nodes)
+				if (!n.under)
+					for (const Tri &t : n.tris)
+						for (const P3 &p : t.p)
+							shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+		}
 	}
 	if (first)
 		shadow_on = gl_shadow_set(first->light, shadow_tris.data(), shadow_tris.size() / 9);
