@@ -28,6 +28,13 @@ the sphere 16 m down), which made the shadow on it about 16 times too big. In th
 scales the hit point along its ray by game altitude / sphere height (`shadow_k`, capped at 200), so the shadow falls on
 the ground the scenery stands on. `GLF_SHIP_SHADOWS=2` also logs the sphere's distance, radius and height.
 
+## Casters are the whole hull
+
+The drawn model only holds the faces turned to the camera (per-face cull, and the model's "skip unless normal faces"
+jumps), so a shadow made from it had holes: the Long Range Eagle's underside, the shuttle's whole hull. `setup_shadows`
+runs each caster again with `Runner::casting`, which skips those facing tests (as the sky does), and takes the triangles
+from that. The map's pass has culling off, so both sides of the hull count. Costs one more model run per caster.
+
 ## The player's own ship
 
 In the cockpit's front view the game skips the player's ship (the slot at A6+608 that the object loop compares with each
@@ -39,6 +46,7 @@ is drawn as usual. `GLF_SHIP_SHADOWS=2` logs the object, caster and triangle cou
 
 ## Limits / next steps
 
+- Ships do not receive shadows from other ships (nor their own): a lookup there would need a bias against self-shadowing.
 - Step 1 only: the ships cast on the ground (plates, scenery, the planet's sphere). The same lookup already applies to
   every receiver of the flat shader, so stations get it too, but that has not been looked at (and the station's own
   lighting is baked in the triangles' colours: night faces get darkened again).

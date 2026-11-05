@@ -1183,6 +1183,8 @@ struct Runner
 	/* The sky: all of it, for any camera. The game draws the half of each
 	 * part that faces its camera (normal tests), from inside. */
 	bool sky = false;
+	/* Ship shadows: the whole model for the light's view, not the half facing the camera */
+	bool casting = false;
 
 	Node &new_node(float key, bool under, const P3 &pt, float push = 0)
 	{
@@ -1546,7 +1548,7 @@ struct Runner
 		{
 			P3 n = turn(r, f.n);
 			P3 a = place(r, f.tris[0]);
-			if (f.has_normal && !sky && dot(n, a) >= 0)
+			if (f.has_normal && !sky && !casting && dot(n, a) >= 0)
 				continue; /* faces away */
 			int sh = f.has_normal ? tint(n) : shade(r, f.nidx);
 			uint16_t col = (uint16_t)colour(f.colour, sh, r.base);
@@ -1984,7 +1986,7 @@ struct Runner
 		if (w.size() < 4)
 			return;
 		int n = w[1] & 0xff;
-		if (!sky && n > 1 && !normal_faces(r, n))
+		if (!sky && !casting && n > 1 && !normal_faces(r, n))
 			return;
 		auto it = shown->texts.find(text_key(o.addr, w[3]));
 		auto org = vertex(r, fe2::s8(w[2]));
@@ -2071,7 +2073,7 @@ struct Runner
 				if (w[1] & 0x8000)
 				{
 					bool faces = normal_faces(r, w[1] & 0x7f);
-					jump = !sky && (ins.op == 0x0b ? !faces : faces);
+					jump = !sky && !casting && (ins.op == 0x0b ? !faces : faces);
 				}
 				else
 				{
@@ -2202,7 +2204,7 @@ std::vector<Drawn> drawn;
 uint32_t frame_seed;
 
 /* Runs object o's model into d; the sky round the camera */
-void run_object(const Object &o, Drawn &d, bool wire, bool sky)
+void run_object(const Object &o, Drawn &d, bool wire, bool sky, bool casting = false)
 {
 	d = Drawn();
 	const Code *c = code_for(o.table, o.model);
@@ -2210,6 +2212,7 @@ void run_object(const Object &o, Drawn &d, bool wire, bool sky)
 		return;
 	Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
 	rn.sky = sky;
+	rn.casting = casting;
 	Run r;
 	r.c = c;
 	r.org = sky ? P3{0, 0, 0} : P3{o.pos[0], o.pos[1], o.pos[2]};
@@ -2325,7 +2328,11 @@ void setup_shadows(bool wire)
 			}
 			if (!first)
 				first = &shown->obj[c.i];
-			for (const Node &n : drawn[c.i].nodes)
+			/* the whole hull, run again without the facing tests: the drawn
+			 * model has only the faces turned to the camera */
+			static Drawn whole;
+			run_object(shown->obj[c.i], whole, false, false, true);
+			for (const Node &n : whole.nodes)
 				if (!n.under)
 					for (const Tri &t : n.tris)
 						for (const P3 &p : t.p)
