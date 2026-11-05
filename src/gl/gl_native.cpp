@@ -1157,6 +1157,7 @@ struct Run
 	int s;        /* view = org + ax v 2^s */
 	float k;      /* 2^s */
 	int base;     /* base colour, -154(a6) */
+	bool shadow = false; /* a cloud's shadow (model 206): drawn as translucent black */
 	int shade0;   /* the shade of normal 0, faces without a normal */
 	uint16_t t[8]; /* temporaries, -64(a6): t0 the depth of sub-models */
 	int voff = 0;  /* mcopy: vertex records shifted by this many */
@@ -1175,6 +1176,7 @@ struct Runner
 	bool wire;
 	int s2; /* -192(a6): sub-models' scales are relative to it */
 	uint32_t frame_seed;
+	int shadow_node = -1; /* the node holding the cloud shadows */
 	int batch = -1; /* the node a batch is going into (L385e4_3dview_word1) */
 	std::vector<float> zpath; /* the open ztree nodes' keys */
 	std::vector<P3> zpt; /* ...and their points (Node.kpt) */
@@ -1548,6 +1550,8 @@ struct Runner
 				continue; /* faces away */
 			int sh = f.has_normal ? tint(n) : shade(r, f.nidx);
 			uint16_t col = (uint16_t)colour(f.colour, sh, r.base);
+			if (r.shadow)
+				col |= 0x8000;
 			if (wire)
 			{
 				auto loop = [&](const std::vector<P3> &lp) {
@@ -1560,7 +1564,17 @@ struct Runner
 				continue;
 			}
 			/* keyed on its first vertex, as the game does */
-			Node &nd = node(place(r, f.outline[0]));
+			Node *ndp = &node(place(r, f.outline[0]));
+			if (r.shadow)
+			{
+				/* all of an object's cloud shadows in one underlay node, so
+				 * they can be drawn once per pixel (draw_tris) */
+				if (shadow_node < 0 && ndp->under)
+					shadow_node = (int)(ndp - out.nodes.data());
+				if (shadow_node >= 0)
+					ndp = &out.nodes[(size_t)shadow_node];
+			}
+			Node &nd = *ndp;
 			for (size_t t = 0; t + 2 < f.tris.size(); t += 3)
 			{
 				Tri tri;
@@ -1833,6 +1847,14 @@ struct Runner
 	 * vector (o.light, away from the light, view space) meets the field's
 	 * ground plane (the field's y axis is up). Without light from above (the
 	 * night side, the sun on the horizon) there is no shadow: false. */
+	/* the cloud shadow drawn as black with some alpha, so the ground (roads,
+	 * its colour) shows through, as the ship shadows do */
+	bool cloud_shadow_translucent() const
+	{
+		static const char *env = getenv("GLF_CLOUD_SHADOWS");
+		return env ? atoi(env) != 0 : native_cloud_shadows;
+	}
+
 	bool cloud_shadow_org(const Run &r, int model, int vid, P3 &org) const
 	{
 		static const char *env = getenv("GLF_CLOUD_SHADOWS");
@@ -1894,6 +1916,7 @@ struct Runner
 		if (!cloud_shadow_org(r, (w[0] >> 5) & 0x7ff, fe2::s8(w[1]), *org))
 			return;
 		Run c;
+		c.shadow = (w[0] >> 5 & 0x7ff) == 206 && !wire && !sky && cloud_shadow_translucent();
 		c.c = child;
 		c.org = *org;
 		c.base = r.base;
@@ -2159,7 +2182,17 @@ struct Runner
 
 void set_colour(int rgb444)
 {
-	Rgb8 c = rgb444_to_rgb8(rgb444);
+	/* bit 15: a cloud's shadow, translucent black over what is under it */
+	static bool blended;
+	bool sh = rgb444 & 0x8000;
+	if (sh != blended)
+		gd_set_blend(blended = sh);
+	if (sh)
+	{
+		gd_color4ub(0, 0, 0, 110);
+		return;
+	}
+	Rgb8 c = rgb444_to_rgb8(rgb444 & 0xfff);
 	gd_color3ub(c.r, c.g, c.b);
 }
 
@@ -2440,15 +2473,69 @@ void draw_dots(const std::vector<Dot> &dots, bool colour = true)
 	}
 }
 
+/* A node's triangles. A cloud's shadows (colour bit 15) are drawn once per
+ * pixel, so where two overlap the ground is not darkened twice (the
+ * stencil counts the first draw; the second undoes it) */
+void draw_shadow_group(const std::vector<const Tri *> &tris)
+{
+	gd_once_phase(0);
+	for (int pass = 0; pass < 2; pass++)
+	{
+		if (pass)
+			gd_once_phase(1);
+		for (const Tri *t : tris)
+		{
+			set_colour(t->colour);
+			if (pass)
+				gd_color4ub(0, 0, 0, 0);
+			gd_tri(t->p[0].data(), t->p[1].data(), t->p[2].data());
+		}
+	}
+	gd_once_phase(2);
+}
+
+void draw_tris(const std::vector<Tri> &tris, bool defer_shadows = false)
+{
+	bool any = false;
+	for (const Tri &t : tris)
+	{
+		if (t.colour & 0x8000)
+		{
+			any = true;
+			continue;
+		}
+		set_colour(t.colour);
+		gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+	}
+	if (!any || defer_shadows)
+		return;
+	if (getenv("GLF_CLOUD_SHADOWS") && atoi(getenv("GLF_CLOUD_SHADOWS")) == 3)
+	{
+		static int n;
+		if (n++ % 120 == 0)
+			log_printf("shadow group: %zu tris\n", tris.size());
+	}
+	for (int pass = 0; pass < 2; pass++)
+	{
+		gd_once_phase(pass);
+		for (const Tri &t : tris)
+		{
+			if (!(t.colour & 0x8000))
+				continue;
+			set_colour(t.colour);
+			if (pass)
+				gd_color4ub(0, 0, 0, 0);
+			gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+		}
+	}
+	gd_once_phase(2);
+}
+
 void draw_nodes(const std::vector<Node> &nodes)
 {
 	for (const Node &n : nodes)
 	{
-		for (const Tri &t : n.tris)
-		{
-			set_colour(t.colour);
-			gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
-		}
+		draw_tris(n.tris);
 		draw_segs(n.segs);
 		draw_dots(n.dots);
 	}
@@ -2874,6 +2961,14 @@ extern "C" void native_draw(void)
 			if (n.under)
 				unders.push_back({n.dist * d->shrink, &n, receives(d)});
 	std::stable_sort(unders.begin(), unders.end(), [](const Under &a, const Under &b) { return a.key > b.key; });
+	/* All the underlays' cloud shadows (of every object) are drawn together,
+	 * once per pixel, at the first underlay node that has any */
+	std::vector<const Tri *> under_shadows;
+	for (const Under &u : unders)
+		for (const Tri &t : u.node->tris)
+			if (t.colour & 0x8000)
+				under_shadows.push_back(&t);
+	bool shadows_drawn = false;
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
 		if (next_under >= unders.size() || unders[next_under].key <= beyond)
@@ -2883,11 +2978,17 @@ extern "C" void native_draw(void)
 		{
 			const Node *n = unders[next_under].node;
 			gd_set_shadow(unders[next_under].recv ? shadow_m : nullptr);
-			for (const Tri &t : n->tris)
-			{
-				set_colour(t.colour);
-				gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
-			}
+			draw_tris(n->tris, true);
+			if (!shadows_drawn && !under_shadows.empty())
+				for (const Tri &t : n->tris)
+					if (t.colour & 0x8000)
+					{
+						gd_set_shadow(nullptr);
+						draw_shadow_group(under_shadows);
+						gd_set_shadow(unders[next_under].recv ? shadow_m : nullptr);
+						shadows_drawn = true;
+						break;
+					}
 			draw_segs(n->segs);
 			draw_dots(n->dots);
 		}
@@ -2929,11 +3030,7 @@ extern "C" void native_draw(void)
 				if (draw_unders(n.dist * d.shrink))
 					gd_set_depth(&depth);
 				gd_set_shadow(recv ? shadow_m : nullptr);
-				for (const Tri &t : n.tris)
-				{
-					set_colour(t.colour);
-					gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
-				}
+				draw_tris(n.tris);
 				draw_segs(n.segs);
 				draw_dots(n.dots);
 			}

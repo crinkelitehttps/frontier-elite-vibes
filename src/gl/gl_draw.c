@@ -395,6 +395,46 @@ void gd_color3ub(int r, int g, int b)
 	cur_col[2] = (uint8_t)b;
 	cur_col[3] = 255;
 }
+void gd_color4ub(int r, int g, int b, int a)
+{
+	gd_color3ub(r, g, b);
+	cur_col[3] = (uint8_t)a;
+}
+static void once_fn(const void *data)
+{
+	static GLboolean was;
+	static GLint ref;
+	int phase = *(const int *)data;
+	if (phase == 0)
+	{
+		was = glIsEnabled(GL_STENCIL_TEST);
+		ref = 0;
+		if (was)
+			glGetIntegerv(GL_STENCIL_REF, &ref);
+		glEnable(GL_STENCIL_TEST);
+		glStencilMask(0xff);
+		glStencilFunc(GL_EQUAL, ref, 0xff);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+	}
+	else if (phase == 1)
+	{
+		glStencilFunc(GL_EQUAL, ref + 1, 0xff);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
+	}
+	else
+	{
+		glStencilFunc(GL_EQUAL, ref, 0xff);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+		if (!was)
+			glDisable(GL_STENCIL_TEST);
+	}
+}
+void gd_once_phase(int phase)
+{
+	int *p = gd_custom(once_fn, sizeof *p);
+	if (p)
+		*p = phase;
+}
 void gd_color3f(float r, float g, float b)
 {
 	gd_color3ub(to_u8(r), to_u8(g), to_u8(b));

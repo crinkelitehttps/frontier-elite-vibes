@@ -98,6 +98,7 @@ mat4 gd_mvp(void);
 
 /* Current colour for subsequently emitted vertices */
 void gd_color3ub(int r, int g, int b);
+void gd_color4ub(int r, int g, int b, int a);
 void gd_color3f(float r, float g, float b);
 
 /* ---- geometry (model-space, transformed by projection * modelview) ---- */
@@ -129,6 +130,12 @@ void gd_disk(float radius, int slices);
  * disabled.  Returns NULL if out of memory. */
 typedef void (*gd_custom_fn)(const void *data);
 void *gd_custom(gd_custom_fn fn, size_t size);
+
+/* Draw each pixel at most once between phase 0 and phase 2 (the stencil
+ * counts: a pixel passes the first time only). Draw the triangles after
+ * phase 0, again (nothing visible) after phase 1, then phase 2 restores
+ * the stencil as it was. Custom commands. */
+void gd_once_phase(int phase);
 
 /* ---- shader helper ------------------------------------------------------
  * Compiles a program from GLSL bodies (no #version line: the right header

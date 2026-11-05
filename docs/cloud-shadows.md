@@ -28,3 +28,13 @@ Which star the lighting vector follows in multiple-star systems has not been che
 The free camera (modded build, Ctrl-V) keeps the game running at a rate of your choice (keys 0-5) and, with the 3D
 cockpit on, is shown through the cockpit renderer (wide, the panel floating below, head tracking). It is a good way to
 watch cloud shadows move from a fixed point under time acceleration.
+
+## Translucent, drawn once
+
+The shadow faces (model 206) are drawn as black at alpha 110/255 (colour bit 15 in the native scene's `Tri`), so the
+ground colour and detail show through, as with the ship shadows. One light means one shadow: where shadows overlap the
+ground is darkened once. All the underlay nodes' shadow triangles, of every object, are drawn together at the first
+underlay node that has any, with the stencil counting (`gd_once_phase`: the first draw of a pixel passes and
+increments, later ones fail; a second invisible draw decrements back, so the cockpit's stencil refs are untouched).
+`GLF_CLOUD_SHADOWS=3` logs shadow group sizes (per-node draws only). Shadows are painted at that point of the underlay
+order, so a nearer ground plate drawn later could hide one.
