@@ -80,6 +80,7 @@ typedef struct
 	int scenery_rear_limit;
 	int scenery_cap;
 	int scenery_radius_km;
+	int cloud_wind_mps;
 	int native_detail_boost;
 	int cloud_shadows;
 	int ship_shadows;
@@ -132,6 +133,7 @@ static const struct
 	{"scenery_rear_limit", offsetof(Settings, scenery_rear_limit)},
 	{"scenery_cap", offsetof(Settings, scenery_cap)},
 	{"scenery_radius_km", offsetof(Settings, scenery_radius_km)},
+	{"cloud_wind_mps", offsetof(Settings, cloud_wind_mps)},
 	{"native_detail_boost", offsetof(Settings, native_detail_boost)},
 	{"cloud_shadows", offsetof(Settings, cloud_shadows)},
 	{"ship_shadows", offsetof(Settings, ship_shadows)},
@@ -254,6 +256,7 @@ static Settings current(void)
 	s.scenery_rear_limit = scenery_rear_limit;
 	s.scenery_cap = scenery_cap;
 	s.scenery_radius_km = scenery_radius_km;
+	s.cloud_wind_mps = scenery_cloud_wind_mps;
 	s.native_detail_boost = native_detail_boost;
 	s.cloud_shadows = native_cloud_shadows;
 	s.ship_shadows = ship_shadows;
@@ -324,6 +327,8 @@ static void apply(const Settings *s)
 		scenery_cap = s->scenery_cap;
 	if (s->scenery_radius_km >= 0 && s->scenery_radius_km <= 1000)
 		scenery_radius_km = s->scenery_radius_km;
+	if (s->cloud_wind_mps >= -2000 && s->cloud_wind_mps <= 2000)
+		scenery_cloud_wind_mps = s->cloud_wind_mps;
 	if (s->target_range_au >= 0 && s->target_range_au <= 100)
 		target_range_au = s->target_range_au;
 	native_cloud_shadows = s->cloud_shadows != 0;

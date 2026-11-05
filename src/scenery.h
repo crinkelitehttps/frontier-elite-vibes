@@ -23,6 +23,9 @@ extern "C"
 /* How far from the ship features are made and shown (L-infinity, like the game's distance), km; 0 = none */
 extern int scenery_radius_km;
 
+/* How fast the clouds drift, m/s of game time, in a direction that is fixed per planet; 0 = they stand still */
+extern int scenery_cloud_wind_mps;
+
 void Call_ScenNext(void);
 void Call_ScenMade(void);
 void Call_VirtNext(void);

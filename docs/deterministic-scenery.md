@@ -54,6 +54,24 @@ none makes no feature there. Planets without outlines are not tested. The direct
 position as it is (checked on Earth: London and 20 E on the equator are land, 20 W is sea; a z flip, as `exact_view`
 uses, gave sea at London). [inferred] That code 0 is the liquid on every planet with outlines is not checked.
 
+## 2b. Two layers: land and drifting clouds (2026-11-05, untested in game)
+
+- **Land layer**: as before (fixed in the planet's frame, hash of planet and cell, 1 cell in 48), but now only the row's non-cloud
+  kinds, and nothing over liquid sea (`planet_is_sea`). A land cell that would have been a cloud is no feature.
+- **Cloud layer**: its own hash (`seed` mixed with `0xc10d`), 1 cell in 48 (`CLOUD_DENSITY`), anywhere, sea or land; the kind is
+  the first model-`$c6` entry of the planet type's row (a row with none, the airless types, has no clouds). Its cells are in a
+  **wind frame**: the planet's frame turned about a fixed axis (from the planet's hash) by `wind * game time / radius`
+  (`scenery_cloud_wind_mps`, cfg `cloud_wind_mps`, default 40 m/s; 0 = still; the clock is the day count at `A6+528` and time
+  of day at `A6+524`). `scan_layer` looks for cells around the ship's place turned back into that frame, so the windward cells
+  come into range by themselves and the same game time gives the same sky. The ray is cast at the cell's present place;
+  the copy is then turned back into the wind frame (position and matrix, `turn_obj`) and turned forward again each frame when
+  it is handed to the object loop, so a cloud is a rigid turn about the planet's centre and keeps its height. Cloud shadows
+  follow (they are part of the field model). Which of the matrix's rows or columns are the axes is found from the first
+  objects made (`detect_mat`; `GLF_SCEN_LOG=1` prints it).
+- Cloud fields the spawner makes near a starport (`l61f06`) from land cells are fixed in place: not kept (`Call_ScenMade` checks
+  the model, `$c6`, of a land-layer object), so only the drifting layer makes clouds.
+- Not checked: how the axis looks to the eye (the wind stands still at the axis' two poles), and the cost of the second scan.
+
 ## 3. Limits
 
 - Cells are made every frame the object loop runs with the ship in flight and "dust and clouds" on, at any altitude and in
