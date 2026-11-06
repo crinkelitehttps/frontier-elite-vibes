@@ -261,6 +261,23 @@ Fix: the compare is a hook (`jsr Lrange_chk / nop`, same size). Within a range f
 as the distant dot (`l39092`) with a screen position and the native scene captures it for the own HUD. The range is
 compared as an exponent: the distance is 2^(14 + `d7` + `88(a4)`) mm (`Call_TargetRange`). Both variants.
 
+## 12. The sun jumps for one frame every 255 frames (`L62966`, `Lcam_stamp`)
+
+Symptom: every 3-4 seconds at 60 fps the sun jumps along its path for one frame and comes back, paused too
+(seen landed on Earth, `savs/Snap26`). The light direction and other distant bodies jump with it.
+Cause: `L38fb4` caches an object's absolute position at `20-43(a0)`, stamped at `19(a0)` with
+`A6_gameloop_iter` (a byte, 1 to 255, never 0), and uses the cache when the stamp equals the counter.
+`L62966` (`L62966_SetupPlayerCamera`) copies the player's ship to the stack as the camera and clears the
+matrix cache's stamp (`clr.b 92(a2)`) but not this one. The copy carries the ship's stamp and cached position
+from whenever the ship's own cache was last filled (landed, that was long ago). Once every 255 frames the
+counter comes round to that stamp, and the camera is placed at the ship's old absolute position. Earth has
+turned since then, so everything placed through other frames (the sun, the light vector) shows the old angle.
+Fix: `clr.b 19(a2)` on the copy as well, so the camera's position is worked out every frame. Original: hook
+`jmp Lcam_stamp` in place of `exg a2,a3 / move.b A6_plr_3dview_mode(a6),d0` (same size; the `beq` after it
+uses the `move.b`'s flags). Modded: in the existing `Lfreecam_camera` hook. Measured in a test instance on
+Snap26: before, the sun's view position changed on one frame in 255 (same wrong value each time); after,
+1203 frames with one value.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

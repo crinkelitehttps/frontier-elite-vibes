@@ -234,6 +234,7 @@
 #define FE2_L62270_rts                               0x5696a /* L62270_rts */
 #define FE2_GenAsteroids                             0x56bec /* L624f2_GenAsteroids */
 #define FE2_PlayerControlUpdate                      0x56d00 /* L62606_PlayerControlUpdate */
+#define FE2_Lcam_stamp_done                          0x5709c /* Lcam_stamp_done */
 #define FE2_DoInHyperspaceEffect                     0x57662 /* L62f68_DoInHyperspaceEffect */
 #define FE2_PutIDMatrix3_a0                          0x57a3c /* L63342_PutIDMatrix3_a0 */
 #define FE2_mod3_fn20_DrawPlayerHUD                  0x57c6e /* L63574_mod3_fn20_DrawPlayerHUD */
@@ -424,6 +425,7 @@
 #define FE2_Lrt_take_game                            0x8432a /* Lrt_take_game */
 #define FE2_Lrt_take_real                            0x84338 /* Lrt_take_real */
 #define FE2_Lrt_limit                                0x84346 /* Lrt_limit */
+#define FE2_Lcam_stamp                               0x84362 /* Lcam_stamp */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

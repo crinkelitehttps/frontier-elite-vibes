@@ -41436,8 +41436,10 @@ L62966:
 		clr.b	92(a2)
 		move.w	90(a2),d0
 		jsr	A5_GetGameDataObj(a5)
-		exg	a2,a3
-		move.b	A6_plr_3dview_mode(a6),d0
+* FIX: the copy keeps the ship's position-cache stamp (19), see Lcam_stamp.
+* Hook, same size as 'exg a2,a3 / move.b A6_plr_3dview_mode(a6),d0'.
+		jmp	Lcam_stamp
+Lcam_stamp_done:
 		beq.w	l62b12
 		cmpi.b	#$1,d0
 		beq.w	l62aea
@@ -68715,3 +68717,23 @@ lrt_limit_test:
 		bgt.s	lrt_limit_idle
 		move.w	#$1,L5eb2_vblank_waits
 		rts
+
+******************************************************************************
+* FIX: the sun jumps for one frame in 255 (original-game bug).
+*
+* L62966 copies the player's ship to the stack as the camera and clears the
+* matrix cache's stamp (92) but not the position cache's (19, the absolute
+* position at 20-43, L38fb4). The copy carries the ship's stamp from
+* whenever the ship's own cache was last filled; when A6_gameloop_iter (1 to
+* 255, never 0) comes round to it, L38fb4 takes that old position for the
+* camera: things in other frames (the sun, the light) are placed from it.
+* Clearing the stamp makes L38fb4 work it out every frame.
+*
+* Hook: L62966 -> Lcam_stamp (a2 = the copy; the beq after it uses the
+* flags of the move.b)
+******************************************************************************
+Lcam_stamp:
+		clr.b	19(a2)
+		exg	a2,a3
+		move.b	A6_plr_3dview_mode(a6),d0
+		jmp	Lcam_stamp_done

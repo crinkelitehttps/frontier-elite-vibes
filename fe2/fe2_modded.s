@@ -66722,6 +66722,10 @@ Lmods_MakeSaveData:
 * (a3) and looked up its model (a2). Replaces 'exg a2,a3 /
 * move.b A6_plr_3dview_mode(a6),d0'; the beq after it uses those flags.
 Lfreecam_camera:
+* FIX: the copy keeps the ship's position-cache stamp (19): when
+* A6_gameloop_iter (1-255, never 0) comes round to it, L38fb4 takes the
+* ship's old cached position for the camera and the sun jumps for a frame.
+		clr.b	19(a2)
 		exg	a2,a3
 		tst.b	Lfreecam_active
 		bne.s	lfreecam_on
