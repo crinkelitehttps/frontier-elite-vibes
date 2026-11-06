@@ -1118,12 +1118,14 @@ static void planet_sphere_pass(const void *data)
 	if (!sm3)
 		sm3 = no_map;
 	glUniform1f(us.shadow_on, stex ? 1.0f : 0.0f);
+	/* always on its own unit: left on 0 with no map, it shares uSurface's unit (a 2D and an array
+	 * sampler on one unit makes the draw invalid, the ground came out white with shadows off) */
+	glUniform1i(us.shadow, 5);
 	if (stex)
 	{
 		glActiveTexture(GL_TEXTURE0 + 5);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, stex);
 		glActiveTexture(GL_TEXTURE0);
-		glUniform1i(us.shadow, 5);
 		glUniform4fv(us.shadow_u, 1, sm);
 		glUniform4fv(us.shadow_v, 1, sm + 4);
 		glUniform4fv(us.shadow_d, 1, sm + 8);

@@ -3622,6 +3622,8 @@ void setup_shadows(bool wire)
 		const bool scenery = o.model >= 101 && o.model <= 104;
 		if (o.table != o.subtable || (!station && !scenery && (o.model < 10 || o.model > 41)) || d.shrink != 1.0f)
 			continue;
+		if (scenery && !building_shadows)
+			continue;
 		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
 		bool any = false;
 		auto add = [&](const P3 &p) {
@@ -3651,6 +3653,8 @@ void setup_shadows(bool wire)
 		}
 		c.r = std::sqrt(c.r);
 		c.base = station && c.r > 5.0e6f; /* an orbital station is a couple of km, a ground base a whole town */
+		if (c.base && !building_shadows)
+			continue;
 		if (c.base)
 		{
 			/* only its parts within 2.5 km of the eye cast (below): none near, it is not run again whole

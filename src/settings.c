@@ -87,6 +87,7 @@ typedef struct
 	int native_detail_boost;
 	int cloud_shadows;
 	int ship_shadows;
+	int building_shadows;
 	int low_sun_shadows;
 	int camera_zoom_max;
 	int volume;
@@ -143,6 +144,7 @@ static const struct
 	{"native_detail_boost", offsetof(Settings, native_detail_boost)},
 	{"cloud_shadows", offsetof(Settings, cloud_shadows)},
 	{"ship_shadows", offsetof(Settings, ship_shadows)},
+	{"building_shadows", offsetof(Settings, building_shadows)},
 	{"low_sun_shadows", offsetof(Settings, low_sun_shadows)},
 	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
 	{"volume", offsetof(Settings, volume)},
@@ -269,6 +271,7 @@ static Settings current(void)
 	s.native_detail_boost = native_detail_boost;
 	s.cloud_shadows = native_cloud_shadows;
 	s.ship_shadows = ship_shadows;
+	s.building_shadows = building_shadows;
 	s.low_sun_shadows = low_sun_shadows;
 	s.camera_zoom_max = camera_zoom_max;
 	s.volume = audio_volume;
@@ -345,6 +348,7 @@ static void apply(const Settings *s)
 		target_range_au = s->target_range_au;
 	native_cloud_shadows = s->cloud_shadows != 0;
 	ship_shadows = s->ship_shadows != 0;
+	building_shadows = s->building_shadows != 0;
 	low_sun_shadows = s->low_sun_shadows != 0;
 	if (s->native_detail_boost >= 0 && s->native_detail_boost <= 8)
 		native_detail_boost = s->native_detail_boost;

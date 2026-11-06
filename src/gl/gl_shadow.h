@@ -1,6 +1,6 @@
 /*
- * gl_shadow.h - ship shadows (experiment, glfrontier.cfg ship_shadows,
- * GLF_SHIP_SHADOWS=1/0 overrides).
+ * gl_shadow.h - ship shadows (glfrontier.cfg ship_shadows; GLF_SHIP_SHADOWS=0/1
+ * force off/on, 2 only logs).
  *
  * The native scene (gl_native.cpp) hands over the triangles of the ships in
  * view (game view space) and the light vector. They are drawn depth only
@@ -28,6 +28,8 @@ extern "C"
 #endif
 
 extern bool ship_shadows; /* the setting */
+/* Buildings, rocks and ground-base hangars cast too (cascade 2; needs ship_shadows) */
+extern bool building_shadows;
 /* Shadows down to a lower sun: clouds to 3.4 degrees (off: 7), ship map depth 1000 radii (off: 200) */
 extern bool low_sun_shadows;
 

@@ -10,6 +10,7 @@
 #include "main.h"
 
 bool ship_shadows = true;
+bool building_shadows = true;
 bool low_sun_shadows = true;
 
 #define MAP_SIZE   1024
@@ -49,7 +50,8 @@ bool gl_shadow_wanted(void)
 		const char *e = getenv("GLF_SHIP_SHADOWS");
 		env = e ? atoi(e) : -1;
 	}
-	return env >= 0 ? env != 0 : ship_shadows;
+	/* 0 off, 1 on; 2 (logging) or unset: the menu setting decides */
+	return env == 0 ? false : env == 1 ? true : ship_shadows;
 }
 
 static void init(void)
