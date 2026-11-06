@@ -20,6 +20,7 @@ typedef struct
 	float size;
 	float depth[2]; /* depth tested: window depth a + b * log(w); b 0 = gl_FragCoord.z */
 	float shadow[3]; /* shadow map u, v, depth (0..1); 0 unless a shadow is set */
+	float shadow2[3]; /* the same in the second cascade */
 } GdVert;
 
 enum GdKind
@@ -37,7 +38,7 @@ typedef struct
 	uint8_t cull;
 	uint8_t blend;
 	uint8_t depth;
-	uint8_t shadow; /* looks the ship shadows up (gd_set_shadow) */
+	uint16_t shadow; /* looks the ship shadows up (gd_set_shadow): (layer0 + 1) | (layer1 + 1) << 8, 0 = off */
 	int first; /* vertex index, or data offset for GD_CUSTOM */
 	int count;
 	gd_custom_fn fn;
@@ -64,8 +65,8 @@ static uint8_t cur_vp = GD_VP_VIEW3D;
 static uint8_t cur_cull;
 static uint8_t cur_blend;
 static uint8_t cur_depth; /* 0 off, else 1 | 2 write | 4 depth only */
-static uint8_t cur_shadow;
-static float shadow_m[12]; /* view point -> shadow map u, v, depth (3 rows of 4) */
+static uint16_t cur_shadow;
+static float shadow_m[12], shadow_m2[12]; /* view point -> shadow map u, v, depth (3 rows of 4), per cascade */
 static float depth_a, depth_b; /* z_clip = a * w + b */
 static float log_a, log_b;     /* window depth = a + b * log(w) */
 static bool wireframe;
@@ -73,7 +74,7 @@ static int vp_rects[GD_VP_COUNT][4];
 
 /* ---- GL objects ----------------------------------------------------- */
 static GLuint prog, vao, vbo;
-static GLint u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow;
+static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow;
 static size_t vbo_bytes;
 
 static const char *VS_FLAT = "in vec4 aPos;\n"
@@ -81,8 +82,10 @@ static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "in float aSize;\n"
 							 "in vec2 aDepth;\n"
 							 "in vec3 aShadow;\n"
+							 "in vec3 aShadow2;\n"
 							 "out vec4 vColor;\n"
 							 "out vec3 vShadow;\n"
+							 "out vec3 vShadow2;\n"
 							 "out highp float vW;\n"
 							 "flat out highp vec2 vDepth;\n"
 							 "void main(){\n"
@@ -92,24 +95,31 @@ static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "  vW = aPos.w;\n"
 							 "  vDepth = aDepth;\n"
 							 "  vShadow = aShadow;\n"
+							 "  vShadow2 = aShadow2;\n"
 							 "}\n";
 
 /* Depth tested, depth goes with log(w) (gd_set_depth): as precise far away
  * as near */
-static const char *FS_FLAT = "in vec4 vColor;\n"
+static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "in vec3 vShadow;\n"
+							 "in vec3 vShadow2;\n"
 							 "in highp float vW;\n"
 							 "flat in highp vec2 vDepth;\n"
 							 "uniform float uShadowOn;\n"
 							 "uniform float uShadowDark;\n"
-							 "uniform float uShadowBias;\n"
-							 "uniform sampler2DShadow uShadow;\n"
+							 "uniform vec2 uShadowBias;\n"
+							 "uniform vec2 uShadowLayer;\n"
+							 "uniform sampler2DArrayShadow uShadow;\n"
 							 "out vec4 fragColor;\n"
 							 "void main(){\n"
 							 "  fragColor = vColor;\n"
-							 /* in the ships' shadow map (outside it: lit) */
-							 "  if (uShadowOn > 0.5 && vShadow.x >= 0.0 && vShadow.x <= 1.0 && vShadow.y >= 0.0 && vShadow.y <= 1.0) {\n"
-							 "    float lit = texture(uShadow, vec3(vShadow.xy, min(vShadow.z, 1.0) - uShadowBias));\n"
+							 /* in the ships' shadow maps (outside one: lit by it) */
+							 "  if (uShadowOn > 0.5) {\n"
+							 "    float lit = 1.0;\n"
+							 "    if (uShadowLayer.x >= 0.0 && vShadow.x >= 0.0 && vShadow.x <= 1.0 && vShadow.y >= 0.0 && vShadow.y <= 1.0)\n"
+							 "      lit = shadowLit(uShadow, vShadow.xy, uShadowLayer.x, min(vShadow.z, 1.0) - uShadowBias.x);\n"
+							 "    if (uShadowLayer.y >= 0.0 && vShadow2.x >= 0.0 && vShadow2.x <= 1.0 && vShadow2.y >= 0.0 && vShadow2.y <= 1.0)\n"
+							 "      lit = min(lit, shadowLit(uShadow, vShadow2.xy, uShadowLayer.y, min(vShadow2.z, 1.0) - uShadowBias.y));\n"
 							 "    fragColor.rgb *= mix(uShadowDark, 1.0, lit);\n"
 							 "  }\n"
 							 "  gl_FragDepth = vDepth.y != 0.0 ? clamp(vDepth.x + vDepth.y * log(max(vW, 1e-6)), 0.0, 1.0)\n"
@@ -188,8 +198,9 @@ static void *grow(void *p, int *cap, int need, size_t elem)
 
 void gd_init(void)
 {
-	static const char *const attribs[] = {"aPos", "aColor", "aSize", "aDepth", "aShadow"};
-	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 5);
+	static const char *const attribs[] = {"aPos", "aColor", "aSize", "aDepth", "aShadow", "aShadow2"};
+	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 6);
+	u_shadow_layer = glGetUniformLocation(prog, "uShadowLayer");
 	u_shadow_on = glGetUniformLocation(prog, "uShadowOn");
 	u_shadow_dark = glGetUniformLocation(prog, "uShadowDark");
 	u_shadow_bias = glGetUniformLocation(prog, "uShadowBias");
@@ -212,6 +223,8 @@ void gd_init(void)
 	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, depth));
 	glEnableVertexAttribArray(4);
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, shadow));
+	glEnableVertexAttribArray(5);
+	glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, shadow2));
 	glBindVertexArray(0);
 
 	verts = grow(NULL, &cap_verts, 65536, sizeof(GdVert));
@@ -312,11 +325,19 @@ void gd_set_depth(const GdDepth *d)
 	log_a = (d->lo + 1 - d->bias) / 2 - log_b * logf(d->near);
 }
 
-void gd_set_shadow(const float m[12])
+void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1)
 {
-	cur_shadow = m ? 1 : 0;
-	if (m)
-		memcpy(shadow_m, m, sizeof shadow_m);
+	cur_shadow = 0;
+	if (m0 && layer0 >= 0)
+	{
+		cur_shadow |= (uint16_t)(1 + layer0);
+		memcpy(shadow_m, m0, sizeof shadow_m);
+	}
+	if (m1 && layer1 >= 0)
+	{
+		cur_shadow |= (uint16_t)((1 + layer1) << 8);
+		memcpy(shadow_m2, m1, sizeof shadow_m2);
+	}
 }
 
 void gd_push(void)
@@ -497,12 +518,16 @@ static inline void put(GdVert *v, const float p[3], const uint8_t col[4], float 
 		v->depth[0] = log_a;
 		v->depth[1] = log_b;
 	}
-	if (cur_shadow)
-		for (int row = 0; row < 3; row++)
-			v->shadow[row] = shadow_m[row * 4] * p[0] + shadow_m[row * 4 + 1] * p[1] + shadow_m[row * 4 + 2] * p[2] +
-							 shadow_m[row * 4 + 3];
-	else
-		v->shadow[0] = v->shadow[1] = v->shadow[2] = 0;
+	for (int c = 0; c < 2; c++)
+	{
+		float *out = c ? v->shadow2 : v->shadow;
+		const float *m = c ? shadow_m2 : shadow_m;
+		if (c ? (cur_shadow >> 8) : (cur_shadow & 0xff))
+			for (int row = 0; row < 3; row++)
+				out[row] = m[row * 4] * p[0] + m[row * 4 + 1] * p[1] + m[row * 4 + 2] * p[2] + m[row * 4 + 3];
+		else
+			out[0] = out[1] = out[2] = 0;
+	}
 	memcpy(v->col, col, 4);
 	v->size = size;
 }
@@ -741,14 +766,15 @@ void gd_flush(void)
 			{
 				shadow = c->shadow;
 				GLuint st = shadow ? gl_shadow_texture() : 0;
+				glUniform2f(u_shadow_layer, (float)(shadow & 0xff) - 1.0f, (float)(shadow >> 8) - 1.0f);
 				glUniform1f(u_shadow_on, st ? 1.0f : 0.0f);
 				if (st)
 				{
 					glActiveTexture(GL_TEXTURE0 + SHADOW_UNIT);
-					glBindTexture(GL_TEXTURE_2D, st);
+					glBindTexture(GL_TEXTURE_2D_ARRAY, st);
 					glActiveTexture(GL_TEXTURE0);
 					glUniform1f(u_shadow_dark, gl_shadow_dark());
-					glUniform1f(u_shadow_bias, gl_shadow_bias());
+					glUniform2f(u_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1));
 				}
 			}
 			if (c->blend != blend)

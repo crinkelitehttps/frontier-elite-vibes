@@ -44,9 +44,44 @@ of each pass) clears that byte, so the loop draws the ship, which the native sce
 the scene (`placed`), so nothing of the hull is drawn round the eye. In the external view and the free camera the ship
 is drawn as usual. `GLF_SHIP_SHADOWS=2` logs the object, caster and triangle counts now and then.
 
+## Ships on ships
+
+The map is a texture array (`GL_TEXTURE_2D_ARRAY`, 1024x1024, `1 + GL_SHADOW_CASTER_LAYERS` = 6 layers, 24 MB). Layer 0 has every
+caster (ground, plates, station, planet). Layer k + 1 has every caster except the k-th, nearest the eye first, and is what
+that ship looks up, so it cannot shadow itself and needs no bias against its own hull. All layers share one matrix (fitted to
+all casters), so the per-vertex shadow coordinates are unchanged; `gd_set_shadow(m, layer)` picks the layer per draw command
+(batches break when it changes) and the flat shader's `uShadowLayer` goes into `sampler2DArrayShadow`. The pass renders each
+layer with `glFramebufferTextureLayer`, drawing the runs of triangles before and after the excluded caster. Only the five
+nearest casters get a layer; the rest are casters that receive nothing (as before). `native_draw`'s `shadow_layer` has the
+layer per object (0 for non-casters, -1 for casters without one). Untested on Quest (array depth textures are core in GLES 3.0).
+
+Resolution: the map is fitted to the casters' box in the light's frame (separate u and v extents, 2% margin), not a sphere round
+them, and the lookup (`shadowLit`, `GL_SHADOW_GLSL` in gl_shadow.h, used by both shaders) averages a 3x3 grid of the hardware's
+2x2 comparisons a texel apart, so coarse texels give a soft edge instead of stairs. `GLF_SHIP_SHADOWS=2` logs the map's size and
+texel size in metres. A far caster still stretches the map: that is what the second cascade is for.
+
+Cascades: with one map the cruiser (2.4 km radius) pulled the Lynx carriers 19 km away into it, so the map was 20 km wide
+(20 m texels, the Cobra one texel). Now there are two maps (`GL_SHADOW_CASCADES`), each fitted to its own casters:
+cascade 0 has the ships up to 5 times the smallest in view, cascade 1 the bigger ones (each class keeps the "near the
+nearest of the class" reach rule). The array has 2 x 6 layers (48 MB; each cascade's layer 0 all of its casters, then one
+per caster without itself). Receivers look up both (`gd_set_shadow(m0, l0, m1, l1)`, a second per-vertex coordinate
+`shadow2`, `uShadowLayer` vec2) and take the darker; a ship uses its own cascade's layer without itself and the other
+cascade's whole layer. The planet's sphere shader has the same pair. `GLF_SHIP_SHADOWS=2` logs each map's size, texel
+size (the game's units are mm) and caster count. Not done: a caster big enough to need its own fine map where a ship
+casts onto a ship of the same class far away.
+
+Stations: objects of models 43-54 (stations and bases; Lave Station is model 49, 265 nodes, about 1,760 triangles drawn) are
+casters of cascade 1 whatever their size, so the Cobra's map is not stretched by them. The station gets its own cascade 1 layer
+(it does not shadow itself) and the cascade 0 layer with every ship, so it still receives the ships' shadows; the ships look up
+cascade 1 with the station in it. At 3 km from Lave Station the map is 6.7 x 4.1 km (6.5 x 4 m texels). Not looked at: the
+Cobra inside the bay (the station's hull casts onto it); the station's baked night-face colours are darkened again.
+`GLF_SHIP_SHADOWS=2` also lists the objects in view (model, triangles, caster, layers).
+
+Next (see the discussion): scenery (buildings, mountains) as casters.
+
 ## Limits / next steps
 
-- Ships do not receive shadows from other ships (nor their own): a lookup there would need a bias against self-shadowing.
+- Ships receive shadows from the other ships, not their own (so no wing-on-fuselage shadows). See "Ships on ships".
 - Step 1 only: the ships cast on the ground (plates, scenery, the planet's sphere). The same lookup already applies to
   every receiver of the flat shader, so stations get it too, but that has not been looked at (and the station's own
   lighting is baked in the triangles' colours: night faces get darkened again).

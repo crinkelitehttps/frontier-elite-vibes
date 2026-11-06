@@ -842,7 +842,8 @@ static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
 	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
-	GLint shadow_k, shadow_on, shadow_u, shadow_v, shadow_d, shadow_dark, shadow_bias, shadow, to_view, view_r;
+	GLint shadow_k, shadow_on, shadow_u, shadow_v, shadow_d, shadow_u2, shadow_v2, shadow_d2, shadow_layer, shadow_dark, shadow_bias,
+		shadow, to_view, view_r;
 } us;
 static struct
 {
@@ -861,7 +862,7 @@ static const char *VS_SPHERE =
 	"}\n";
 
 static const char *FS_SPHERE =
-	"precision highp float;\n"
+	"precision highp float;\n" GL_SHADOW_GLSL
 	"in vec3 vRay;\n"
 	"uniform vec3 uCentre;\n" /* sphere centre / radius, eye space */
 	"uniform float uC;\n"     /* |centre|^2 - 1, computed in double on the CPU */
@@ -879,9 +880,13 @@ static const char *FS_SPHERE =
 	"uniform vec4 uShadowU;\n"
 	"uniform vec4 uShadowV;\n"
 	"uniform vec4 uShadowD;\n"
+	"uniform vec4 uShadowU2;\n" /* the second cascade */
+	"uniform vec4 uShadowV2;\n"
+	"uniform vec4 uShadowD2;\n"
+	"uniform vec2 uShadowLayer;\n" /* each cascade's layer, negative: none */
 	"uniform float uShadowDark;\n"
-	"uniform float uShadowBias;\n"
-	"uniform sampler2DShadow uShadow;\n"
+	"uniform vec2 uShadowBias;\n"
+	"uniform sampler2DArrayShadow uShadow;\n"
 	"uniform mat3 uToView;\n"
 	"uniform float uViewR;\n"
 	"uniform float uShadowK;\n"
@@ -924,9 +929,14 @@ static const char *FS_SPHERE =
 	"  float sh = 1.0;\n"
 	"  if (uShadowOn > 0.5 && l > 0.0) {\n"
 	"    vec3 pv = (uToView * (tt * d)) * uViewR * uShadowK;\n"
+	"    float lit = 1.0;\n"
 	"    vec3 s = vec3(dot(uShadowU.xyz, pv) + uShadowU.w, dot(uShadowV.xyz, pv) + uShadowV.w, dot(uShadowD.xyz, pv) + uShadowD.w);\n"
-	"    if (s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
-	"      sh = mix(uShadowDark, 1.0, texture(uShadow, vec3(s.xy, min(s.z, 1.0) - uShadowBias)));\n"
+	"    if (uShadowLayer.x >= 0.0 && s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
+	"      lit = shadowLit(uShadow, s.xy, uShadowLayer.x, min(s.z, 1.0) - uShadowBias.x);\n"
+	"    vec3 s2 = vec3(dot(uShadowU2.xyz, pv) + uShadowU2.w, dot(uShadowV2.xyz, pv) + uShadowV2.w, dot(uShadowD2.xyz, pv) + uShadowD2.w);\n"
+	"    if (uShadowLayer.y >= 0.0 && s2.x >= 0.0 && s2.x <= 1.0 && s2.y >= 0.0 && s2.y <= 1.0)\n"
+	"      lit = min(lit, shadowLit(uShadow, s2.xy, uShadowLayer.y, min(s2.z, 1.0) - uShadowBias.y));\n"
+	"    sh = mix(uShadowDark, 1.0, lit);\n"
 	"  }\n"
 	"  if (uTextured != 0) {\n"
 	"    vec3 p = normalize(uToLocal * n);\n"
@@ -989,6 +999,10 @@ void gl_planet_init(void)
 	us.shadow_u = glGetUniformLocation(sphere_prog, "uShadowU");
 	us.shadow_v = glGetUniformLocation(sphere_prog, "uShadowV");
 	us.shadow_d = glGetUniformLocation(sphere_prog, "uShadowD");
+	us.shadow_u2 = glGetUniformLocation(sphere_prog, "uShadowU2");
+	us.shadow_v2 = glGetUniformLocation(sphere_prog, "uShadowV2");
+	us.shadow_d2 = glGetUniformLocation(sphere_prog, "uShadowD2");
+	us.shadow_layer = glGetUniformLocation(sphere_prog, "uShadowLayer");
 	us.shadow_dark = glGetUniformLocation(sphere_prog, "uShadowDark");
 	us.shadow_bias = glGetUniformLocation(sphere_prog, "uShadowBias");
 	us.shadow = glGetUniformLocation(sphere_prog, "uShadow");
@@ -1049,20 +1063,29 @@ static void planet_sphere_pass(const void *data)
 	glUniform3fv(us.ambient, 1, p->ambient);
 	glUniform1i(us.textured, p->surface != 0);
 	/* the ships' shadows, near the ground */
-	const float *sm = gl_shadow_matrix();
-	GLuint stex = sm ? gl_shadow_texture() : 0;
+	static const float no_map[12];
+	const float *sm = gl_shadow_matrix(0), *sm2 = gl_shadow_matrix(1);
+	GLuint stex = gl_shadow_texture();
+	if (!sm)
+		sm = no_map;
+	if (!sm2)
+		sm2 = no_map;
 	glUniform1f(us.shadow_on, stex ? 1.0f : 0.0f);
 	if (stex)
 	{
 		glActiveTexture(GL_TEXTURE0 + 5);
-		glBindTexture(GL_TEXTURE_2D, stex);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, stex);
 		glActiveTexture(GL_TEXTURE0);
 		glUniform1i(us.shadow, 5);
 		glUniform4fv(us.shadow_u, 1, sm);
 		glUniform4fv(us.shadow_v, 1, sm + 4);
 		glUniform4fv(us.shadow_d, 1, sm + 8);
+		glUniform4fv(us.shadow_u2, 1, sm2);
+		glUniform4fv(us.shadow_v2, 1, sm2 + 4);
+		glUniform4fv(us.shadow_d2, 1, sm2 + 8);
+		glUniform2f(us.shadow_layer, (float)gl_shadow_all_layer(0), (float)gl_shadow_all_layer(1));
 		glUniform1f(us.shadow_dark, gl_shadow_dark());
-		glUniform1f(us.shadow_bias, gl_shadow_bias());
+		glUniform2f(us.shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1));
 		glUniformMatrix3fv(us.to_view, 1, GL_FALSE, p->to_view);
 		glUniform1f(us.view_r, p->view_r);
 		glUniform1f(us.shadow_k, p->shadow_k);

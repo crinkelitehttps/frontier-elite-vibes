@@ -12,6 +12,7 @@
 bool ship_shadows = true;
 
 #define MAP_SIZE   1024
+#define N_LAYERS   (1 + GL_SHADOW_CASTER_LAYERS) /* per cascade */
 #define DEPTH_SPAN 1000.0f /* the map's depth reaches this many radii of the ships along the light */
 #define DARK       0.5f   /* the colour left in shadow */
 
@@ -19,13 +20,19 @@ static GLuint tex, fbo, prog, vao, vbo;
 static size_t vbo_bytes;
 static bool inited, failed;
 
-static float matrix[12];
-static bool have_map;
-static float bias_depth;
-
-/* the pass's triangles in map clip space (x, y, z in -1..1), until the frame is drawn */
-static float *clip;
-static size_t clip_cap, clip_n; /* floats */
+/* one map per cascade (casters of a size; see gl_shadow.h): its matrix, the pass's triangles in its clip space
+ * (x, y, z in -1..1) until the frame is drawn, and where each caster's triangles end in them (in vertices) */
+typedef struct
+{
+	float matrix[12];
+	bool have;
+	float bias;
+	float *clip;
+	size_t clip_cap, clip_n; /* floats */
+	size_t caster_end[GL_SHADOW_CASTER_LAYERS];
+	int n_casters;
+} Cascade;
+static Cascade cas[GL_SHADOW_CASCADES];
 
 static const char *VS = "in vec3 aPos;\n"
 						"void main(){ gl_Position = vec4(aPos, 1.0); }\n";
@@ -50,22 +57,24 @@ static void init(void)
 	prog = gd_build_program(VS, FS, attribs, 1);
 
 	glGenTextures(1, &tex);
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, MAP_SIZE, MAP_SIZE, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT,
-				 NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	/* cascade c: layer c * N_LAYERS has every caster of it; layer c * N_LAYERS + k + 1 every caster but the k-th (what
+	 * that ship is lit by) */
+	glBindTexture(GL_TEXTURE_2D_ARRAY, tex);
+	glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT24, MAP_SIZE, MAP_SIZE, N_LAYERS * GL_SHADOW_CASCADES, 0, GL_DEPTH_COMPONENT,
+				 GL_UNSIGNED_INT, NULL);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+	glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
 	glGenFramebuffers(1, &fbo);
 	GLint prev = 0;
 	glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prev);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, tex, 0);
+	glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tex, 0, 0);
 	GLenum none = GL_NONE;
 	glDrawBuffers(1, &none);
 #if !GL_IS_GLES
@@ -89,16 +98,17 @@ static void init(void)
 
 typedef struct
 {
-	int unused;
+	int cascade;
 } PassData;
 
 /* The map's pass, at the start of the frame's draw list */
 static void shadow_pass(const void *payload)
 {
-	(void)payload;
+	Cascade *cs = &cas[((const PassData *)payload)->cascade];
+	const int base = ((const PassData *)payload)->cascade * N_LAYERS;
 	if (!inited)
 		init();
-	if (failed || !clip_n)
+	if (failed || !cs->clip_n)
 		return;
 
 	GLint prev_fbo = 0, vp[4];
@@ -119,17 +129,32 @@ static void shadow_pass(const void *payload)
 	glDepthFunc(GL_LESS);
 	glDepthMask(GL_TRUE);
 	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	glClear(GL_DEPTH_BUFFER_BIT);
 
 	glUseProgram(prog);
 	glBindVertexArray(vao);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	size_t bytes = clip_n * sizeof(float);
+	size_t bytes = cs->clip_n * sizeof(float);
 	if (bytes > vbo_bytes)
 		vbo_bytes = bytes * 2;
 	glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vbo_bytes, NULL, GL_STREAM_DRAW);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)bytes, clip);
-	glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(clip_n / 3));
+	glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)bytes, cs->clip);
+	const size_t nverts = cs->clip_n / 3;
+	for (int layer = 0; layer <= cs->n_casters; layer++)
+	{
+		glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tex, 0, base + layer);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		if (layer == 0)
+			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)nverts);
+		else
+		{
+			/* all the casters but the (layer - 1)-th: the runs before and after it */
+			size_t a = layer > 1 ? cs->caster_end[layer - 2] : 0, b = cs->caster_end[layer - 1];
+			if (a)
+				glDrawArrays(GL_TRIANGLES, 0, (GLsizei)a);
+			if (b < nverts)
+				glDrawArrays(GL_TRIANGLES, (GLint)b, (GLsizei)(nverts - b));
+		}
+	}
 	glBindVertexArray(0);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
@@ -147,36 +172,13 @@ static void shadow_pass(const void *payload)
 		glDisable(GL_DEPTH_TEST);
 }
 
-bool gl_shadow_set(const float light[3], const float *tris, size_t ntris)
+bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t ntris, const size_t *caster_tris_end,
+				   int ncasters)
 {
-	have_map = false;
+	Cascade *cs = &cas[cascade];
+	float *matrix = cs->matrix;
+	cs->have = false;
 	if (!ntris || !gl_shadow_wanted() || failed)
-		return false;
-
-	/* the ships' bounds: centre of the box, radius from it */
-	float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
-	for (size_t i = 0; i < ntris * 3; i++)
-		for (int k = 0; k < 3; k++)
-		{
-			float v = tris[i * 3 + k];
-			lo[k] = fminf(lo[k], v);
-			hi[k] = fmaxf(hi[k], v);
-		}
-	float c[3], r2 = 0;
-	for (int k = 0; k < 3; k++)
-		c[k] = 0.5f * (lo[k] + hi[k]);
-	for (size_t i = 0; i < ntris * 3; i++)
-	{
-		float d2 = 0;
-		for (int k = 0; k < 3; k++)
-		{
-			float d = tris[i * 3 + k] - c[k];
-			d2 += d * d;
-		}
-		r2 = fmaxf(r2, d2);
-	}
-	float R = sqrtf(r2);
-	if (R < 1.0f)
 		return false;
 
 	/* an orthonormal frame with z along the light */
@@ -192,34 +194,63 @@ bool gl_shadow_set(const float light[3], const float *tris, size_t ntris)
 	for (int k = 0; k < 3; k++)
 		X[k] /= xl;
 	float Y[3] = {L[1] * X[2] - L[2] * X[1], L[2] * X[0] - L[0] * X[2], L[0] * X[1] - L[1] * X[0]};
-
-	/* u = 0.5 + (p - c).X / 2R, v likewise, d = ((p - c).L + R) / span */
-	float span = DEPTH_SPAN * R;
 	const float *axis[3] = {X, Y, L};
-	const float scale[3] = {0.5f / R, 0.5f / R, 1.0f / span};
-	const float base[3] = {0.5f, 0.5f, R / span};
+
+	/* the casters' box in that frame (a tight rectangle: ships spread along one axis of the light's
+	 * view no longer waste the map on the other) */
+	float lo[3] = {1e30f, 1e30f, 1e30f}, hi[3] = {-1e30f, -1e30f, -1e30f};
+	for (size_t i = 0; i < ntris * 3; i++)
+		for (int row = 0; row < 3; row++)
+		{
+			float v = axis[row][0] * tris[i * 3] + axis[row][1] * tris[i * 3 + 1] + axis[row][2] * tris[i * 3 + 2];
+			lo[row] = fminf(lo[row], v);
+			hi[row] = fmaxf(hi[row], v);
+		}
+	/* R: half the box's diagonal, the size the depth range and bias are in */
+	float R = 0.5f * sqrtf((hi[0] - lo[0]) * (hi[0] - lo[0]) + (hi[1] - lo[1]) * (hi[1] - lo[1]) +
+						   (hi[2] - lo[2]) * (hi[2] - lo[2]));
+	if (R < 1.0f)
+		return false;
+	/* a margin round the sides so the shadows' edges and the filter stay inside */
+	float margin = 0.02f * R;
+	float extent[2] = {hi[0] - lo[0] + 2 * margin, hi[1] - lo[1] + 2 * margin};
+	extent[0] = fmaxf(extent[0], 1.0f);
+	extent[1] = fmaxf(extent[1], 1.0f);
+
+	/* u = (p.X - lo.x + margin) / extent.x, v likewise, d = (p.L - lo.z + margin) / span */
+	float span = DEPTH_SPAN * R;
+	const float scale[3] = {1.0f / extent[0], 1.0f / extent[1], 1.0f / span};
 	for (int row = 0; row < 3; row++)
 	{
-		float off = base[row];
 		for (int k = 0; k < 3; k++)
-		{
 			matrix[row * 4 + k] = axis[row][k] * scale[row];
-			off -= axis[row][k] * c[k] * scale[row];
-		}
-		matrix[row * 4 + 3] = off;
+		matrix[row * 4 + 3] = (margin - lo[row]) * scale[row];
 	}
 	/* a depth a hundredth of the ships' size apart is the same surface */
-	bias_depth = 0.01f * R / span;
+	cs->bias = 0.01f * R / span;
+	{
+		static int dbg = -1, fr;
+		if (dbg < 0)
+			dbg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
+		if (dbg && fr++ % 100 == 0)
+			log_printf("shadow map %d: %.1f x %.1f m, texel %.3f x %.3f m, R %.1f m, %d casters\n", cascade, extent[0] / 1000,
+					   extent[1] / 1000, extent[0] / MAP_SIZE / 1000, extent[1] / MAP_SIZE / 1000, R / 1000, ncasters);
+	}
+
+	cs->n_casters = ncasters < GL_SHADOW_CASTER_LAYERS ? ncasters : GL_SHADOW_CASTER_LAYERS;
+	for (int i = 0; i < cs->n_casters; i++)
+		cs->caster_end[i] = caster_tris_end[i] * 3;
 
 	size_t need = ntris * 9;
-	if (need > clip_cap)
+	if (need > cs->clip_cap)
 	{
-		float *n = realloc(clip, need * sizeof(float));
+		float *n = realloc(cs->clip, need * sizeof(float));
 		if (!n)
 			return false;
-		clip = n;
-		clip_cap = need;
+		cs->clip = n;
+		cs->clip_cap = need;
 	}
+	float *clip = cs->clip;
 	for (size_t i = 0; i < ntris * 3; i++)
 	{
 		const float *p = tris + i * 3;
@@ -228,28 +259,47 @@ bool gl_shadow_set(const float light[3], const float *tris, size_t ntris)
 				2.0f * (matrix[row * 4] * p[0] + matrix[row * 4 + 1] * p[1] + matrix[row * 4 + 2] * p[2] + matrix[row * 4 + 3]) -
 				1.0f;
 	}
-	clip_n = need;
+	cs->clip_n = need;
 
-	if (!gd_custom(shadow_pass, sizeof(PassData)))
+	PassData *pd = gd_custom(shadow_pass, sizeof(PassData));
+	if (!pd)
 		return false;
-	have_map = true;
+	pd->cascade = cascade;
+	cs->have = true;
 	return true;
 }
 
 void gl_shadow_clear(void)
 {
-	have_map = false;
-	clip_n = 0;
+	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
+	{
+		cas[c].have = false;
+		cas[c].clip_n = 0;
+		cas[c].n_casters = 0;
+	}
 }
 
-const float *gl_shadow_matrix(void)
+int gl_shadow_layer(int cascade, int caster)
 {
-	return have_map ? matrix : NULL;
+	return caster >= 0 && caster < GL_SHADOW_CASTER_LAYERS ? cascade * N_LAYERS + caster + 1 : -1;
+}
+
+int gl_shadow_all_layer(int cascade)
+{
+	return cas[cascade].have ? cascade * N_LAYERS : -1;
+}
+
+const float *gl_shadow_matrix(int cascade)
+{
+	return cas[cascade].have ? cas[cascade].matrix : NULL;
 }
 
 GLuint gl_shadow_texture(void)
 {
-	return have_map && inited && !failed ? tex : 0;
+	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
+		if (cas[c].have)
+			return inited && !failed ? tex : 0;
+	return 0;
 }
 
 float gl_shadow_dark(void)
@@ -257,9 +307,9 @@ float gl_shadow_dark(void)
 	return DARK;
 }
 
-float gl_shadow_bias(void)
+float gl_shadow_bias(int cascade)
 {
-	return bias_depth;
+	return cas[cascade].bias;
 }
 
 void gl_shadow_shutdown(void)
@@ -272,8 +322,11 @@ void gl_shadow_shutdown(void)
 		glDeleteVertexArrays(1, &vao);
 		glDeleteBuffers(1, &vbo);
 	}
-	free(clip);
-	clip = NULL;
-	clip_cap = clip_n = 0;
+	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
+	{
+		free(cas[c].clip);
+		cas[c].clip = NULL;
+		cas[c].clip_cap = cas[c].clip_n = 0;
+	}
 	inited = false;
 }

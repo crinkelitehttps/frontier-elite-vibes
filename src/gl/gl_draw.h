@@ -80,10 +80,12 @@ typedef struct
 void gd_set_depth(const GdDepth *d);
 
 /* Ship shadows (gl_shadow.h): vertices emitted until the next call look the
- * shadow map up in the flat shader. `m` is the 3x4 matrix (rows u, v, depth)
- * from the point passed to gd_tri etc. (before the modelview) to the map's
- * coordinates; NULL = off (the default at the start of every frame) */
-void gd_set_shadow(const float m[12]);
+ * shadow maps up in the flat shader. Each of the two cascades has `m`, the 3x4 matrix
+ * (rows u, v, depth) from the point passed to gd_tri etc. (before the modelview) to its
+ * coordinates, and `layer`, its layer of the map (gl_shadow_layer, gl_shadow_all_layer);
+ * a negative layer = that cascade is not looked up. Both off is the default at the
+ * start of every frame */
+void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1);
 
 /* Modelview stack */
 void gd_push(void);

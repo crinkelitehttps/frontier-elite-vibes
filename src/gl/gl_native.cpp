@@ -586,6 +586,7 @@ extern "C" void Nu_NativeFar(void)
 		f.shrink = native_frame_shrink(a6);
 		f.planet = planet;
 		capture_light(a6, f.light, f.tint);
+
 	}
 	SetReg(REG_D0, enabled == 2 && !planet ? 1 : 0);
 }
@@ -1004,7 +1005,6 @@ static void map_orbit_draw(const Frame &f)
 			gd_line(f.orbit.pt[i], f.orbit.pt[i + 1]);
 }
 
-extern "C" void native_publish(bool screen)
 /* A far disc (a sun, a far planet's dot) is only put when a pass of the
  * game's engine has it ahead of its camera: the ahead pass for what is in
  * the game's own view, otherwise a capture pass, and those come every few
@@ -1044,14 +1044,15 @@ struct FarKeep
 };
 static FarKeep far_keep_pub, far_keep_world;
 
+extern "C" void native_publish(bool screen)
 {
 	map_orbit_build(rec);
 	if (!screen)
-		note_capture_sources(rec);
 	{
 		far_keep_pub.apply(rec);
-	pub = rec;
+		note_capture_sources(rec);
 	}
+	pub = rec;
 	pub.texts = texts_seen;
 	pub.serial = ++publishes;
 }
@@ -1059,8 +1060,8 @@ static FarKeep far_keep_pub, far_keep_world;
 extern "C" void native_publish_world(void)
 {
 	map_orbit_build(rec);
-	note_capture_sources(rec);
 	far_keep_world.apply(rec);
+	note_capture_sources(rec);
 	pub_world = rec;
 	pub_world.texts = texts_seen;
 	pub_world.serial = ++publishes;
@@ -2297,6 +2298,13 @@ void sort_nodes(std::vector<Node> &nodes);
  * space is not the others'. A flyable ship's model is 10-41. */
 std::vector<float> shadow_tris;
 std::vector<char> shadow_caster;
+/* the layer of each cascade's map an object looks up (gl_shadow_layer, gl_shadow_all_layer):
+ * every caster for what is no caster, the map without itself for a ship, -1 = none */
+struct ShadowLayers
+{
+	int l[GL_SHADOW_CASCADES];
+};
+std::vector<ShadowLayers> shadow_layer;
 bool shadow_on = false;
 
 void setup_shadows(bool wire)
@@ -2304,6 +2312,7 @@ void setup_shadows(bool wire)
 	gl_shadow_clear();
 	shadow_on = false;
 	shadow_caster.assign(drawn.size(), 0);
+	shadow_layer.assign(drawn.size(), ShadowLayers{{-1, -1}});
 	if (wire || !gl_shadow_wanted())
 		return;
 	shadow_tris.clear();
@@ -2315,13 +2324,15 @@ void setup_shadows(bool wire)
 		size_t i;
 		P3 c;
 		float r;
+		bool station; /* a station or base (models 43-54): always in the big cascade */
 	};
 	std::vector<Cand> cands;
 	for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
 	{
 		const Object &o = shown->obj[i];
 		const Drawn &d = drawn[i];
-		if (o.table != o.subtable || o.model < 10 || o.model > 41 || d.shrink != 1.0f)
+		const bool station = o.model >= 43 && o.model <= 54;
+		if (o.table != o.subtable || (!station && (o.model < 10 || o.model > 41)) || d.shrink != 1.0f)
 			continue;
 		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
 		bool any = false;
@@ -2337,7 +2348,7 @@ void setup_shadows(bool wire)
 						}
 		if (!any)
 			continue;
-		Cand c = {i, {}, 0};
+		Cand c = {i, {}, 0, station};
 		for (int k = 0; k < 3; k++)
 		{
 			c.c[k] = 0.5f * (lo[k] + hi[k]);
@@ -2350,40 +2361,98 @@ void setup_shadows(bool wire)
 	if (!cands.empty())
 	{
 		auto dist0 = [](const Cand &c) { return std::sqrt(c.c[0] * c.c[0] + c.c[1] * c.c[1] + c.c[2] * c.c[2]); };
-		size_t near = 0;
-		for (size_t k = 1; k < cands.size(); k++)
-			if (dist0(cands[k]) - cands[k].r < dist0(cands[near]) - cands[near].r)
-				near = k;
-		const float reach = std::max(8.0f * cands[near].r, 1.0e5f);
+		/* Two cascades by size: a map round a cruiser and a Cobra many km apart has texels as wide as the Cobra.
+		 * Cascade 0 has the ships up to 5 times the smallest in view, cascade 1 the bigger ones and the stations. */
+		float rmin = 1e30f;
 		for (const Cand &c : cands)
+			if (!c.station)
+				rmin = std::min(rmin, c.r);
+		std::vector<std::vector<const Cand *>> chosen(GL_SHADOW_CASCADES);
+		std::vector<int> cascade_of(drawn.size(), -1);
+		for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
 		{
-			float dx = c.c[0] - cands[near].c[0], dy = c.c[1] - cands[near].c[1], dz = c.c[2] - cands[near].c[2];
-			if (std::sqrt(dx * dx + dy * dy + dz * dz) + c.r > reach && &c != &cands[near])
+			std::vector<const Cand *> cls;
+			for (const Cand &c : cands)
+				if (cc == 0 ? !c.station && c.r <= 5.0f * rmin : c.station || c.r > 5.0f * rmin)
+					cls.push_back(&c);
+			if (cls.empty())
 				continue;
-			shadow_caster[c.i] = 1;
+			/* the map is fitted round the casters, so a ship far off would stretch it and make every texel
+			 * metres wide: only those near the class's nearest (within a few of its sizes, at least 100 m) cast */
+			const Cand *near = cls[0];
+			for (const Cand *c : cls)
+				if (dist0(*c) - c->r < dist0(*near) - near->r)
+					near = c;
+			const float reach = std::max(8.0f * near->r, 1.0e5f);
+			for (const Cand *c : cls)
 			{
-				static const bool dbg2 = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
-				static int fr;
-				if (dbg2 && fr++ % 100 < 3)
-					log_printf("shadow caster %zu model %d own %d shrink %.2f centre %.0f %.0f %.0f r %.0f\n", c.i,
-							   (int)shown->obj[c.i].model, (int)shown->obj[c.i].own_added, drawn[c.i].shrink, c.c[0],
-							   c.c[1], c.c[2], c.r);
+				float dx = c->c[0] - near->c[0], dy = c->c[1] - near->c[1], dz = c->c[2] - near->c[2];
+				if (std::sqrt(dx * dx + dy * dy + dz * dz) + c->r > reach && c != near)
+					continue;
+				chosen[(size_t)cc].push_back(c);
 			}
-			if (!first)
-				first = &shown->obj[c.i];
-			/* the whole hull, run again without the facing tests: the drawn
-			 * model has only the faces turned to the camera */
-			static Drawn whole;
-			run_object(shown->obj[c.i], whole, false, false, true);
-			for (const Node &n : whole.nodes)
-				if (!n.under)
-					for (const Tri &t : n.tris)
-						for (const P3 &p : t.p)
-							shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+			/* nearest the eye first: the first few have a map of their own (they receive) */
+			std::stable_sort(chosen[(size_t)cc].begin(), chosen[(size_t)cc].end(),
+							 [&](const Cand *a, const Cand *b) { return dist0(*a) - a->r < dist0(*b) - b->r; });
 		}
+		const float *light = nullptr;
+		float lightv[3];
+		bool made[GL_SHADOW_CASCADES] = {};
+		std::vector<int> own_layer(drawn.size(), -1);
+		for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
+		{
+			std::vector<size_t> ends;
+			shadow_tris.clear();
+			for (const Cand *cp : chosen[(size_t)cc])
+			{
+				const Cand &c = *cp;
+				shadow_caster[c.i] = 1;
+				cascade_of[c.i] = cc;
+				own_layer[c.i] = gl_shadow_layer(cc, (int)ends.size());
+				{
+					static const bool dbg2 = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
+					static int fr;
+					if (dbg2 && fr++ % 100 < 3)
+						log_printf("shadow caster %zu model %d cascade %d own %d shrink %.2f centre %.0f %.0f %.0f r %.0f\n",
+								   c.i, (int)shown->obj[c.i].model, cc, (int)shown->obj[c.i].own_added,
+								   drawn[c.i].shrink, c.c[0], c.c[1], c.c[2], c.r);
+				}
+				if (!first)
+				{
+					first = &shown->obj[c.i];
+					for (int k = 0; k < 3; k++)
+						lightv[k] = first->light[k];
+					light = lightv;
+				}
+				/* the whole hull, run again without the facing tests: the drawn
+				 * model has only the faces turned to the camera */
+				static Drawn whole;
+				run_object(shown->obj[c.i], whole, false, false, true);
+				for (const Node &n : whole.nodes)
+					if (!n.under)
+						for (const Tri &t : n.tris)
+							for (const P3 &p : t.p)
+								shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+				ends.push_back(shadow_tris.size() / 9);
+			}
+			if (!ends.empty())
+				made[cc] = gl_shadow_set(cc, light, shadow_tris.data(), shadow_tris.size() / 9, ends.data(), (int)ends.size());
+		}
+		shadow_on = made[0] || made[1];
+		/* what each object looks up: each cascade's map with every caster, or for a caster of it the map
+		 * without itself (none at all for a caster that has no map of its own) */
+		for (size_t i = 0; i < drawn.size(); i++)
+			for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
+			{
+				int &l = shadow_layer[i].l[cc];
+				l = gl_shadow_all_layer(cc);
+				if (cascade_of[i] == cc)
+					l = made[cc] ? own_layer[i] : -1;
+			}
+		for (size_t i = 0; i < drawn.size(); i++)
+			if (cascade_of[i] >= 0 && own_layer[i] < 0)
+				shadow_layer[i] = ShadowLayers{{-1, -1}};
 	}
-	if (first)
-		shadow_on = gl_shadow_set(first->light, shadow_tris.data(), shadow_tris.size() / 9);
 	static const bool dbg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
 	static int frames;
 	if (dbg && frames++ % 100 == 0)
@@ -2396,6 +2465,16 @@ void setup_shadows(bool wire)
 		}
 		log_printf("ship shadows: %d objects, %d casters (%d own, hidden), %zu triangles, map %d\n", shown->n, casters,
 				   hidden, shadow_tris.size() / 9, (int)shadow_on);
+		for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
+		{
+			size_t nt = 0;
+			for (const Node &n : drawn[i].nodes)
+				nt += n.tris.size();
+			if (nt)
+				log_printf("  object %zu model %d shrink %.3f nodes %zu tris %zu caster %d layers %d %d\n", i,
+						   (int)shown->obj[i].model, drawn[i].shrink, drawn[i].nodes.size(), nt, (int)shadow_caster[i],
+						   shadow_layer[i].l[0], shadow_layer[i].l[1]);
+		}
 	}
 }
 
@@ -2999,11 +3078,17 @@ extern "C" void native_draw(void)
 	{
 		float key; /* true key */
 		const Node *node;
-		bool recv; /* receives the ships' shadows */
+		ShadowLayers layers; /* the shadow maps' layers it looks up */
 	};
-	const float *shadow_m = shadow_on ? gl_shadow_matrix() : nullptr;
+	const float *shadow_m0 = shadow_on ? gl_shadow_matrix(0) : nullptr;
+	const float *shadow_m1 = shadow_on ? gl_shadow_matrix(1) : nullptr;
+	/* the map layers an object looks up (-1: none of that cascade), all -1 if it receives none */
+	static const ShadowLayers no_layers = {{-1, -1}};
 	auto receives = [&](const Drawn *d) {
-		return shadow_m && d->shrink == 1.0f && !shadow_caster[(size_t)(d - drawn.data())];
+		return shadow_on && d->shrink == 1.0f ? shadow_layer[(size_t)(d - drawn.data())] : no_layers;
+	};
+	auto set_shadow = [&](const ShadowLayers &sl) {
+		gd_set_shadow(shadow_m0, shadow_m0 ? sl.l[0] : -1, shadow_m1, shadow_m1 ? sl.l[1] : -1);
 	};
 	std::vector<Under> unders;
 	for (const Drawn *d : placed)
@@ -3027,22 +3112,22 @@ extern "C" void native_draw(void)
 		for (; next_under < unders.size() && unders[next_under].key > beyond; next_under++)
 		{
 			const Node *n = unders[next_under].node;
-			gd_set_shadow(unders[next_under].recv ? shadow_m : nullptr);
+			set_shadow(unders[next_under].layers);
 			draw_tris(n->tris, true);
 			if (!shadows_drawn && !under_shadows.empty())
 				for (const Tri &t : n->tris)
 					if (t.colour & 0x8000)
 					{
-						gd_set_shadow(nullptr);
+						gd_set_shadow(nullptr, -1, nullptr, -1);
 						draw_shadow_group(under_shadows);
-						gd_set_shadow(unders[next_under].recv ? shadow_m : nullptr);
+						set_shadow(unders[next_under].layers);
 						shadows_drawn = true;
 						break;
 					}
 			draw_segs(n->segs);
 			draw_dots(n->dots);
 		}
-		gd_set_shadow(nullptr);
+		gd_set_shadow(nullptr, -1, nullptr, -1);
 		return true;
 	};
 
@@ -3072,19 +3157,19 @@ extern "C" void native_draw(void)
 			depth.write = false;
 			depth.depth_only = false;
 			gd_set_depth(&depth);
-			const bool recv = receives(&d);
+			const ShadowLayers recv = receives(&d);
 			for (const Node &n : d.nodes)
 			{
 				if (n.under)
 					continue;
 				if (draw_unders(n.dist * d.shrink))
 					gd_set_depth(&depth);
-				gd_set_shadow(recv ? shadow_m : nullptr);
+				set_shadow(recv);
 				draw_tris(n.tris);
 				draw_segs(n.segs);
 				draw_dots(n.dots);
 			}
-			gd_set_shadow(nullptr);
+			gd_set_shadow(nullptr, -1, nullptr, -1);
 			/* ...then its depth, to hide what is behind it of the others */
 			depth.write = true;
 			depth.depth_only = true;
