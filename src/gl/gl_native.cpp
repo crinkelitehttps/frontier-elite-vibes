@@ -1005,11 +1005,53 @@ static void map_orbit_draw(const Frame &f)
 }
 
 extern "C" void native_publish(bool screen)
+/* A far disc (a sun, a far planet's dot) is only put when a pass of the
+ * game's engine has it ahead of its camera: the ahead pass for what is in
+ * the game's own view, otherwise a capture pass, and those come every few
+ * frames. Without this a body the view shows from beside the game's view
+ * (the free camera, a turned head) is there for a frame and gone for the
+ * next few, a star flashing up. The last sightings are kept for
+ * FAR_KEEP_FRAMES published frames and placed where they were seen. */
+#define FAR_KEEP_FRAMES 8
+struct FarKept
+{
+	Far far;
+	int age;
+};
+struct FarKeep
+{
+	std::vector<FarKept> kept;
+	void apply(Frame &f)
+	{
+		std::vector<FarKept> now;
+		for (int i = 0; i < f.nfar; i++)
+			now.push_back({f.far[i], 0});
+		for (const FarKept &k : kept)
+		{
+			if (k.age >= FAR_KEEP_FRAMES || k.far.planet)
+				continue;
+			bool seen = false;
+			for (int i = 0; i < f.nfar && !seen; i++)
+				seen = f.far[i].addr == k.far.addr;
+			if (seen)
+				continue;
+			now.push_back({k.far, k.age + 1});
+			if (f.nfar < MAX_FAR)
+				f.far[f.nfar++] = k.far;
+		}
+		kept = now;
+	}
+};
+static FarKeep far_keep_pub, far_keep_world;
+
 {
 	map_orbit_build(rec);
 	if (!screen)
 		note_capture_sources(rec);
+	{
+		far_keep_pub.apply(rec);
 	pub = rec;
+	}
 	pub.texts = texts_seen;
 	pub.serial = ++publishes;
 }
@@ -1018,6 +1060,7 @@ extern "C" void native_publish_world(void)
 {
 	map_orbit_build(rec);
 	note_capture_sources(rec);
+	far_keep_world.apply(rec);
 	pub_world = rec;
 	pub_world.texts = texts_seen;
 	pub_world.serial = ++publishes;
