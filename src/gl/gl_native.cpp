@@ -552,6 +552,111 @@ extern "C" float native_frame_shrink(uint32_t a6)
 	return e > 0 ? std::ldexp(1.0f, e) : 1.0f;
 }
 
+/* The object's view position and axes without the game's rounding. L390f2
+ * cuts the camera-to-object vector down to 14 bits before turning it
+ * (L3901a, then l39140/l39174) and rounds the axes' product to 16 bits
+ * (L39290): for a model whose middle is far off (a city 40 km across) the
+ * parts near the camera jump by up to a metre as the camera moves or
+ * turns. Worked out again here in doubles from the same 64-bit positions
+ * and matrices; only where the camera and the object share a frame (the
+ * other cases go through the parent chain, L38fb4, and keep the game's). */
+struct Exact
+{
+	uint32_t a6 = 0, obj = 0;
+	bool pos_ok = false;
+	double pos[3];   /* as -16(a6), unrounded */
+	bool cam_axes = false; /* L39290 copies the camera's matrix: nothing rounded */
+};
+static Exact exact;
+
+static double obj_coord(uint32_t o, int k)
+{
+	return (double)(int32_t)rdlong(o + 56 + 4 * (uint32_t)k) * 4294967296.0 + (double)(uint32_t)rdlong(o + 44 + 4 * (uint32_t)k);
+}
+
+/* At Lnative_clip: a4 the object, a3 the camera, a0 just past the matrix
+ * L390f2 turned the vector with, d7 the distance exponent, a5 the model */
+static void exact_note(uint32_t a6)
+{
+	exact = Exact();
+	static int on = -1;
+	if (on < 0)
+		on = !getenv("GLF_EXACT_POSE") || atoi(getenv("GLF_EXACT_POSE")) != 0;
+	if (!on)
+		return;
+	uint32_t a3 = (uint32_t)GetReg(REG_A3), a4 = (uint32_t)GetReg(REG_A4), mat = (uint32_t)GetReg(REG_A0) - 6;
+	uint32_t m = (uint32_t)GetReg(REG_A5);
+	exact.a6 = a6;
+	exact.obj = a4;
+	uint8_t cpar = (uint8_t)rdbyte(a3 + 68);
+	exact.cam_axes = rdbyte(a3 + 69) && !rdbyte(a4 + 69) && cpar == (uint8_t)rdbyte(a4 + 93);
+	double rel[3];
+	if (cpar == (uint8_t)rdbyte(a4 + 68) && rdbyte(a4 + 69) == rdbyte(a3 + 69))
+		for (int k = 0; k < 3; k++)
+			rel[k] = obj_coord(a4, k) - obj_coord(a3, k);
+	else if (cpar == (uint8_t)rdbyte(a4 + 93))
+		for (int k = 0; k < 3; k++)
+			rel[k] = -obj_coord(a3, k);
+	else
+		return;
+	/* pos = M rel 2^(16 - S - d0): S the cut, d7 = S - 88(a4), d0 = 16 - d7 + 12(a5), at least 0 */
+	int d7 = (int16_t)GetReg(REG_D7);
+	int S = d7 + (int16_t)rdword(a4 + 88);
+	int d0 = std::max(0, 16 - d7 + (int16_t)rdword(m + 12));
+	double f = std::ldexp(1.0, 16 - S - d0) / 32768.0;
+	for (int i = 0; i < 3; i++)
+	{
+		double s = 0, w = 0;
+		for (int k = 0; k < 3; k++)
+		{
+			int16_t mk = (int16_t)rdword(mat + 2 * (uint32_t)(i + 3 * k));
+			s += mk * rel[k];
+			w += std::abs(mk);
+		}
+		exact.pos[i] = s * f;
+		/* the game's is out by up to a unit of each cut component (w 2^(1-d0)):
+		 * further off, a case not followed, keep the game's */
+		double g = (double)(int32_t)rdlong(a6 - 16 + 4 * (uint32_t)i);
+		if (std::fabs(exact.pos[i] - g) > 4 + 2 * w * std::ldexp(2.0, -d0))
+			return;
+	}
+	exact.pos_ok = true;
+}
+
+/* At Lnative_object (L393de), into the captured object: a3 and a4 are the
+ * matrices L39290 multiplied (unless it copied the camera's) */
+static void exact_apply(uint32_t a6, Object &o)
+{
+	if (exact.a6 != a6 || exact.obj != (uint32_t)rdlong(a6 - 212))
+		return;
+	if (exact.pos_ok)
+	{
+		float p[3] = {(float)exact.pos[0], (float)exact.pos[1], -(float)exact.pos[2]};
+		cockpit_pass_to_view(p, o.pos);
+	}
+	if (exact.cam_axes)
+		return;
+	uint32_t A = (uint32_t)GetReg(REG_A3), B = (uint32_t)GetReg(REG_A4);
+	float cols[3][3];
+	for (int j = 0; j < 3; j++)
+		for (int i = 0; i < 3; i++)
+		{
+			double s = 0;
+			for (int k = 0; k < 3; k++)
+				s += (double)(int16_t)rdword(A + 2 * (uint32_t)(i + 3 * k)) *
+					 (int16_t)rdword(B + 2 * (uint32_t)(j + 3 * k));
+			cols[j][i] = (float)(s / 1073741824.0);
+			double g = (int16_t)rdword(a6 - 36 + 6 * (uint32_t)j + 2 * (uint32_t)i) / 32768.0;
+			if (std::fabs(cols[j][i] - g) > 4.0 / 32768)
+				return;
+		}
+	for (int c = 0; c < 3; c++)
+	{
+		float col[3] = {cols[c][0], cols[c][1], -cols[c][2]};
+		cockpit_pass_to_view(col, o.cols[c]);
+	}
+}
+
 /* Host call (Lnative_clip, before the cull): is the object too far for its
  * model (d7, its distance's exponent, >= the model's word at +20), so that
  * L390f2 would draw it as a disc (l39092)? Kept as a far body if so; d0 = 1
@@ -563,6 +668,7 @@ extern "C" void Nu_NativeFar(void)
 	far_a6 = 0;
 	if (!native_enabled() || !scene_active())
 		return;
+	exact_note((uint32_t)GetReg(REG_A6));
 	uint32_t a6 = (uint32_t)GetReg(REG_A6);
 	uint32_t m = (uint32_t)GetReg(REG_A5);
 	if ((int16_t)GetReg(REG_D7) < (int16_t)rdword(m + 20) || (int32_t)rdlong(a6 - 8) < 0x40)
@@ -647,6 +753,7 @@ extern "C" void Nu_NativeObject(void)
 	if (!wanted(a6, addr, table, model))
 		return;
 	capture(rec.obj[rec.n++], a6, addr, table, model);
+	exact_apply(a6, rec.obj[rec.n - 1]);
 	/* filled, the native scene draws it: not the game's primitives too,
 	 * which the classic view paints under the native scene (over the
 	 * planets and the far bodies there) */
