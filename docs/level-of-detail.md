@@ -221,6 +221,15 @@ ground colour; buildings and starports are separate objects (section 6 and the b
 into a 2048x1024 texture with a fixed 6 levels of splitting. No mesh, no view-dependent detail, so no
 popping; the cost is that close up the coastline is only as sharp as the texture.
 
+[native] Ground objects are bent onto the sphere (`make_bends` in `gl_native.cpp`, `uBend` in `gl_draw.c`'s mesh
+shader). A city is one flat model laid flat at its centre (Mars' model 48 is ~40 km wide); the sphere falls away
+under it by d^2 / 2R, about 15 m at 10 km and 50 m at 20 km on Mars, so the outskirts' roads and buildings floated
+with sky and shadows under them (the game's flat ground fill never showed it). Each point of an object within
+60 km of a planet's ground is lowered by R - sqrt(R^2 - w^2), w its distance from the vertical through the
+object's origin; shadow casters get the same. The drawn sphere is the true one shrunk about the eye by a power of
+two (8 landed on Mars), so the planet records that factor (`ground_k`, from the planet object's radius) for
+`planet_native_ground`. `GLF_GROUND_BEND=0` turns it off.
+
 ## 8. The native renderer
 
 [native] `src/gl/gl_native.cpp` replays model bytecode in 3D. It keeps the game's rules where they matter for

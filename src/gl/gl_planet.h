@@ -91,10 +91,15 @@ bool planet_native_find(uint32_t addr, const float pos[3], const float cols[3][3
 /* Where the drawn native planet of this radius is (view space), if any */
 bool planet_native_centre(float radius, float centre[3]);
 int planet_native_count(void);
+/* The drawn planet i at the true size of the objects round it (view units, the shown frame): the sphere the
+ * ground objects stand on. False if not known. */
+bool planet_native_ground(int i, double c[3], double *r);
 uint32_t planet_native_object_addr(int i); /* its planet object */
 double planet_native_dist(int i);   /* as drawn (shrunk, native_frame_shrink) */
 float planet_native_shrink(int i); /* true distance = dist * shrink */
 void planet_native_draw(int i);
+/* The player's ship this frame (GL view space, view units; shrink as native_frame_shrink), for the ground the shadows fall on in the external view */
+void planet_set_ground_ship(bool ok, const float pos[3], float shrink);
 /* drawing the cockpit screen's picture: its planets, not the world's */
 void planet_use_screen(bool screen);
 void planet_use_page(bool page); /* the page's (scene_use_page) */

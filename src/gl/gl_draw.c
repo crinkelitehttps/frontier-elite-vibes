@@ -21,6 +21,7 @@ typedef struct
 	float depth[2]; /* depth tested: window depth a + b * log(w); b 0 = gl_FragCoord.z */
 	float shadow[3]; /* shadow map u, v, depth (0..1); 0 unless a shadow is set */
 	float shadow2[3]; /* the same in the second cascade */
+	float shadow3[3]; /* and the third */
 } GdVert;
 
 enum GdKind
@@ -28,8 +29,31 @@ enum GdKind
 	GD_TRIS,
 	GD_LINES,
 	GD_POINTS,
-	GD_CUSTOM
+	GD_CUSTOM,
+	GD_MESH /* a kept mesh (gd_mesh_draw): data is a MeshDraw */
 };
+
+#define FACE_UNIT 6	  /* the texture unit of the face table */
+#define FACE_W 1024	  /* faces per row of the face table */
+
+struct GdMesh
+{
+	GLuint vao, vbo;
+	int n;
+};
+
+/* A kept mesh's draw: everything put() would have used, with the pose in */
+typedef struct
+{
+	GdMesh *mesh;
+	float mvp[16];   /* projection x modelview x pose */
+	float sh[9][4];  /* each cascade's shadow rows x pose, 0 when off */
+	float depth[4];  /* 1 when depth tested, depth_a, depth_b */
+	float logk[2];   /* log_a, log_b */
+	float bend[6][4]; /* bent onto a planet (gd_mesh_draw), [4][3] = 1 when on */
+	int base;
+	int range0, nranges; /* in range_first/range_count */
+} MeshDraw;
 
 typedef struct
 {
@@ -38,7 +62,7 @@ typedef struct
 	uint8_t cull;
 	uint8_t blend;
 	uint8_t depth;
-	uint16_t shadow; /* looks the ship shadows up (gd_set_shadow): (layer0 + 1) | (layer1 + 1) << 8, 0 = off */
+	uint32_t shadow; /* looks the ship shadows up (gd_set_shadow): (layer0 + 1) | (layer1 + 1) << 8 | (layer2 + 1) << 16, 0 = off */
 	int first; /* vertex index, or data offset for GD_CUSTOM */
 	int count;
 	gd_custom_fn fn;
@@ -51,6 +75,8 @@ static GdCmd *cmds;
 static int n_cmds, cap_cmds;
 static unsigned char *custom_data;
 static size_t custom_used, custom_cap;
+static GLint *range_first, *range_count; /* the kept meshes' vertex ranges (MeshDraw) */
+static int n_ranges, cap_ranges;
 
 /* ---- state ---------------------------------------------------------- */
 #define MV_STACK_DEPTH 32
@@ -65,8 +91,8 @@ static uint8_t cur_vp = GD_VP_VIEW3D;
 static uint8_t cur_cull;
 static uint8_t cur_blend;
 static uint8_t cur_depth; /* 0 off, else 1 | 2 write | 4 depth only */
-static uint16_t cur_shadow;
-static float shadow_m[12], shadow_m2[12]; /* view point -> shadow map u, v, depth (3 rows of 4), per cascade */
+static uint32_t cur_shadow;
+static float shadow_m[12], shadow_m2[12], shadow_m3[12]; /* view point -> shadow map u, v, depth (3 rows of 4), per cascade */
 static float depth_a, depth_b; /* z_clip = a * w + b */
 static float log_a, log_b;     /* window depth = a + b * log(w) */
 static bool wireframe;
@@ -76,6 +102,56 @@ static int vp_rects[GD_VP_COUNT][4];
 static GLuint prog, vao, vbo;
 static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow;
 static size_t vbo_bytes;
+static GLuint mesh_prog, face_tex;
+static int face_rows;
+static GLint um_mvp, um_depth, um_log, um_sh, um_base, um_faces, um_bend;
+static GLint um_shadow_layer, um_shadow_on, um_shadow_dark, um_shadow_bias, um_shadow;
+
+/* A kept mesh's vertices: placed by the pose in uMvp, coloured by their
+ * face's entry in the face table; the rest as put() and VS_FLAT */
+static const char *VS_MESH = "in vec3 aPos;\n"
+							 "in float aFace;\n"
+							 "uniform mat4 uMvp;\n"
+							 "uniform vec3 uDepth;\n"
+							 "uniform vec2 uLog;\n"
+							 "uniform vec4 uSh[9];\n"
+							 "uniform vec4 uBend[6];\n"
+							 "uniform int uBase;\n"
+							 "uniform sampler2D uFaces;\n"
+							 "out vec4 vColor;\n"
+							 "out vec3 vShadow;\n"
+							 "out vec3 vShadow2;\n"
+							 "out vec3 vShadow3;\n"
+							 "out highp float vW;\n"
+							 "flat out highp vec2 vDepth;\n"
+							 "void main(){\n"
+							 "  int f = int(aFace + 0.5) + uBase;\n"
+							 "  vec4 c = texelFetch(uFaces, ivec2(f & 1023, f >> 10), 0);\n"
+							 "  vec4 q = vec4(aPos, 1.0);\n"
+							 /* bent onto the planet (gd_mesh_draw): lowered by how far the sphere falls away
+							  * from the plane it touches at the bend's point */
+							 "  if (uBend[4].w > 0.5) {\n"
+							 "    vec3 dq = q.xyz - uBend[3].xyz;\n"
+							 "    vec3 d = uBend[0].xyz * dq.x + uBend[1].xyz * dq.y + uBend[2].xyz * dq.z;\n"
+							 "    float h = dot(d, uBend[4].xyz);\n"
+							 "    float w2 = max(dot(d, d) - h * h, 0.0);\n"
+							 "    float R = uBend[3].w;\n"
+							 "    q.xyz -= uBend[5].xyz * (w2 / (R + sqrt(max(R * R - w2, 0.0))));\n"
+							 "  }\n"
+							 "  vec4 p = uMvp * q;\n"
+							 "  vDepth = vec2(0.0);\n"
+							 "  if (uDepth.x > 0.5) {\n"
+							 "    p.z = uDepth.y * p.w + uDepth.z;\n"
+							 "    vDepth = uLog;\n"
+							 "  }\n"
+							 "  vW = p.w;\n"
+							 "  vColor = vec4(c.rgb, 1.0);\n"
+							 "  vShadow = vec3(dot(uSh[0], q), dot(uSh[1], q), dot(uSh[2], q));\n"
+							 "  vShadow2 = vec3(dot(uSh[3], q), dot(uSh[4], q), dot(uSh[5], q));\n"
+							 "  vShadow3 = vec3(dot(uSh[6], q), dot(uSh[7], q), dot(uSh[8], q));\n"
+							 /* a face turned away: all three corners at one point, nothing drawn */
+							 "  gl_Position = c.a > 0.0 ? p : vec4(0.0, 0.0, 2.0, 1.0);\n"
+							 "}\n";
 
 static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "in vec4 aColor;\n"
@@ -83,9 +159,11 @@ static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "in vec2 aDepth;\n"
 							 "in vec3 aShadow;\n"
 							 "in vec3 aShadow2;\n"
+							 "in vec3 aShadow3;\n"
 							 "out vec4 vColor;\n"
 							 "out vec3 vShadow;\n"
 							 "out vec3 vShadow2;\n"
+							 "out vec3 vShadow3;\n"
 							 "out highp float vW;\n"
 							 "flat out highp vec2 vDepth;\n"
 							 "void main(){\n"
@@ -96,6 +174,7 @@ static const char *VS_FLAT = "in vec4 aPos;\n"
 							 "  vDepth = aDepth;\n"
 							 "  vShadow = aShadow;\n"
 							 "  vShadow2 = aShadow2;\n"
+							 "  vShadow3 = aShadow3;\n"
 							 "}\n";
 
 /* Depth tested, depth goes with log(w) (gd_set_depth): as precise far away
@@ -103,12 +182,13 @@ static const char *VS_FLAT = "in vec4 aPos;\n"
 static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "in vec3 vShadow;\n"
 							 "in vec3 vShadow2;\n"
+							 "in vec3 vShadow3;\n"
 							 "in highp float vW;\n"
 							 "flat in highp vec2 vDepth;\n"
 							 "uniform float uShadowOn;\n"
 							 "uniform float uShadowDark;\n"
-							 "uniform vec2 uShadowBias;\n"
-							 "uniform vec2 uShadowLayer;\n"
+							 "uniform vec3 uShadowBias;\n"
+							 "uniform vec3 uShadowLayer;\n"
 							 "uniform sampler2DArrayShadow uShadow;\n"
 							 "out vec4 fragColor;\n"
 							 "void main(){\n"
@@ -120,6 +200,8 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "      lit = shadowLit(uShadow, vShadow.xy, uShadowLayer.x, min(vShadow.z, 1.0) - uShadowBias.x);\n"
 							 "    if (uShadowLayer.y >= 0.0 && vShadow2.x >= 0.0 && vShadow2.x <= 1.0 && vShadow2.y >= 0.0 && vShadow2.y <= 1.0)\n"
 							 "      lit = min(lit, shadowLit(uShadow, vShadow2.xy, uShadowLayer.y, min(vShadow2.z, 1.0) - uShadowBias.y));\n"
+							 "    if (uShadowLayer.z >= 0.0 && vShadow3.x >= 0.0 && vShadow3.x <= 1.0 && vShadow3.y >= 0.0 && vShadow3.y <= 1.0)\n"
+							 "      lit = min(lit, shadowLit(uShadow, vShadow3.xy, uShadowLayer.z, min(vShadow3.z, 1.0) - uShadowBias.z));\n"
 							 "    fragColor.rgb *= mix(uShadowDark, 1.0, lit);\n"
 							 "  }\n"
 							 "  gl_FragDepth = vDepth.y != 0.0 ? clamp(vDepth.x + vDepth.y * log(max(vW, 1e-6)), 0.0, 1.0)\n"
@@ -198,8 +280,8 @@ static void *grow(void *p, int *cap, int need, size_t elem)
 
 void gd_init(void)
 {
-	static const char *const attribs[] = {"aPos", "aColor", "aSize", "aDepth", "aShadow", "aShadow2"};
-	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 6);
+	static const char *const attribs[] = {"aPos", "aColor", "aSize", "aDepth", "aShadow", "aShadow2", "aShadow3"};
+	prog = gd_build_program(VS_FLAT, FS_FLAT, attribs, 7);
 	u_shadow_layer = glGetUniformLocation(prog, "uShadowLayer");
 	u_shadow_on = glGetUniformLocation(prog, "uShadowOn");
 	u_shadow_dark = glGetUniformLocation(prog, "uShadowDark");
@@ -207,6 +289,25 @@ void gd_init(void)
 	u_shadow = glGetUniformLocation(prog, "uShadow");
 	glUseProgram(prog);
 	glUniform1i(u_shadow, SHADOW_UNIT);
+	glUseProgram(0);
+
+	static const char *const mesh_attribs[] = {"aPos", "aFace"};
+	mesh_prog = gd_build_program(VS_MESH, FS_FLAT, mesh_attribs, 2);
+	um_mvp = glGetUniformLocation(mesh_prog, "uMvp");
+	um_depth = glGetUniformLocation(mesh_prog, "uDepth");
+	um_log = glGetUniformLocation(mesh_prog, "uLog");
+	um_sh = glGetUniformLocation(mesh_prog, "uSh");
+	um_base = glGetUniformLocation(mesh_prog, "uBase");
+	um_bend = glGetUniformLocation(mesh_prog, "uBend");
+	um_faces = glGetUniformLocation(mesh_prog, "uFaces");
+	um_shadow_layer = glGetUniformLocation(mesh_prog, "uShadowLayer");
+	um_shadow_on = glGetUniformLocation(mesh_prog, "uShadowOn");
+	um_shadow_dark = glGetUniformLocation(mesh_prog, "uShadowDark");
+	um_shadow_bias = glGetUniformLocation(mesh_prog, "uShadowBias");
+	um_shadow = glGetUniformLocation(mesh_prog, "uShadow");
+	glUseProgram(mesh_prog);
+	glUniform1i(um_shadow, SHADOW_UNIT);
+	glUniform1i(um_faces, FACE_UNIT);
 	glUseProgram(0);
 
 	glGenVertexArrays(1, &vao);
@@ -225,6 +326,8 @@ void gd_init(void)
 	glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, shadow));
 	glEnableVertexAttribArray(5);
 	glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, shadow2));
+	glEnableVertexAttribArray(6);
+	glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(GdVert), (void *)offsetof(GdVert, shadow3));
 	glBindVertexArray(0);
 
 	verts = grow(NULL, &cap_verts, 65536, sizeof(GdVert));
@@ -240,12 +343,21 @@ void gd_shutdown(void)
 	glDeleteBuffers(1, &vbo);
 	glDeleteVertexArrays(1, &vao);
 	glDeleteProgram(prog);
+	glDeleteProgram(mesh_prog);
+	if (face_tex)
+		glDeleteTextures(1, &face_tex);
+	face_tex = 0;
+	face_rows = 0;
 	free(verts);
 	free(cmds);
 	free(custom_data);
+	free(range_first);
+	free(range_count);
 	verts = NULL;
 	cmds = NULL;
 	custom_data = NULL;
+	range_first = range_count = NULL;
+	cap_ranges = n_ranges = 0;
 	cap_verts = cap_cmds = 0;
 	custom_cap = 0;
 }
@@ -255,6 +367,7 @@ void gd_begin_frame(const int rects[GD_VP_COUNT][4])
 	memcpy(vp_rects, rects, sizeof(vp_rects));
 	n_verts = n_cmds = 0;
 	custom_used = 0;
+	n_ranges = 0;
 	mv_sp = 0;
 	mv_stack[0] = mat4_identity();
 	proj = mat4_identity();
@@ -325,17 +438,22 @@ void gd_set_depth(const GdDepth *d)
 	log_a = (d->lo + 1 - d->bias) / 2 - log_b * logf(d->near);
 }
 
-void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1)
+void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1, const float *m2, int layer2)
 {
 	cur_shadow = 0;
+	if (m2 && layer2 >= 0)
+	{
+		cur_shadow |= (uint32_t)(1 + layer2) << 16;
+		memcpy(shadow_m3, m2, sizeof shadow_m3);
+	}
 	if (m0 && layer0 >= 0)
 	{
-		cur_shadow |= (uint16_t)(1 + layer0);
+		cur_shadow |= (uint32_t)(1 + layer0);
 		memcpy(shadow_m, m0, sizeof shadow_m);
 	}
 	if (m1 && layer1 >= 0)
 	{
-		cur_shadow |= (uint16_t)((1 + layer1) << 8);
+		cur_shadow |= (uint32_t)(1 + layer1) << 8;
 		memcpy(shadow_m2, m1, sizeof shadow_m2);
 	}
 }
@@ -518,11 +636,11 @@ static inline void put(GdVert *v, const float p[3], const uint8_t col[4], float 
 		v->depth[0] = log_a;
 		v->depth[1] = log_b;
 	}
-	for (int c = 0; c < 2; c++)
+	for (int c = 0; c < 3; c++)
 	{
-		float *out = c ? v->shadow2 : v->shadow;
-		const float *m = c ? shadow_m2 : shadow_m;
-		if (c ? (cur_shadow >> 8) : (cur_shadow & 0xff))
+		float *out = c == 2 ? v->shadow3 : c ? v->shadow2 : v->shadow;
+		const float *m = c == 2 ? shadow_m3 : c ? shadow_m2 : shadow_m;
+		if ((cur_shadow >> (8 * c)) & 0xff)
 			for (int row = 0; row < 3; row++)
 				out[row] = m[row * 4] * p[0] + m[row * 4 + 1] * p[1] + m[row * 4 + 2] * p[2] + m[row * 4 + 3];
 		else
@@ -658,7 +776,8 @@ void gd_disk(float radius, int slices)
 		gd_tri(centre, ring[s + 1], ring[s]);
 }
 
-void *gd_custom(gd_custom_fn fn, size_t size)
+/* A new command with `size` bytes of data (its first) */
+static GdCmd *data_cmd(enum GdKind kind, size_t size)
 {
 	size = (size + 15) & ~(size_t)15;
 	if (custom_used + size > custom_cap)
@@ -680,7 +799,7 @@ void *gd_custom(gd_custom_fn fn, size_t size)
 		cmds = nc;
 	}
 	GdCmd *c = &cmds[n_cmds++];
-	c->kind = GD_CUSTOM;
+	c->kind = (uint8_t)kind;
 	c->vp = cur_vp;
 	c->cull = cur_cull;
 	c->blend = 0;
@@ -688,9 +807,213 @@ void *gd_custom(gd_custom_fn fn, size_t size)
 	c->shadow = 0;
 	c->first = (int)custom_used;
 	c->count = 0;
-	c->fn = fn;
+	c->fn = NULL;
 	custom_used += size;
+	return c;
+}
+
+void *gd_custom(gd_custom_fn fn, size_t size)
+{
+	GdCmd *c = data_cmd(GD_CUSTOM, size);
+	if (!c)
+		return NULL;
+	c->fn = fn;
 	return custom_data + c->first;
+}
+
+/* =========================================================================
+ * Kept meshes
+ * ========================================================================= */
+GdMesh *gd_mesh_new(void)
+{
+	return calloc(1, sizeof(GdMesh));
+}
+
+void gd_mesh_free(GdMesh *m)
+{
+	if (!m)
+		return;
+	if (m->vbo)
+		glDeleteBuffers(1, &m->vbo);
+	if (m->vao)
+		glDeleteVertexArrays(1, &m->vao);
+	free(m);
+}
+
+void gd_mesh_upload(GdMesh *m, const float *xyzf, int n)
+{
+	if (!m)
+		return;
+	if (!m->vao)
+	{
+		glGenVertexArrays(1, &m->vao);
+		glGenBuffers(1, &m->vbo);
+		glBindVertexArray(m->vao);
+		glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(3 * sizeof(float)));
+		glBindVertexArray(0);
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
+	glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)((size_t)(n > 0 ? n : 1) * 4 * sizeof(float)), n > 0 ? xyzf : NULL,
+				 GL_STATIC_DRAW);
+	m->n = n;
+}
+
+void gd_face_colours(const uint8_t *rgba, int n)
+{
+	int rows = (n + FACE_W - 1) / FACE_W;
+	if (rows < 1)
+		rows = 1;
+	glActiveTexture(GL_TEXTURE0 + FACE_UNIT);
+	if (!face_tex)
+	{
+		glGenTextures(1, &face_tex);
+		glBindTexture(GL_TEXTURE_2D, face_tex);
+		/* texelFetch only: no mipmaps, so it must not want them */
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	else
+		glBindTexture(GL_TEXTURE_2D, face_tex);
+	if (rows > face_rows)
+	{
+		face_rows = rows + rows / 2;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, FACE_W, face_rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	}
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	if (n >= FACE_W)
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, FACE_W, n / FACE_W, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	if (n % FACE_W)
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, n / FACE_W, n % FACE_W, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+						rgba + (size_t)(n / FACE_W) * FACE_W * 4);
+	glActiveTexture(GL_TEXTURE0);
+}
+
+static bool add_range(int first, int count)
+{
+	if (n_ranges + 1 > cap_ranges)
+	{
+		int cap = cap_ranges;
+		GLint *nf = grow(range_first, &cap, n_ranges + 1, sizeof(GLint));
+		if (!nf)
+			return false;
+		range_first = nf;
+		cap = cap_ranges;
+		GLint *nc = grow(range_count, &cap, n_ranges + 1, sizeof(GLint));
+		if (!nc)
+			return false;
+		range_count = nc;
+		cap_ranges = cap;
+	}
+	range_first[n_ranges] = first;
+	range_count[n_ranges] = count;
+	n_ranges++;
+	return true;
+}
+
+void gd_mesh_draw(GdMesh *m, const float pose[16], int face_base, int first, int count, const float *bend)
+{
+	if (!m || !m->vao || count <= 0 || first < 0 || first + count > m->n)
+		return;
+	MeshDraw md;
+	memset(&md, 0, sizeof md);
+	md.mesh = m;
+	const float *x = get_xf()->m;
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+		{
+			double s = 0;
+			for (int k = 0; k < 4; k++)
+				s += (double)x[k * 4 + r] * pose[c * 4 + k];
+			md.mvp[c * 4 + r] = (float)s;
+		}
+	if (cur_depth)
+	{
+		md.depth[0] = 1;
+		md.depth[1] = depth_a;
+		md.depth[2] = depth_b;
+		md.logk[0] = log_a;
+		md.logk[1] = log_b;
+	}
+	for (int cc = 0; cc < 3; cc++)
+	{
+		if (!((cur_shadow >> (8 * cc)) & 0xff))
+			continue;
+		const float *sm = cc == 2 ? shadow_m3 : cc ? shadow_m2 : shadow_m;
+		for (int row = 0; row < 3; row++)
+			for (int c = 0; c < 4; c++)
+			{
+				double s = 0;
+				for (int k = 0; k < 4; k++)
+					s += (double)sm[row * 4 + k] * pose[c * 4 + k];
+				md.sh[cc * 3 + row][c] = (float)s;
+			}
+	}
+	if (bend)
+		memcpy(md.bend, bend, sizeof md.bend);
+	md.base = face_base;
+	/* the same draw as the last command (the next node of the object): one more range */
+	GdCmd *last = n_cmds ? &cmds[n_cmds - 1] : NULL;
+	if (last && last->kind == GD_MESH && last->vp == cur_vp && last->cull == cur_cull && last->blend == cur_blend &&
+		last->depth == cur_depth && last->shadow == cur_shadow &&
+		memcmp(custom_data + last->first, &md, offsetof(MeshDraw, range0)) == 0)
+	{
+		MeshDraw *lm = (MeshDraw *)(custom_data + last->first);
+		int r = lm->range0 + lm->nranges - 1;
+		if (range_first[r] + range_count[r] == first)
+			range_count[r] += count;
+		else if (add_range(first, count))
+			lm->nranges++;
+		return;
+	}
+	GdCmd *c = data_cmd(GD_MESH, sizeof md);
+	if (!c)
+		return;
+	c->blend = cur_blend;
+	c->depth = cur_depth;
+	c->shadow = cur_shadow;
+	md.range0 = n_ranges;
+	md.nranges = add_range(first, count) ? 1 : 0;
+	memcpy(custom_data + c->first, &md, sizeof md);
+}
+
+static void draw_mesh(const MeshDraw *md, uint32_t shadow)
+{
+	if (!md->nranges)
+		return;
+	glUseProgram(mesh_prog);
+	glUniformMatrix4fv(um_mvp, 1, GL_FALSE, md->mvp);
+	glUniform3f(um_depth, md->depth[0], md->depth[1], md->depth[2]);
+	glUniform2f(um_log, md->logk[0], md->logk[1]);
+	glUniform4fv(um_sh, 9, &md->sh[0][0]);
+	glUniform4fv(um_bend, 6, &md->bend[0][0]);
+	glUniform1i(um_base, md->base);
+	GLuint st = shadow ? gl_shadow_texture() : 0;
+	glUniform3f(um_shadow_layer, (float)(shadow & 0xff) - 1.0f, (float)((shadow >> 8) & 0xff) - 1.0f,
+				(float)((shadow >> 16) & 0xff) - 1.0f);
+	glUniform1f(um_shadow_on, st ? 1.0f : 0.0f);
+	if (st)
+	{
+		glActiveTexture(GL_TEXTURE0 + SHADOW_UNIT);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, st);
+		glUniform1f(um_shadow_dark, gl_shadow_dark());
+		glUniform3f(um_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1), gl_shadow_bias(2));
+	}
+	glActiveTexture(GL_TEXTURE0 + FACE_UNIT);
+	glBindTexture(GL_TEXTURE_2D, face_tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(md->mesh->vao);
+#if GL_IS_GLES
+	for (int i = 0; i < md->nranges; i++)
+		glDrawArrays(GL_TRIANGLES, range_first[md->range0 + i], range_count[md->range0 + i]);
+#else
+	glMultiDrawArrays(GL_TRIANGLES, range_first + md->range0, range_count + md->range0, md->nranges);
+#endif
 }
 
 /* =========================================================================
@@ -766,7 +1089,8 @@ void gd_flush(void)
 			{
 				shadow = c->shadow;
 				GLuint st = shadow ? gl_shadow_texture() : 0;
-				glUniform2f(u_shadow_layer, (float)(shadow & 0xff) - 1.0f, (float)(shadow >> 8) - 1.0f);
+				glUniform3f(u_shadow_layer, (float)(shadow & 0xff) - 1.0f, (float)((shadow >> 8) & 0xff) - 1.0f,
+							(float)((shadow >> 16) & 0xff) - 1.0f);
 				glUniform1f(u_shadow_on, st ? 1.0f : 0.0f);
 				if (st)
 				{
@@ -774,7 +1098,7 @@ void gd_flush(void)
 					glBindTexture(GL_TEXTURE_2D_ARRAY, st);
 					glActiveTexture(GL_TEXTURE0);
 					glUniform1f(u_shadow_dark, gl_shadow_dark());
-					glUniform2f(u_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1));
+					glUniform3f(u_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1), gl_shadow_bias(2));
 				}
 			}
 			if (c->blend != blend)
@@ -801,6 +1125,10 @@ void gd_flush(void)
 			break;
 		case GD_POINTS:
 			glDrawArrays(GL_POINTS, c->first, c->count);
+			break;
+		case GD_MESH:
+			draw_mesh((const MeshDraw *)(custom_data + c->first), c->shadow);
+			bind_flat(); /* the state above sets the flat program's uniforms */
 			break;
 		case GD_CUSTOM:
 			if (blend)
@@ -832,4 +1160,5 @@ void gd_flush(void)
 	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 	n_verts = n_cmds = 0;
 	custom_used = 0;
+	n_ranges = 0;
 }

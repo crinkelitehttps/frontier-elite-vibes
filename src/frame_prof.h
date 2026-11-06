@@ -63,6 +63,9 @@ void prof_render_acquire(uint64_t t0); /* the drawing taking a frame, lock wait 
  * (CPU time to issue it), xrEndFrame, all in ticks */
 void prof_vr_add(uint64_t wait, uint64_t eyes, uint64_t end);
 void prof_vr_gpu(unsigned ns); /* what the GPU took for the eyes of an earlier picture */
+/* the native scene's models run for one picture (gl_native.cpp prepare): the
+ * time, how many objects ran their bytecode and how many reused a cached run */
+void prof_native_add(uint64_t t0, int ran, int reused);
 
 #define PROF_BEGIN() (prof_on ? prof_now() : 0)
 #define PROF_END(slot, t0) \

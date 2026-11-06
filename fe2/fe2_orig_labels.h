@@ -420,6 +420,10 @@
 #define FE2_Lscen_ha                                 0x841ec /* Lscen_ha */
 #define FE2_Lvirt_obj                                0x841f0 /* Lvirt_obj */
 #define FE2_Lscen_cap                                0x84310 /* Lscen_cap */
+#define FE2_Lrt_vbl                                  0x84324 /* Lrt_vbl */
+#define FE2_Lrt_take_game                            0x8432a /* Lrt_take_game */
+#define FE2_Lrt_take_real                            0x84338 /* Lrt_take_real */
+#define FE2_Lrt_limit                                0x84346 /* Lrt_limit */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

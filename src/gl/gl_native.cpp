@@ -14,6 +14,12 @@
 
 extern "C"
 {
+#include "frame_prof.h"
+#include <SDL.h>
+}
+
+extern "C"
+{
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_hud.h"
@@ -1141,8 +1147,10 @@ struct Dot
 	float px;     /* radius in pixels, else < 0 and... */
 	float radius; /* ...in view units */
 	bool twinkly = false; /* rays across it, 8 pixels longer (L3a93c) */
+	int circ = -1;        /* a cached run's circle (Rec.circles): sized for each view */
 };
 constexpr int ZTREE_MAX = 4; /* nested depth trees (L385d0_3dview_thing2) */
+struct GpuDraw;
 struct Node
 {
 	float key; /* the game's depth key (zkey); the farthest is drawn first */
@@ -1154,6 +1162,7 @@ struct Node
 	 * back, so the key can be worked out again for any view (rekey) */
 	std::array<P3, ZTREE_MAX + 1> kpt;
 	std::array<float, ZTREE_MAX + 1> kpush;
+	uint8_t kcam = 0; /* bit i: level i's point is the camera ($7fd, $7fe), not one of the model's */
 	std::array<float, ZTREE_MAX + 1> dpath; /* the keys for the view drawn */
 	int seq = 0; /* made in this order (the model's), for equal keys */
 	int depth;
@@ -1173,6 +1182,11 @@ struct Node
 	float dist = 0;
 	bool planet = false; /* the planet command: the sphere goes here */
 	float radius = 0;    /* ...the planet's, view units */
+	/* Triangles kept on the GPU (a cached run's, GLF_NATIVE_GPU): gcount
+	 * vertices from gfirst of g's mesh, drawn before tris; gnode is the
+	 * node in the cache entry. gcount 0: none of its faces is shown */
+	const GpuDraw *g = nullptr;
+	int gfirst = 0, gcount = 0, gnode = -1;
 };
 struct Drawn
 {
@@ -1190,6 +1204,7 @@ struct Drawn
 	 * draws before the planet, drawn after the sky, before the planet's
 	 * atmosphere */
 	std::vector<Node> before_planet;
+	std::shared_ptr<GpuDraw> gpu; /* the pose and face colours its GPU nodes (Node.g) are drawn with */
 };
 
 /* A model being run: where it is and its state (the game's A6 frame) */
@@ -1211,6 +1226,276 @@ struct Run
 	/* The parent's vertices passed to a sub-model: vertex -1 (its origin)
 	 * to -5, view space */
 	std::optional<P3> pv[5];
+	bool top = false; /* the object's own model, not a sub-model: t is the object's (Object.t) */
+	/* where each temporary's value came from: bit i, the object's t[i] (Object.t)
+	 * as the model started, copied down to sub-models; a calc result has none */
+	uint8_t tsrc[8] = {};
+};
+
+/* ---- cached runs (native_model_cache) ------------------------------------------
+ * A model's bytecode is run once in the object's own axes (its origin at 0, its
+ * axes the unit ones, the same 2^s), and what it made is placed again in later
+ * frames by the object's pose (Place) while what the run decided still holds:
+ * every test of the run that hangs on the view (distances, faces turned to the
+ * camera, sizes on the screen) is kept with its answer and asked again each
+ * frame; any other answer, or other variables, scale or detail, and the model
+ * runs again. Which faces face the camera and their shade are worked out each
+ * frame (CFace), as are circles' sizes (CCircle). A run that used the frame's
+ * randomness, an exhaust or text is not kept (volatile): it runs every frame. */
+
+/* The object's pose: view = pos + ax v, v in the run's frame */
+struct Place
+{
+	P3 pos;
+	P3 ax[3];
+	P3 at(const P3 &v) const
+	{
+		P3 p;
+		for (int j = 0; j < 3; j++)
+			p[j] = pos[j] + ax[0][j] * v[0] + ax[1][j] * v[1] + ax[2][j] * v[2];
+		return p;
+	}
+	P3 dir(const P3 &v) const
+	{
+		P3 p;
+		for (int j = 0; j < 3; j++)
+			p[j] = ax[0][j] * v[0] + ax[1][j] * v[1] + ax[2][j] * v[2];
+		return p;
+	}
+	/* a view point in the run's frame (at's inverse) */
+	P3 back(const P3 &p) const
+	{
+		/* columns a, b, c: x = (p - pos) . (b x c, c x a, a x b) / det */
+		const P3 &a = ax[0], &b = ax[1], &c = ax[2];
+		P3 bc = {b[1] * c[2] - b[2] * c[1], b[2] * c[0] - b[0] * c[2], b[0] * c[1] - b[1] * c[0]};
+		P3 ca = {c[1] * a[2] - c[2] * a[1], c[2] * a[0] - c[0] * a[2], c[0] * a[1] - c[1] * a[0]};
+		P3 ab = {a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+		float det = a[0] * bc[0] + a[1] * bc[1] + a[2] * bc[2];
+		if (det == 0)
+			return p;
+		P3 q = {p[0] - pos[0], p[1] - pos[1], p[2] - pos[2]};
+		return {dot(q, bc) / det, dot(q, ca) / det, dot(q, ab) / det};
+	}
+};
+
+/* The shade a normal gives (Runner::shade): fixed (>= 0), or the light's tint
+ * for normal n, none when the test is on and n faces away from the camera at p */
+struct ShadeSpec
+{
+	int fixed = -1;
+	P3 n = {0, 0, 0}, p = {0, 0, 0};
+	bool test = false;
+};
+
+/* A face of a cached run: its triangles' colour index is the face's */
+struct CFace
+{
+	P3 n, a;   /* its normal and first vertex, for the facing test */
+	bool cull; /* dropped when it faces away */
+	bool tint_n; /* shaded by its own normal n, else by sh */
+	ShadeSpec sh;
+	uint16_t colour;
+	int base;
+	bool shadow;
+};
+
+/* A circle of a cached run (Runner::circle) */
+struct CCircle
+{
+	P3 p;
+	float across;
+	int c;
+	bool lit, twinkly;
+};
+
+/* An exhaust of a cached run (Runner::teardrop): put after the rest of its node */
+struct CTear
+{
+	size_t node;
+	P3 head, tail;
+	float width; /* the third word * 2^s / 32 */
+	int c;
+};
+
+/* An exhaust from view points head to tail into node nd (L3bc46_ProjectThrust) */
+void tear_eval(const P3 &head, const P3 &tail, float width, int c, Node &nd)
+{
+	if (-head[2] <= 512 || -tail[2] <= 512)
+		return;
+	int px = (int)(width * 256 / -head[2]);
+	if (px == 0)
+		return;
+	Seg line = {head, tail, (uint16_t)c};
+	if (px <= 8)
+	{
+		nd.segs.push_back(line);
+		return;
+	}
+	const float STRETCH = 1.3333333333f, BROADEN = 0.33f;
+	const int STEPS = 24;
+	const P3 &b = tail;
+	P3 dir = {head[0] - b[0], head[1] - b[1], head[2] - b[2]};
+	P3 cp[4] = {b,
+				{b[0] + STRETCH * dir[0] - BROADEN * dir[1], b[1] + STRETCH * dir[1] + BROADEN * dir[0], b[2] + dir[2]},
+				{b[0] + STRETCH * dir[0] + BROADEN * dir[1], b[1] + STRETCH * dir[1] - BROADEN * dir[0], b[2] + dir[2]},
+				b};
+	auto at = [&](float t) {
+		float u = 1 - t, k0 = u * u * u, k1 = 3 * u * u * t, k2 = 3 * u * t * t, k3 = t * t * t;
+		P3 q;
+		for (int j = 0; j < 3; j++)
+			q[j] = k0 * cp[0][j] + k1 * cp[1][j] + k2 * cp[2][j] + k3 * cp[3][j];
+		return q;
+	};
+	P3 prev = at(0);
+	for (int i = 1; i <= STEPS; i++)
+	{
+		P3 cur = at((float)i / STEPS);
+		nd.tris.push_back({{b, prev, cur}, (uint16_t)c});
+		prev = cur;
+	}
+}
+
+/* The light's tint for a face with unit view normal n (L3a0ac): the light
+ * vector points away from the light; a face square to it (n . light = -1)
+ * gets tint 0, the brightest, one edge on 7, one facing away none. The game
+ * takes bits 30-28 of the negative 2 n . light (normals are bytes, at most
+ * 127/128 long). */
+int tint_of(const Object &o, const P3 &n)
+{
+	float d = (n[0] * o.light[0] + n[1] * o.light[1] + n[2] * o.light[2]) * (127.0f / 128.0f);
+	if (d >= 0)
+		return 0;
+	return o.tint[std::max(0, std::min(7, (int)std::floor(8 * (1 + d))))];
+}
+
+/* pl: the run's frame to the view's (null: it is the view's) */
+int shade_eval(const Object &o, const Place *pl, const ShadeSpec &s)
+{
+	if (s.fixed >= 0)
+		return s.fixed;
+	P3 n = pl ? pl->dir(s.n) : s.n;
+	if (s.test && !(dot(n, pl ? pl->at(s.p) : s.p) < 0))
+		return 0;
+	return tint_of(o, n);
+}
+
+/* A circle at view point p: false when it isn't drawn (too near) */
+bool circle_eval(const Object &o, const P3 &p, const CCircle &cc, Dot &d)
+{
+	float z = -p[2];
+	if (z < 64)
+		return false;
+	bool small = z / 8 > cc.across;
+	if (!small && z <= cc.across / 2)
+		return false; /* round the eye */
+	d.p = p;
+	d.twinkly = cc.twinkly;
+	d.px = small ? std::floor(cc.across * 256 / z) / 2 : -1.0f;
+	d.radius = small ? 0 : cc.across / 2;
+	int c = cc.c;
+	if (cc.lit && (small ? o.light[2] <= 0.875f : o.light[2] < -0.9766f))
+		c = (c + o.tint[0]) & 0xfff;
+	d.colour = (uint16_t)c;
+	d.circ = -1;
+	return true;
+}
+
+/* `ifdist`: how far apart two view points are on the game's screen (168
+ * pixels high for its 36.5 degree view), roughly */
+std::optional<float> apart_view(const P3 &p, const P3 &q)
+{
+	float dp = std::sqrt(dot(p, p)), dq = std::sqrt(dot(q, q));
+	if (dp < 64 || dq < 64)
+		return std::nullopt;
+	static const float f = 84.0f / std::tan(CLASSIC_FOV * (float)M_PI / 360.0f);
+	P3 d = {p[0] - q[0], p[1] - q[1], p[2] - q[2]};
+	return f * std::sqrt(dot(d, d)) * 2 / (dp + dq);
+}
+bool apart_jump(const P3 &p, const P3 &q, int w1)
+{
+	auto d = apart_view(p, q);
+	if (!d)
+		return false;
+	return (w1 & 0x8000) ? *d > (w1 & 0x7fff) : *d <= w1;
+}
+
+/* What a cached run decided on the view, and what it made that is worked out per view */
+struct Rec
+{
+	struct Dist
+	{
+		P3 at;
+		float lim;
+		bool far;
+	};
+	struct Facing
+	{
+		P3 n, p;
+		bool faces;
+	};
+	struct Apart
+	{
+		P3 p, q;
+		int w1;
+		bool jump;
+	};
+	struct Shade
+	{
+		ShadeSpec s;
+		int v;
+	};
+	std::vector<Dist> dist;
+	std::vector<Facing> facing;
+	std::vector<Apart> apart;
+	std::vector<Shade> shade;
+	std::vector<CFace> faces;
+	std::vector<CCircle> circles;
+	std::vector<CTear> tears;
+	/* bit tests of an object variable ($13, $14): only the answer must stay */
+	struct Bit
+	{
+		int var, bit;
+		bool set;
+	};
+	std::vector<Bit> bits;
+	bool light = false; /* placed by the light (msetup, cloud shadows): kept while it stays put */
+	std::vector<std::pair<uint64_t, std::string>> texts; /* the strings it drew (Frame.texts) */
+	/* Sub-models good for one frame only, left out and run for each frame
+	 * (cache_place): the call as it was made, in the object's axes */
+	struct Live
+	{
+		Run c;
+		int depth;
+		int batch, shadow_node;
+		std::vector<P3> zpt;
+	};
+	std::vector<Live> live;
+	struct Sizes
+	{
+		size_t dist, facing, apart, shade, faces, circles, tears, bits, texts, live;
+	};
+	Sizes sizes() const
+	{
+		return {dist.size(),	facing.size(), apart.size(), shade.size(), faces.size(),
+				circles.size(), tears.size(),  bits.size(),	 texts.size(), live.size()};
+	}
+	void cut(const Sizes &z)
+	{
+		dist.resize(z.dist);
+		facing.resize(z.facing);
+		apart.resize(z.apart);
+		shade.resize(z.shade);
+		faces.resize(z.faces);
+		circles.resize(z.circles);
+		tears.resize(z.tears);
+		bits.resize(z.bits);
+		texts.resize(z.texts);
+		live.resize(z.live);
+	}
+	/* the object's variables and temporaries (Object.vars, .t) it read */
+	uint64_t vread[2] = {0, 0};
+	uint8_t tread = 0;
+	const char *why = nullptr; /* why it isn't kept (volatile) */
 };
 
 struct Runner
@@ -1229,8 +1514,43 @@ struct Runner
 	bool sky = false;
 	/* Ship shadows: the whole model for the light's view, not the half facing the camera */
 	bool casting = false;
+	/* A cached run (Rec): the model run in its own axes, pl places that frame
+	 * in the view; rec keeps the tests that hang on the view. vol: it made
+	 * something good for this frame and view only. L: the light (away from
+	 * it) in the run's frame. */
+	const Place *pl = nullptr;
+	Rec *rec = nullptr;
+	mutable bool vol = false;
+	P3 L = {0, 0, 0};
 
-	Node &new_node(float key, bool under, const P3 &pt, float push = 0)
+	void volatile_(const char *why) const
+	{
+		vol = true;
+		if (rec && !rec->why)
+			rec->why = why;
+	}
+	/* an object variable, a temporary (noted for the cache: Rec.vread, .tread) */
+	int var(int i) const
+	{
+		if (i < 0 || i >= NUM_VARS)
+			return 0;
+		if (rec)
+			rec->vread[i >> 6] |= 1ull << (i & 63);
+		return o.vars[i];
+	}
+	int tmp(const Run &r, int i) const
+	{
+		if (i < 0 || i >= 8)
+			return 0;
+		if (rec)
+			rec->tread |= r.tsrc[i];
+		return r.t[i];
+	}
+
+	P3 V(const P3 &p) const { return pl ? pl->at(p) : p; }
+	P3 VD(const P3 &n) const { return pl ? pl->dir(n) : n; }
+
+	Node &new_node(float key, bool under, const P3 &pt, float push = 0, bool cam = false)
 	{
 		Node n;
 		n.key = key;
@@ -1241,6 +1561,8 @@ struct Runner
 		}
 		n.kpt[zpt.size()] = pt;
 		n.kpush[zpt.size()] = push;
+		if (cam)
+			n.kcam = (uint8_t)(1u << zpt.size());
 		n.seq = (int)out.nodes.size();
 		n.depth = 0;
 		for (float k : zpath)
@@ -1338,7 +1660,7 @@ struct Runner
 		else
 			key = at(v, pt);
 		bool under = v == 0x7fe || v == 0x7fd || ((v & 0x700) == 0x700 && v != 0x7ff && w.size() > 1 && (int16_t)w[1] > 0);
-		new_node(key, under, pt, push);
+		new_node(key, under, pt, push, v == 0x7fe || v == 0x7fd);
 		batch = (int)out.nodes.size() - 1;
 	}
 
@@ -1362,11 +1684,19 @@ struct Runner
 	 * so it is kept, in the game camera's view space (GL's, z flipped). */
 	static float zkey(const P3 &a) { return -a[2] + (std::fabs(a[0]) + std::fabs(a[1])) / 8; }
 
-	/* View space -> the model's units */
+	/* View space -> the model's units. The axes are square to each other
+	 * but not unit (the game's matrix is 127/128 long): divided by their
+	 * length twice */
 	fe2::Vec3 unplace(const Run &r, const P3 &p) const
 	{
 		P3 d = {p[0] - r.org[0], p[1] - r.org[1], p[2] - r.org[2]};
-		return {dot(r.ax[0], d) / r.k, dot(r.ax[1], d) / r.k, dot(r.ax[2], d) / r.k};
+		float c[3];
+		for (int a = 0; a < 3; a++)
+		{
+			float n = dot(r.ax[a], r.ax[a]);
+			c[a] = n > 0 ? dot(r.ax[a], d) / (n * r.k) : 0;
+		}
+		return {c[0], c[1], c[2]};
 	}
 	fe2::Model::ParentFn parent_fn(const Run &r) const
 	{
@@ -1383,6 +1713,7 @@ struct Runner
 	 * >> shift, view units; new each frame, the same within one */
 	fe2::Vec3 jitter(const Run &r, int vi, int shift) const
 	{
+		volatile_("random vertices"); /* new each frame */
 		uint32_t h = o.addr * 2654435761u ^ (uint32_t)r.c->model.index * 40503u ^ (uint32_t)vi * 2246822519u ^
 					 frame_seed * 3266489917u;
 		float d[3];
@@ -1415,21 +1746,11 @@ struct Runner
 		return place(r, to_p3(*v));
 	}
 
-	/* The light's tint for a face with unit view normal n (L3a0ac): the
-	 * light vector points away from the light; a face square to it
-	 * (n . light = -1) gets tint 0, the brightest, one edge on 7, one facing
-	 * away none. The game takes bits 30-28 of the negative 2 n . light
-	 * (normals are bytes, at most 127/128 long). */
-	int tint(const P3 &n) const
-	{
-		float d = (n[0] * o.light[0] + n[1] * o.light[1] + n[2] * o.light[2]) * (127.0f / 128.0f);
-		if (d >= 0)
-			return 0;
-		return o.tint[std::max(0, std::min(7, (int)std::floor(8 * (1 + d))))];
-	}
+	/* The light's tint for a face with unit view normal n (tint_of) */
+	int tint(const P3 &n) const { return tint_of(o, n); }
 
-	/* Normal `n` of the model, view space, unit; and whether it faces the
-	 * camera (the game's $8000 when it doesn't). Normal 0 always does. */
+	/* Normal `n` of the model, the run's frame, unit; and whether it faces
+	 * the camera (the game's $8000 when it doesn't). Normal 0 always does. */
 	bool normal(const Run &r, int n, P3 &out) const
 	{
 		auto nv = r.c->model.normal_vec(n);
@@ -1438,26 +1759,55 @@ struct Runner
 		out = turn(r, to_p3(fe2::normalize(*nv)));
 		return true;
 	}
-	bool normal_faces(const Run &r, int n) const
+	/* normal n and the vertex it is tested at; false: no test, it faces */
+	bool facing(const Run &r, int n, P3 &nv, P3 &p) const
 	{
-		P3 nv;
 		if (!normal(r, n, nv))
-			return true;
+			return false;
 		int ni = (n >> 1) - 1;
 		if (ni < 0 || ni >= (int)r.c->model.norms.size())
+			return false;
+		auto q = vertex(r, r.c->model.norms[ni].v ^ (n & 1));
+		if (!q)
+			return false;
+		p = *q;
+		return true;
+	}
+	bool normal_faces(const Run &r, int n) const
+	{
+		P3 nv, p;
+		if (!facing(r, n, nv, p))
 			return true;
-		auto p = vertex(r, r.c->model.norms[ni].v ^ (n & 1));
-		return !p || dot(nv, *p) < 0;
+		bool f = dot(VD(nv), V(p)) < 0;
+		if (rec)
+			rec->facing.push_back({nv, p, f});
+		return f;
 	}
 	/* The shade normal n gives a colour (L3a02a_3DPrimCullNLight) */
+	ShadeSpec shade_spec(const Run &r, int n) const
+	{
+		ShadeSpec s;
+		if (n <= 1)
+		{
+			s.fixed = n == 0 ? r.shade0 : o.tint[4];
+			return s;
+		}
+		if (!normal(r, n, s.n))
+		{
+			s.fixed = 0;
+			return s;
+		}
+		P3 nv;
+		s.test = facing(r, n, nv, s.p);
+		return s;
+	}
 	int shade(const Run &r, int n) const
 	{
-		if (n <= 1)
-			return n == 0 ? r.shade0 : o.tint[4];
-		P3 nv;
-		if (!normal(r, n, nv) || !normal_faces(r, n))
-			return 0;
-		return tint(nv);
+		ShadeSpec s = shade_spec(r, n);
+		int v = shade_eval(o, pl, s);
+		if (rec && s.fixed < 0)
+			rec->shade.push_back({s, v});
+		return v;
 	}
 
 	/* A face's colour as the game works it out: its colour value plus the
@@ -1488,9 +1838,9 @@ struct Runner
 		case 0x40:
 			return (v << 10) & 0xffff;
 		case 0x80:
-			return o.vars[v];
+			return var(v);
 		default:
-			return v < 8 ? r.t[v] : 0;
+			return tmp(r, v);
 		}
 	}
 
@@ -1532,7 +1882,7 @@ struct Runner
 		case 10:
 		{
 			int v = (a + b) & 0xffff;
-			return v < NUM_VARS ? o.vars[v] : 0;
+			return var(v);
 		}
 		case 11:
 			return b <= a ? a : 0;
@@ -1557,22 +1907,24 @@ struct Runner
 		int sh = o.detail[k & 1] + r.s + native_detail_boost;
 		if (sh < 0 || sh > 31 || ((int64_t)k << sh) > 0x7fffffff)
 			return std::nullopt;
-		return len(r.org) > (float)((int64_t)k << sh);
+		float lim = (float)((int64_t)k << sh);
+		bool far = len(V(r.org)) > lim;
+		if (rec)
+			rec->dist.push_back({r.org, lim, far});
+		return far;
 	}
 
-	/* `ifdist`: how far apart two vertices are on the game's screen (168
-	 * pixels high for its 36.5 degree view), roughly */
-	std::optional<float> apart(const Run &r, int a, int b) const
+	/* `ifdist` (apart_jump): whether to jump, by how far apart vertices a
+	 * and b are on the game's screen */
+	bool apart(const Run &r, int a, int b, int w1) const
 	{
 		auto p = vertex(r, a), q = vertex(r, b);
 		if (!p || !q)
-			return std::nullopt;
-		float dp = len(*p), dq = len(*q);
-		if (dp < 64 || dq < 64)
-			return std::nullopt;
-		static const float f = 84.0f / std::tan(CLASSIC_FOV * (float)M_PI / 360.0f);
-		P3 d = {(*p)[0] - (*q)[0], (*p)[1] - (*q)[1], (*p)[2] - (*q)[2]};
-		return f * len(d) * 2 / (dp + dq);
+			return false;
+		bool jump = apart_jump(V(*p), V(*q), w1);
+		if (rec)
+			rec->apart.push_back({*p, *q, w1, jump});
+		return jump;
 	}
 
 	void emit(const Run &r, size_t i)
@@ -1592,12 +1944,28 @@ struct Runner
 		{
 			P3 n = turn(r, f.n);
 			P3 a = place(r, f.tris[0]);
-			if (f.has_normal && !sky && !casting && dot(n, a) >= 0)
-				continue; /* faces away */
-			int sh = f.has_normal ? tint(n) : shade(r, f.nidx);
-			uint16_t col = (uint16_t)colour(f.colour, sh, r.base);
-			if (r.shadow)
-				col |= 0x8000;
+			bool cull = f.has_normal && !sky && !casting;
+			uint16_t col;
+			if (rec)
+			{
+				/* worked out for each view (face_colour): the triangles' colour
+				 * is the face's index */
+				CFace cf = {n, a, cull, f.has_normal, f.has_normal ? ShadeSpec() : shade_spec(r, f.nidx),
+							(uint16_t)f.colour, r.base, r.shadow};
+				if (rec->faces.size() > 0xffff)
+					volatile_("faces");
+				col = (uint16_t)rec->faces.size();
+				rec->faces.push_back(cf);
+			}
+			else
+			{
+				if (cull && dot(n, a) >= 0)
+					continue; /* faces away */
+				int sh = f.has_normal ? tint(n) : shade(r, f.nidx);
+				col = (uint16_t)colour(f.colour, sh, r.base);
+				if (r.shadow)
+					col |= 0x8000;
+			}
 			if (wire)
 			{
 				auto loop = [&](const std::vector<P3> &lp) {
@@ -1656,9 +2024,9 @@ struct Runner
 		if (!(sz & 0x80))
 			v = ((sz >> 7) | (sz << 9)) & 0xffff;
 		else if (sz & 0x40)
-			v = (sz & 0x3f) < 8 ? r.t[sz & 0x3f] : 0;
+			v = tmp(r, sz & 0x3f);
 		else
-			v = o.vars[sz & 0x3f];
+			v = var(sz & 0x3f);
 		Dot d;
 		d.colour = (uint16_t)c;
 		d.px = (v & 0x8000) ? (float)(v & 0x7fff) : -1.0f;
@@ -1693,32 +2061,32 @@ struct Runner
 		if (w.size() < 3)
 			return;
 		auto p = vertex(r, fe2::s8(w[2] >> 8));
-		float z = p ? -(*p)[2] : 0;
-		if (!p || z < 64)
+		if (!p)
 			return;
 		int sz = w[1], v;
 		if (!(sz & 0x80))
 			v = ((sz >> 7) | (sz << 9)) & 0xffff;
 		else if (sz & 0x40)
-			v = (sz & 0x3f) < 8 ? r.t[sz & 0x3f] : 0;
+			v = tmp(r, sz & 0x3f);
 		else
-			v = o.vars[sz & 0x3f];
-		float across = (float)((v & 0xffff) >> 1) * r.k / 128;
+			v = var(sz & 0x3f);
 		int c0 = (w[0] >> 4) & 0xfff;
 		int c = c0 & 0xefe;
 		if (c & 0x10)
 			c = ((c & ~0x10) + r.base) & 0xfff;
+		CCircle cc = {*p, (float)((v & 0xffff) >> 1) * r.k / 128, c, !(c0 & 0x100), (w[2] & 0x80) != 0};
 		Dot d;
-		d.p = *p;
-		d.twinkly = w[2] & 0x80;
-		bool small = z / 8 > across;
-		if (!small && z <= across / 2)
-			return; /* round the eye */
-		d.px = small ? std::floor(across * 256 / z) / 2 : -1.0f;
-		d.radius = small ? 0 : across / 2;
-		if (!(c0 & 0x100) && (small ? o.light[2] <= 0.875f : o.light[2] < -0.9766f))
-			c = (c + o.tint[0]) & 0xfff;
-		d.colour = (uint16_t)c;
+		if (rec)
+		{
+			/* sized for each view (circle_eval) */
+			d.p = *p;
+			d.circ = (int)rec->circles.size();
+			rec->circles.push_back(cc);
+			node(d.p).dots.push_back(d);
+			return;
+		}
+		if (!circle_eval(o, *p, cc, d))
+			return;
 		if (wire)
 			out.wire_dots.push_back(d);
 		else
@@ -1736,50 +2104,28 @@ struct Runner
 		if (w.size() < 3)
 			return;
 		auto head = vertex(r, fe2::s8(w[1])), tail = vertex(r, fe2::s8(w[1] >> 8));
-		if (!head || !tail || -(*head)[2] <= 512 || -(*tail)[2] <= 512)
-			return;
-		int px = (int)((float)(int16_t)w[2] * r.k / 32 * 256 / -(*head)[2]);
-		if (px == 0)
+		if (!head || !tail)
 			return;
 		int c = (w[0] >> 4) & 0xefe;
 		if (c & 0x10)
 			c = ((c & ~0x10) + r.base) & 0xfff;
-		Seg line = {*head, *tail, (uint16_t)c};
+		float width = (float)(int16_t)w[2] * r.k / 32;
+		if (rec)
+		{
+			/* shaped for each view (tear_eval) */
+			Node &nd = node(*head);
+			rec->tears.push_back({(size_t)(&nd - out.nodes.data()), *head, *tail, width, c});
+			return;
+		}
 		if (wire)
 		{
-			out.wire.push_back(line);
+			if (-(*head)[2] > 512 && -(*tail)[2] > 512 && (int)(width * 256 / -(*head)[2]) != 0)
+				out.wire.push_back({*head, *tail, (uint16_t)c});
 			return;
 		}
-		Node &nd = node(*head);
-		if (px <= 8)
-		{
-			nd.segs.push_back(line);
+		if (-(*head)[2] <= 512 || -(*tail)[2] <= 512 || (int)(width * 256 / -(*head)[2]) == 0)
 			return;
-		}
-		const float STRETCH = 1.3333333333f, BROADEN = 0.33f;
-		const int STEPS = 24;
-		const P3 &b = *tail;
-		P3 dir = {(*head)[0] - b[0], (*head)[1] - b[1], (*head)[2] - b[2]};
-		P3 cp[4] = {b,
-					{b[0] + STRETCH * dir[0] - BROADEN * dir[1], b[1] + STRETCH * dir[1] + BROADEN * dir[0],
-					 b[2] + dir[2]},
-					{b[0] + STRETCH * dir[0] + BROADEN * dir[1], b[1] + STRETCH * dir[1] - BROADEN * dir[0],
-					 b[2] + dir[2]},
-					b};
-		auto at = [&](float t) {
-			float u = 1 - t, k0 = u * u * u, k1 = 3 * u * u * t, k2 = 3 * u * t * t, k3 = t * t * t;
-			P3 q;
-			for (int j = 0; j < 3; j++)
-				q[j] = k0 * cp[0][j] + k1 * cp[1][j] + k2 * cp[2][j] + k3 * cp[3][j];
-			return q;
-		};
-		P3 prev = at(0);
-		for (int i = 1; i <= STEPS; i++)
-		{
-			P3 cur = at((float)i / STEPS);
-			nd.tris.push_back({{b, prev, cur}, (uint16_t)c});
-			prev = cur;
-		}
+		tear_eval(*head, *tail, width, c, node(*head));
 	}
 
 	/* Axes swapped by `code` and negated by bits 13, 12, 11 of `w`
@@ -1820,8 +2166,8 @@ struct Runner
 			return ((w >> 7) | (w << 9)) & 0xffff;
 		int i = (((w & ~0x80) * 2) & 0xffff) & ~0x80;
 		if (!(w & 0x40))
-			return (i >> 1) < NUM_VARS ? o.vars[i >> 1] : 0;
-		return (i >> 1) < 8 ? r.t[i >> 1] : 0;
+			return var(i >> 1);
+		return tmp(r, i >> 1);
 	}
 	void rotate_by(Run &r, int pair, int a) const
 	{
@@ -1834,6 +2180,8 @@ struct Runner
 	{
 		if (w0 & 0x8000)
 		{
+			if (pl)
+				volatile_("camera matrix"); /* the camera's axes: the view's */
 			r.m[0] = {1, 0, 0};
 			r.m[1] = {0, 1, 0};
 			r.m[2] = {0, 0, -1};
@@ -1842,7 +2190,9 @@ struct Runner
 		int pair = (w0 >> 5) & 3;
 		/* the light, away from it, in the model's axes; the game view's
 		 * z is GL's flipped, as are the axes, so the dots agree */
-		const P3 light = {o.light[0], o.light[1], o.light[2]};
+		const P3 light = L;
+		if (rec)
+			rec->light = true;
 		float l[3] = {dot(r.ax[0], light), dot(r.ax[1], light), dot(r.ax[2], light)};
 		static const int COMP[4][2] = {{1, 2}, {2, 0}, {0, 1}, {1, 0}};
 		float c = l[COMP[pair][0]], s = l[COMP[pair][1]];
@@ -1912,7 +2262,10 @@ struct Runner
 		auto tp = r.c->model.vertex_pos(vid - 10);
 		if (!top || !gp || !tp || std::fabs(gp->x - tp->x) > 0.5f || std::fabs(gp->z - tp->z) > 0.5f || tp->y <= gp->y)
 			return true;
-		P3 up = r.ax[1];
+		/* in view space (a cached run's frame need not be square: the
+		 * game's matrix isn't quite), then back */
+		P3 up = VD(r.ax[1]), at = V(org), tv = V(*top);
+		const P3 light = {o.light[0], o.light[1], o.light[2]};
 		float ul = std::sqrt(up[0] * up[0] + up[1] * up[1] + up[2] * up[2]);
 		if (ul <= 0)
 			return true;
@@ -1921,8 +2274,8 @@ struct Runner
 		for (int j = 0; j < 3; j++)
 		{
 			up[j] /= ul;
-			d[j] = (*top)[j] - org[j];
-			lu += o.light[j] * up[j];
+			d[j] = tv[j] - at[j];
+			lu += light[j] * up[j];
 			du += d[j] * up[j];
 		}
 		/* the sun's height above the horizon: -lu (sin of it) */
@@ -1933,10 +2286,13 @@ struct Runner
 				log_printf("cloud shadow: sun elevation %.1f deg, cloud %.0f above\n",
 						   std::asin(std::max(-1.0f, std::min(1.0f, -lu))) * 57.2958f, du);
 		}
+		if (rec)
+			rec->light = true;
 		if (-lu < 0.06f) /* below about 3.4 degrees: no shadow */
 			return false;
 		for (int j = 0; j < 3; j++)
-			org[j] += d[j] - du / lu * o.light[j];
+			at[j] += d[j] - du / lu * light[j];
+		org = pl ? pl->back(at) : at;
 		return true;
 	}
 
@@ -1990,7 +2346,7 @@ struct Runner
 				col = ((col & ~0x10) + r.base) & 0xfff;
 			c.base = col;
 			if (w[2] & 0x800)
-				sparam = (int16_t)r.t[(w[2] >> 12) & 7];
+				sparam = (int16_t)tmp(r, (w[2] >> 12) & 7);
 			else
 				sparam = (int16_t)w[2] >> 12;
 		}
@@ -2011,7 +2367,57 @@ struct Runner
 		c.t[0] = (uint16_t)(r.t[0] + 1);
 		c.t[1] = r.t[1];
 		c.t[2] = r.t[2];
+		for (int i = 0; i < 3; i++)
+			c.tsrc[i] = r.tsrc[i];
+		if (!rec)
+		{
+			run(c, depth + 1);
+			return;
+		}
+		/* A cached run: a sub-model good for this frame only (random
+		 * vertices, the camera's matrix) is taken out again and run for each
+		 * frame (Rec.live), not the whole object */
+		bool was = vol;
+		const char *was_why = rec->why;
+		bool was_light = rec->light;
+		uint64_t vr[2] = {rec->vread[0], rec->vread[1]};
+		Rec::Sizes sz = rec->sizes();
+		size_t nn = out.nodes.size(), bt = 0, bs = 0, bd = 0;
+		int b0 = batch, sh0 = shadow_node;
+		if (batch >= 0)
+		{
+			const Node &bn = out.nodes[(size_t)batch];
+			bt = bn.tris.size();
+			bs = bn.segs.size();
+			bd = bn.dots.size();
+		}
+		std::vector<float> zp = zpath;
+		std::vector<P3> zq = zpt;
 		run(c, depth + 1);
+		if (!vol || was)
+			return;
+		vol = false;
+		rec->why = was_why;
+		rec->light = was_light;
+		rec->vread[0] = vr[0];
+		rec->vread[1] = vr[1];
+		rec->cut(sz);
+		out.nodes.resize(nn);
+		if (b0 >= 0)
+		{
+			Node &bn = out.nodes[(size_t)b0];
+			bn.tris.resize(bt);
+			bn.segs.resize(bs);
+			bn.dots.resize(bd);
+		}
+		zpath = zp;
+		zpt = zq;
+		if (batch >= (int)nn)
+			batch = -1; /* its own batch, made again with it */
+		shadow_node = sh0;
+		/* the temporaries it is given stay as they were */
+		rec->tread |= (uint8_t)(c.tsrc[0] | c.tsrc[1] | c.tsrc[2]);
+		rec->live.push_back({c, depth + 1, b0, sh0, zq});
 	}
 
 	/* vtext (L3c676_ProjectVectorText): the string the game formatted for
@@ -2033,6 +2439,8 @@ struct Runner
 		if (!sky && !casting && n > 1 && !normal_faces(r, n))
 			return;
 		auto it = shown->texts.find(text_key(o.addr, w[3]));
+		if (rec)
+			rec->texts.push_back({text_key(o.addr, w[3]), it == shown->texts.end() ? std::string("\1") : it->second});
 		auto org = vertex(r, fe2::s8(w[2]));
 		if (it == shown->texts.end() || !org)
 			return;
@@ -2054,6 +2462,13 @@ struct Runner
 		const P3 &a = g.ax[0], &b = g.ax[1], &c = g.ax[2];
 		float det = a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) +
 					a[2] * (b[0] * c[1] - b[1] * c[0]);
+		if (pl)
+		{
+			/* a cached run's frame: the view's handedness is the pose's times its own */
+			const P3 &pa = pl->ax[0], &pb = pl->ax[1], &pc = pl->ax[2];
+			det *= pa[0] * (pb[1] * pc[2] - pb[2] * pc[1]) - pa[1] * (pb[0] * pc[2] - pb[2] * pc[0]) +
+				   pa[2] * (pb[0] * pc[1] - pb[1] * pc[0]);
+		}
 		if (det > 0)
 			for (float &x : g.ax[0])
 				x = -x;
@@ -2067,7 +2482,9 @@ struct Runner
 		for (unsigned char ch : it->second)
 		{
 			std::memset(g.t, 0, sizeof g.t);
+			std::memset(g.tsrc, 0, sizeof g.tsrc);
 			g.t[0] = (uint16_t)(r.t[0] + 1);
+			g.tsrc[0] = r.tsrc[0];
 			g.pv[0] = g.org;
 			int i = (int)(signed char)ch - 0x20;
 			if (i < 0)
@@ -2128,25 +2545,28 @@ struct Runner
 			case 0x13: /* skip unless bit; 0 = false, bit numbers start at 1 */
 			case 0x14:
 			{
-				int v = param(r, w[1] & 0xff), bit = w[1] >> 8;
+				int p = w[1] & 0xff, bit = w[1] >> 8;
+				/* an object variable's bit: the cache keeps the answer, not the value */
+				bool objvar = (p & 0xc0) == 0x80 && (p & 0x3f) < NUM_VARS;
+				int v = objvar ? o.vars[p & 0x3f] : param(r, p);
 				bool set = v != 0 && (bit == 0 || (v >> (bit - 1)) & 1);
+				if (rec && objvar)
+					rec->bits.push_back({p & 0x3f, bit, set});
 				jump = ins.op == 0x13 ? !set : set;
 				break;
 			}
 			case 0x17: /* ifdist */
-			{
-				auto d = apart(r, fe2::s8(w[2]), fe2::s8(w[2] >> 8));
-				if (d)
-					jump = (w[1] & 0x8000) ? *d > (w[1] & 0x7fff) : *d <= w[1];
+				jump = apart(r, fe2::s8(w[2]), fe2::s8(w[2] >> 8), w[1]);
 				break;
-			}
 			case 0x0d:
 			case 0x1d:
 			{
 				/* bits 4-7, the lowest being the op's own bit 4: $0d has the
 				 * even functions, $1d the odd ones */
 				int fn = (w[0] >> 4) & 15;
-				r.t[(w[0] >> 8) & 7] = (uint16_t)calc(fn, param(r, w[1] & 0xff), param(r, w[1] >> 8));
+				int ti = (w[0] >> 8) & 7;
+				r.t[ti] = (uint16_t)calc(fn, param(r, w[1] & 0xff), param(r, w[1] >> 8));
+				r.tsrc[ti] = 0;
 				break;
 			}
 			case 0x1a: /* colour (L3a0f4): the base colour, or normal 0's */
@@ -2247,21 +2667,41 @@ std::vector<Drawn> drawn;
 
 uint32_t frame_seed;
 
-/* Runs object o's model into d; the sky round the camera */
-void run_object(const Object &o, Drawn &d, bool wire, bool sky, bool casting = false)
+/* Runs object o's model into d; the sky round the camera. With pl, in the
+ * object's own axes (a cached run, rec), false when what it made is good
+ * for this frame only. */
+bool run_object(const Object &o, Drawn &d, bool wire, bool sky, bool casting = false, const Place *pl = nullptr,
+				Rec *rec = nullptr)
 {
 	d = Drawn();
 	const Code *c = code_for(o.table, o.model);
 	if (!c)
-		return;
+		return true;
 	Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
 	rn.sky = sky;
 	rn.casting = casting;
+	rn.pl = pl;
+	rn.rec = rec;
 	Run r;
 	r.c = c;
-	r.org = sky ? P3{0, 0, 0} : P3{o.pos[0], o.pos[1], o.pos[2]};
-	for (int a = 0; a < 3; a++)
-		r.ax[a] = {o.cols[a][0], o.cols[a][1], o.cols[a][2]};
+	if (pl)
+	{
+		/* the light in the object's axes: as msetup dots it with them */
+		r.org = P3{0, 0, 0};
+		for (int a = 0; a < 3; a++)
+		{
+			r.ax[a] = P3{0, 0, 0};
+			r.ax[a][(size_t)a] = 1;
+			rn.L[(size_t)a] = o.cols[a][0] * o.light[0] + o.cols[a][1] * o.light[1] + o.cols[a][2] * o.light[2];
+		}
+	}
+	else
+	{
+		r.org = sky ? P3{0, 0, 0} : P3{o.pos[0], o.pos[1], o.pos[2]};
+		for (int a = 0; a < 3; a++)
+			r.ax[a] = {o.cols[a][0], o.cols[a][1], o.cols[a][2]};
+		rn.L = {o.light[0], o.light[1], o.light[2]};
+	}
 	r.s = o.scale;
 	r.k = std::ldexp(1.0f, o.scale);
 	r.base = 0x111; /* L390f2 */
@@ -2270,12 +2710,614 @@ void run_object(const Object &o, Drawn &d, bool wire, bool sky, bool casting = f
 	for (int a = 0; a < 3; a++)
 		r.m[a] = r.ax[a];
 	r.pv[0] = r.org;
+	r.top = true;
+	for (int i = 0; i < 8; i++)
+		r.tsrc[i] = (uint8_t)(1u << i);
 	rn.run(r, 0);
+	return !rn.vol;
 }
+
+/* ---- the cache of runs (Rec, Place) ---- */
+
+/* GLF_NATIVE_CACHE=0: every object's model runs every frame, as before */
+bool cache_on()
+{
+	static const char *env = getenv("GLF_NATIVE_CACHE");
+	return !env || atoi(env) != 0;
+}
+
+/* What a run starts from besides the pose: the same, the same run */
+struct CacheKey
+{
+	uint32_t table, subtable;
+	int model, scale, boost, clouds;
+	int detail[2];
+	bool casting;
+	uint16_t tint[8];
+};
+
+struct Cached
+{
+	CacheKey key;
+	bool made = false;
+	bool vol = false; /* its runs are good for one frame only: run every frame */
+	uint32_t seen = 0;
+	P3 light;         /* the light in the object's axes when it ran */
+	uint16_t vars[NUM_VARS], t[8]; /* the object's when it ran: those it read (Rec.vread, .tread) must stay */
+	Drawn d;          /* in the object's axes; triangle colours are face indexes */
+	Rec rec;
+	/* d's triangles on the GPU (GLF_NATIVE_GPU), node by node: those of a
+	 * node that is no underlay and has no cloud shadows */
+	struct GNode
+	{
+		bool gpu = false;
+		int first = 0, count = 0; /* vertices in mesh */
+		P3 lo, hi;                /* the box round them */
+		std::vector<uint16_t> faces; /* the faces they belong to */
+	};
+	GdMesh *mesh = nullptr;
+	std::vector<GNode> gn;
+};
+std::unordered_map<uint64_t, Cached> cache;
+
+/* An object's GPU nodes this frame: its cache entry, pose, face colours */
+struct GpuDraw
+{
+	const Cached *e = nullptr;
+	Place pl;
+	float pose[16];
+	int base = 0;        /* its faces' first entry in the face table */
+	std::vector<int> fc; /* each face's colour (face_colour), for drawing on the CPU */
+	bool bent = false;   /* bent onto a planet (Bend): bend holds gd_mesh_draw's numbers */
+	float bend[6][4] = {};
+};
+/* The face table of this frame's objects (gd_face_colours), RGBA8 */
+std::vector<uint8_t> face_rgba;
+
+/* GLF_NATIVE_GPU=0: cached runs placed on the CPU every frame (stage 1) */
+bool gpu_on()
+{
+	static const char *env = getenv("GLF_NATIVE_GPU");
+	return cache_on() && (!env || atoi(env) != 0);
+}
+
+/* Puts e's triangles on the GPU (e.gn, e.mesh) */
+void build_mesh(Cached &e)
+{
+	static std::vector<float> v;
+	v.clear();
+	e.gn.assign(e.d.nodes.size(), Cached::GNode());
+	for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
+	{
+		const Node &s = e.d.nodes[ni];
+		Cached::GNode &g = e.gn[ni];
+		if (s.under || s.planet || s.tris.empty())
+			continue;
+		bool shadows = false;
+		for (const Tri &t : s.tris)
+			shadows |= t.colour >= e.rec.faces.size() || e.rec.faces[t.colour].shadow;
+		if (shadows)
+			continue;
+		g.gpu = true;
+		g.first = (int)(v.size() / 4);
+		g.lo = {1e30f, 1e30f, 1e30f};
+		g.hi = {-1e30f, -1e30f, -1e30f};
+		for (const Tri &t : s.tris)
+		{
+			g.faces.push_back(t.colour);
+			for (const P3 &p : t.p)
+			{
+				v.insert(v.end(), {p[0], p[1], p[2], (float)t.colour});
+				for (int k = 0; k < 3; k++)
+				{
+					g.lo[k] = std::min(g.lo[k], p[k]);
+					g.hi[k] = std::max(g.hi[k], p[k]);
+				}
+			}
+		}
+		std::sort(g.faces.begin(), g.faces.end());
+		g.faces.erase(std::unique(g.faces.begin(), g.faces.end()), g.faces.end());
+		g.count = (int)(v.size() / 4) - g.first;
+	}
+	if (v.empty())
+	{
+		e.gn.clear();
+		return;
+	}
+	if (!e.mesh)
+		e.mesh = gd_mesh_new();
+	gd_mesh_upload(e.mesh, v.data(), (int)(v.size() / 4));
+}
+
+/* A GPU node's triangles as the CPU would have placed them (the self-check, wireframe) */
+void gpu_tris(const Node &n, std::vector<Tri> &out)
+{
+	if (!n.g || !n.gcount)
+		return;
+	const GpuDraw &g = *n.g;
+	for (const Tri &t : g.e->d.nodes[(size_t)n.gnode].tris)
+	{
+		int c = g.fc[t.colour];
+		if (c >= 0)
+			out.push_back({{g.pl.at(t.p[0]), g.pl.at(t.p[1]), g.pl.at(t.p[2])}, (uint16_t)c});
+	}
+}
+
+/* The corners of a GPU node's box, view space */
+template <class F> void gpu_corners(const Node &n, F f)
+{
+	const Cached::GNode &gn = n.g->e->gn[(size_t)n.gnode];
+	for (int i = 0; i < 8; i++)
+		f(n.g->pl.at({(i & 1) ? gn.hi[0] : gn.lo[0], (i & 2) ? gn.hi[1] : gn.lo[1], (i & 4) ? gn.hi[2] : gn.lo[2]}));
+}
+uint32_t cache_tick;
+std::unordered_map<std::string, int> cache_why;
+
+void key_of(const Object &o, bool casting, CacheKey &k)
+{
+	std::memset(&k, 0, sizeof k);
+	k.table = o.table;
+	k.subtable = o.subtable;
+	k.model = o.model;
+	k.scale = o.scale;
+	k.boost = native_detail_boost;
+	static const char *env = getenv("GLF_CLOUD_SHADOWS");
+	k.clouds = env ? atoi(env) : native_cloud_shadows;
+	k.detail[0] = o.detail[0];
+	k.detail[1] = o.detail[1];
+	k.casting = casting;
+	std::memcpy(k.tint, o.tint, sizeof k.tint);
+}
+
+Place place_of(const Object &o)
+{
+	Place pl;
+	pl.pos = {o.pos[0], o.pos[1], o.pos[2]};
+	for (int a = 0; a < 3; a++)
+		pl.ax[a] = {o.cols[a][0], o.cols[a][1], o.cols[a][2]};
+	return pl;
+}
+
+P3 light_in(const Object &o)
+{
+	P3 l;
+	for (int a = 0; a < 3; a++)
+		l[(size_t)a] = o.cols[a][0] * o.light[0] + o.cols[a][1] * o.light[1] + o.cols[a][2] * o.light[2];
+	return l;
+}
+
+/* Whether the run's answers on the view are the same for this one */
+bool cache_inputs_same(const Object &o, const Cached &e)
+{
+	for (int i = 0; i < NUM_VARS; i++)
+		if ((e.rec.vread[i >> 6] >> (i & 63) & 1) && o.vars[i] != e.vars[i])
+			return false;
+	for (int i = 0; i < 8; i++)
+		if ((e.rec.tread >> i & 1) && o.t[i] != e.t[i])
+			return false;
+	for (const Rec::Bit &b : e.rec.bits)
+	{
+		int v = o.vars[b.var];
+		if ((v != 0 && (b.bit == 0 || (v >> (b.bit - 1)) & 1)) != b.set)
+			return false;
+	}
+	for (const auto &tx : e.rec.texts)
+	{
+		auto it = shown->texts.find(tx.first);
+		if ((it == shown->texts.end() ? std::string("\1") : it->second) != tx.second)
+			return false;
+	}
+	return true;
+}
+
+bool cache_holds(const Object &o, const Place &pl, const Cached &e)
+{
+	if (e.rec.light)
+	{
+		/* a cloud's shadow moves with the light: about 0.06 degrees */
+		P3 l = light_in(o);
+		P3 d = {l[0] - e.light[0], l[1] - e.light[1], l[2] - e.light[2]};
+		if (dot(d, d) > 1e-6f)
+			return false;
+	}
+	for (const Rec::Dist &g : e.rec.dist)
+	{
+		P3 p = pl.at(g.at);
+		if ((std::sqrt(dot(p, p)) > g.lim) != g.far)
+			return false;
+	}
+	for (const Rec::Facing &g : e.rec.facing)
+		if ((dot(pl.dir(g.n), pl.at(g.p)) < 0) != g.faces)
+			return false;
+	for (const Rec::Apart &g : e.rec.apart)
+		if (apart_jump(pl.at(g.p), pl.at(g.q), g.w1) != g.jump)
+			return false;
+	for (const Rec::Shade &g : e.rec.shade)
+		if (shade_eval(o, &pl, g.s) != g.v)
+			return false;
+	return true;
+}
+
+/* A face's colour in this view, -1 when it faces away */
+int face_colour(const Object &o, const Place &pl, const CFace &f)
+{
+	P3 n = pl.dir(f.n);
+	if (f.cull && dot(n, pl.at(f.a)) >= 0)
+		return -1;
+	int sh = f.tint_n ? tint_of(o, n) : shade_eval(o, &pl, f.sh);
+	int col = Runner::colour(f.colour, sh, f.base);
+	return f.shadow ? col | 0x8000 : col;
+}
+
+/* What the cached run made, placed by this frame's pose: as a run in the
+ * view would have made it; with gpu, its GPU nodes (Cached.gn) only point
+ * at their triangles there (Node.g) */
+void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bool gpu)
+{
+	/* d's buffers are kept (mostly the object's last frame): only cleared */
+	d.hide = false;
+	d.wire.clear();
+	d.wire_dots.clear();
+	d.near = 1e30f;
+	d.far = 0;
+	d.shrink = 1;
+	d.back = false;
+	for (Node &n : d.before_planet)
+		d.nodes.push_back(std::move(n));
+	d.before_planet.clear();
+	d.nodes.resize(e.d.nodes.size());
+	static std::vector<int> fc;
+	fc.resize(e.rec.faces.size());
+	for (size_t i = 0; i < fc.size(); i++)
+		fc[i] = face_colour(o, pl, e.rec.faces[i]);
+	GpuDraw *g = nullptr;
+	if (gpu && !e.gn.empty())
+	{
+		if (!d.gpu)
+			d.gpu = std::make_shared<GpuDraw>();
+		g = d.gpu.get();
+		g->e = &e;
+		g->pl = pl;
+		float *m = g->pose;
+		for (int a = 0; a < 3; a++)
+		{
+			for (int k = 0; k < 3; k++)
+				m[a * 4 + k] = pl.ax[a][k];
+			m[a * 4 + 3] = 0;
+		}
+		for (int k = 0; k < 3; k++)
+			m[12 + k] = pl.pos[k];
+		m[15] = 1;
+		g->fc = fc;
+		g->base = (int)(face_rgba.size() / 4);
+		for (int c : fc)
+		{
+			if (c < 0)
+			{
+				face_rgba.insert(face_rgba.end(), {0, 0, 0, 0});
+				continue;
+			}
+			Rgb8 k = rgb444_to_rgb8(c & 0xfff);
+			face_rgba.insert(face_rgba.end(), {(uint8_t)k.r, (uint8_t)k.g, (uint8_t)k.b, 255});
+		}
+	}
+	for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
+	{
+		const Node &s = e.d.nodes[ni];
+		Node &n = d.nodes[ni];
+		n.g = nullptr;
+		n.gcount = 0;
+		n.gnode = -1;
+		n.tris.clear();
+		n.segs.clear();
+		n.dots.clear();
+		n.dist = 0;
+		n.kpush = s.kpush;
+		n.kcam = s.kcam;
+		n.seq = s.seq;
+		n.depth = s.depth;
+		n.under = s.under;
+		n.planet = s.planet;
+		n.radius = s.radius;
+		/* the keys again from their points (Runner::new_node) */
+		for (int i = 0; i < s.depth; i++)
+		{
+			P3 p = (s.kcam >> i) & 1 ? P3{0, 0, 0} : pl.at(s.kpt[(size_t)i]);
+			n.kpt[(size_t)i] = p;
+			n.path[(size_t)i] = Runner::zkey(p) + s.kpush[(size_t)i];
+		}
+		n.key = s.depth > 0 ? n.path[(size_t)(s.depth > 1 ? 0 : s.depth - 1)] : s.key;
+		if (g && e.gn[ni].gpu)
+		{
+			const Cached::GNode &gn = e.gn[ni];
+			n.g = g;
+			n.gnode = (int)ni;
+			n.gfirst = gn.first;
+			for (uint16_t f : gn.faces)
+				if (fc[f] >= 0)
+				{
+					n.gcount = gn.count;
+					break;
+				}
+		}
+		else
+			n.tris.reserve(s.tris.size());
+		static const std::vector<Tri> none;
+		for (const Tri &t : n.g ? none : s.tris)
+		{
+			int c = fc[t.colour];
+			if (c < 0)
+				continue;
+			n.tris.push_back({{pl.at(t.p[0]), pl.at(t.p[1]), pl.at(t.p[2])}, (uint16_t)c});
+		}
+		n.segs.reserve(s.segs.size());
+		for (const Seg &g : s.segs)
+			n.segs.push_back({pl.at(g.a), pl.at(g.b), g.colour});
+		for (const Dot &g : s.dots)
+		{
+			Dot q = g;
+			if (g.circ >= 0)
+			{
+				if (circle_eval(o, pl.at(g.p), e.rec.circles[(size_t)g.circ], q))
+					n.dots.push_back(q);
+				continue;
+			}
+			q.p = pl.at(g.p);
+			n.dots.push_back(q);
+		}
+	}
+	for (const CTear &t : e.rec.tears)
+		tear_eval(pl.at(t.head), pl.at(t.tail), t.width, t.c, d.nodes[t.node]);
+	if (e.rec.live.empty())
+		return;
+	const Code *top = code_for(o.table, o.model);
+	if (!top)
+		return;
+	for (const Rec::Live &lv : e.rec.live)
+	{
+		Runner rn{o, d, false, top->model.scale + top->model.scale2 - o.scale, frame_seed};
+		rn.casting = e.key.casting;
+		rn.L = {o.light[0], o.light[1], o.light[2]};
+		rn.batch = lv.batch;
+		rn.shadow_node = lv.shadow_node;
+		for (const P3 &p : lv.zpt)
+		{
+			rn.zpt.push_back(pl.at(p));
+			rn.zpath.push_back(Runner::zkey(rn.zpt.back()));
+		}
+		Run c = lv.c;
+		c.org = pl.at(c.org);
+		for (int i = 0; i < 3; i++)
+		{
+			c.ax[i] = pl.dir(c.ax[i]);
+			c.m[i] = pl.dir(c.m[i]);
+		}
+		for (auto &v : c.pv)
+			if (v)
+				v = pl.at(*v);
+		rn.run(c, lv.depth);
+	}
+}
+
+void cache_check(const Object &o, bool casting, const Drawn &got, const char *how);
+
+/* Object o's model (filled, not the sky) into d, from the cache when the
+ * run it holds still holds; ran / reused counted */
+void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused)
+{
+	/* the shadow casters' runs stay on the CPU (setup_shadows reads their triangles) */
+	const bool gpu = !casting && gpu_on();
+	if (!cache_on())
+	{
+		run_object(o, d, false, false, casting);
+		ran++;
+		return;
+	}
+	CacheKey k;
+	key_of(o, casting, k);
+	uint64_t id = (uint64_t)o.addr << 1 | (casting ? 1u : 0u);
+	Cached &e = cache[id];
+	e.seen = cache_tick;
+	Place pl = place_of(o);
+	bool same = e.made && std::memcmp(&e.key, &k, sizeof k) == 0 && cache_inputs_same(o, e);
+	static const bool dbg = getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 2;
+	if (dbg)
+	{
+		/* why each model runs again (GLF_NATIVE_CACHE=2), counted: logged by cache_trim */
+		std::string why;
+		if (!e.made)
+			why = "new";
+		else if (std::memcmp(&e.key, &k, sizeof k) != 0)
+		{
+			why = e.key.scale != k.scale ? "scale" : e.key.detail[0] != k.detail[0] || e.key.detail[1] != k.detail[1] ? "detail" : "key";
+		}
+		else if (e.vol)
+			why = std::string("volatile ") + (e.rec.why ? e.rec.why : "");
+		else
+		{
+			for (int i = 0; i < NUM_VARS && why.empty(); i++)
+				if ((e.rec.vread[i >> 6] >> (i & 63) & 1) && o.vars[i] != e.vars[i])
+					why = "var " + std::to_string(i);
+			for (int i = 0; i < 8 && why.empty(); i++)
+				if ((e.rec.tread >> i & 1) && o.t[i] != e.t[i])
+					why = "t" + std::to_string(i);
+			if (why.empty() && !cache_inputs_same(o, e))
+				why = "bit/text";
+			if (why.empty() && !cache_holds(o, pl, e))
+				why = "test";
+		}
+		if (!why.empty())
+			cache_why[std::to_string(o.model) + " " + why]++;
+	}
+	if (same && !e.vol && cache_holds(o, pl, e))
+	{
+		cache_place(o, pl, e, d, gpu);
+		reused++;
+		cache_check(o, casting, d, "reused");
+		return;
+	}
+	ran++;
+	if (same && e.vol)
+	{
+		run_object(o, d, false, false, casting);
+		return;
+	}
+	e.key = k;
+	e.made = true;
+	e.rec = Rec();
+	e.light = light_in(o);
+	std::memcpy(e.vars, o.vars, sizeof e.vars);
+	std::memcpy(e.t, o.t, sizeof e.t);
+	e.vol = !run_object(o, e.d, false, false, casting, &pl, &e.rec);
+	if (e.vol)
+	{
+		/* kept: what it read, to know when to try again */
+		e.d = Drawn();
+		e.rec.dist.clear();
+		e.rec.facing.clear();
+		e.rec.apart.clear();
+		e.rec.shade.clear();
+		e.rec.faces.clear();
+		e.rec.circles.clear();
+		e.rec.tears.clear();
+		e.rec.live.clear();
+		e.gn.clear();
+		run_object(o, d, false, false, casting);
+		return;
+	}
+	if (gpu)
+		build_mesh(e);
+	else
+		e.gn.clear();
+	cache_place(o, pl, e, d, gpu);
+	cache_check(o, casting, d, "made");
+}
+
+/* GLF_NATIVE_CACHE=3: each cached object also run as before, and what both
+ * made compared (counts, colours, points); the differences are logged */
+void cache_check(const Object &o, bool casting, const Drawn &got, const char *how)
+{
+	static const bool on = getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 3;
+	if (!on)
+		return;
+	static Drawn want;
+	run_object(o, want, false, false, casting);
+	/* GPU nodes: their triangles as the CPU would have placed them, before the node's own */
+	static Drawn cpu;
+	bool any_gpu = false;
+	for (const Node &n : got.nodes)
+		any_gpu |= n.g != nullptr;
+	if (any_gpu)
+	{
+		cpu = got;
+		for (Node &n : cpu.nodes)
+			if (n.g)
+			{
+				std::vector<Tri> t;
+				gpu_tris(n, t);
+				t.insert(t.end(), n.tris.begin(), n.tris.end());
+				n.tris = std::move(t);
+			}
+	}
+	const Drawn &have = any_gpu ? cpu : got;
+	struct Sum
+	{
+		size_t tris = 0, segs = 0, dots = 0, nodes = 0;
+		double colour = 0, p = 0, key = 0;
+	};
+	auto sum = [](const Drawn &d) {
+		Sum s;
+		for (const Node &n : d.nodes)
+		{
+			s.nodes++;
+			s.key += n.depth > 0 ? n.path[0] : 0;
+			for (const Tri &t : n.tris)
+			{
+				s.tris++;
+				s.colour += t.colour;
+				for (const P3 &q : t.p)
+					s.p += std::fabs(q[0]) + std::fabs(q[1]) + std::fabs(q[2]);
+			}
+			for (const Seg &g : n.segs)
+			{
+				s.segs++;
+				s.colour += g.colour;
+			}
+			for (const Dot &g : n.dots)
+			{
+				s.dots++;
+				s.colour += g.colour + g.px;
+			}
+		}
+		return s;
+	};
+	Sum a = sum(have), b = sum(want);
+	static int bad, good;
+	bool same = a.tris == b.tris && a.segs == b.segs && a.dots == b.dots && a.colour == b.colour &&
+				std::fabs(a.p - b.p) <= 1e-3 * std::max(1.0, b.p);
+	if (!same && bad < 3 && have.nodes.size() == want.nodes.size())
+		for (size_t i = 0; i < have.nodes.size(); i++)
+		{
+			const Node &x = have.nodes[i], &y = want.nodes[i];
+			bool found = false;
+			for (size_t j = 0; j < x.tris.size() && j < y.tris.size() && !found; j++)
+				for (int v = 0; v < 3 && !found; v++)
+					for (int c = 0; c < 3; c++)
+						if (std::fabs(x.tris[j].p[v][c] - y.tris[j].p[v][c]) > 1e-3f * (1 + std::fabs(y.tris[j].p[v][c])))
+						{
+							log_printf("  node %zu (under %d, colour %x) tri %zu: %.1f %.1f %.1f vs %.1f %.1f %.1f\n", i, (int)y.under,
+									   y.tris[j].colour, j, x.tris[j].p[v][0], x.tris[j].p[v][1], x.tris[j].p[v][2],
+									   y.tris[j].p[v][0], y.tris[j].p[v][1], y.tris[j].p[v][2]);
+							found = true;
+							break;
+						}
+			if (found)
+				break;
+		}
+	if (same)
+		good++;
+	else if (bad++ < 40)
+		log_printf("native cache check: model %d (%s%s) differs: tris %zu/%zu segs %zu/%zu dots %zu/%zu colour %.0f/%.0f points %.6g/%.6g nodes %zu/%zu\n",
+				   o.model, how, casting ? ", casting" : "", a.tris, b.tris, a.segs, b.segs, a.dots, b.dots, a.colour, b.colour,
+				   a.p, b.p, a.nodes, b.nodes);
+	if ((good + bad) % 2000 == 0)
+		log_printf("native cache check: %d same, %d different\n", good, bad);
+}
+
+/* Entries of objects not seen for a while go */
+void cache_trim()
+{
+	if (!cache_why.empty() && cache_tick % 300 == 0)
+	{
+		std::vector<std::pair<int, std::string>> v;
+		for (auto &w : cache_why)
+			v.push_back({w.second, w.first});
+		std::sort(v.rbegin(), v.rend());
+		std::string line;
+		for (size_t i = 0; i < v.size() && i < 14; i++)
+			line += " " + v[i].second + "=" + std::to_string(v[i].first);
+		log_printf("native cache runs (model why=count over 300):%s\n", line.c_str());
+		cache_why.clear();
+	}
+	if (++cache_tick % 64)
+		return;
+	for (auto it = cache.begin(); it != cache.end();)
+		if (cache_tick - it->second.seen > 600)
+		{
+			gd_mesh_free(it->second.mesh);
+			it = cache.erase(it);
+		}
+		else
+			++it;
+}
+
+int prof_ran, prof_reused;
 
 void run_objects(bool wire)
 {
 	frame_seed++;
+	cache_trim();
+	face_rgba.clear();
 	drawn.resize((size_t)shown->n);
 	for (int i = 0; i < shown->n; i++)
 	{
@@ -2284,14 +3326,146 @@ void run_objects(bool wire)
 		/* filled, planets are drawn with the sky (draw_fars) */
 		if (c && c->planet && !wire)
 			drawn[(size_t)i] = Drawn();
-		else
+		else if (wire)
+		{
 			run_object(o, drawn[(size_t)i], wire, false);
+			prof_ran++;
+		}
+		else
+			cached_run(o, drawn[(size_t)i], false, prof_ran, prof_reused);
 		drawn[(size_t)i].shrink = o.shrink;
 		drawn[(size_t)i].hide = o.own_added;
 	}
 }
 
 void sort_nodes(std::vector<Node> &nodes);
+
+/* Ground objects bent onto the planet. A city (Mars' model 48) is one flat sheet some 40 km wide, laid flat at
+ * its centre; the planet curves away under it, 15 m at 10 km out, 50 m at 20 km on Mars. The game drew the ground
+ * at the surface as a flat fill and painted the city over it, so that never showed; over the native sphere the
+ * outskirts' roads and buildings float, with sky and their shadows under them. Each point of an object near a
+ * planet is lowered by the sphere's fall from the plane it touches at the object's origin: R - sqrt(R^2 - w^2),
+ * w the point's distance from the vertical through the origin. A ship or a hangar moves by a fraction of a mm;
+ * a cloud field follows the curve too. GLF_GROUND_BEND=0 turns it off. */
+#define NATIVE_BEND_PLANETS 8
+struct Bend
+{
+	bool on = false;
+	P3 b;         /* the object's origin (view units) */
+	P3 u;         /* up there, unit */
+	double R = 0; /* the planet's centre to b */
+};
+std::vector<Bend> bends; /* by drawn index, this game frame */
+
+void bend_point(const Bend &bd, P3 &p)
+{
+	double d[3] = {(double)p[0] - bd.b[0], (double)p[1] - bd.b[1], (double)p[2] - bd.b[2]};
+	double h = d[0] * bd.u[0] + d[1] * bd.u[1] + d[2] * bd.u[2];
+	double w2 = std::max(d[0] * d[0] + d[1] * d[1] + d[2] * d[2] - h * h, 0.0);
+	double drop = w2 / (bd.R + std::sqrt(std::max(bd.R * bd.R - w2, 0.0)));
+	for (int k = 0; k < 3; k++)
+		p[k] -= (float)(bd.u[k] * drop);
+}
+
+void bend_nodes(const Bend &bd, std::vector<Node> &nodes)
+{
+	if (!bd.on)
+		return;
+	for (Node &n : nodes)
+	{
+		for (Tri &t : n.tris)
+			for (P3 &p : t.p)
+				bend_point(bd, p);
+		for (Seg &s : n.segs)
+		{
+			bend_point(bd, s.a);
+			bend_point(bd, s.b);
+		}
+		for (Dot &dt : n.dots)
+			bend_point(bd, dt.p);
+	}
+}
+
+/* The GPU meshes' numbers (gd_mesh_draw): the bend in the mesh's own units */
+void bend_gpu(const Bend &bd, GpuDraw &g)
+{
+	g.bent = false;
+	if (!bd.on)
+		return;
+	const Place &pl = g.pl;
+	/* A^-1 of the pose's axes (columns ax[0..2]) */
+	double a[3][3], inv[3][3];
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			a[r][c] = pl.ax[c][r];
+	double det = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
+				 a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+	if (std::fabs(det) < 1e-30)
+		return;
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+		{
+			int r1 = (c + 1) % 3, r2 = (c + 2) % 3, c1 = (r + 1) % 3, c2 = (r + 2) % 3;
+			inv[r][c] = (a[r1][c1] * a[r2][c2] - a[r1][c2] * a[r2][c1]) / det;
+		}
+	double bp[3] = {(double)bd.b[0] - pl.pos[0], (double)bd.b[1] - pl.pos[1], (double)bd.b[2] - pl.pos[2]};
+	for (int k = 0; k < 3; k++)
+	{
+		for (int j = 0; j < 3; j++)
+			g.bend[k][j] = pl.ax[k][j];
+		g.bend[k][3] = 0;
+		g.bend[3][k] = (float)(inv[k][0] * bp[0] + inv[k][1] * bp[1] + inv[k][2] * bp[2]);
+		g.bend[4][k] = bd.u[k];
+		g.bend[5][k] = (float)(inv[k][0] * bd.u[0] + inv[k][1] * bd.u[1] + inv[k][2] * bd.u[2]);
+	}
+	g.bend[3][3] = (float)bd.R;
+	g.bend[4][3] = 1;
+	g.bend[5][3] = 0;
+	g.bent = true;
+}
+
+/* Each object's bend: the nearest planet whose ground it is within 60 km above (or 2 km below) */
+void make_bends(bool wire)
+{
+	bends.assign(drawn.size(), Bend());
+	static const bool off = getenv("GLF_GROUND_BEND") && atoi(getenv("GLF_GROUND_BEND")) == 0;
+	if (off || wire)
+		return;
+	double c[NATIVE_BEND_PLANETS][3], r[NATIVE_BEND_PLANETS];
+	int np = 0;
+	for (int i = 0; i < planet_native_count() && np < NATIVE_BEND_PLANETS; i++)
+		if (planet_native_ground(i, c[np], &r[np]))
+			np++;
+	if (!np)
+		return;
+	for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
+	{
+		const Object &o = shown->obj[i];
+		Drawn &d = drawn[i];
+		if (d.shrink != 1.0f || o.table != o.subtable || planet_model(o))
+			continue;
+		Bend &bd = bends[i];
+		double best = 60e6;
+		for (int j = 0; j < np; j++)
+		{
+			double v[3] = {o.pos[0] - c[j][0], o.pos[1] - c[j][1], o.pos[2] - c[j][2]};
+			double len = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+			double h = len - r[j];
+			if (len <= 0 || h < -2e6 || h >= best)
+				continue;
+			best = h;
+			bd.on = true;
+			bd.b = {o.pos[0], o.pos[1], o.pos[2]};
+			for (int k = 0; k < 3; k++)
+				bd.u[k] = (float)(v[k] / len);
+			bd.R = len;
+		}
+		bend_nodes(bd, d.nodes);
+		bend_nodes(bd, d.before_planet);
+		if (d.gpu)
+			bend_gpu(bd, *d.gpu);
+	}
+}
 
 /* Ship shadows (gl_shadow.h): the ships in view cast, the rest of the scene
  * receives (not the ships themselves). Shrunk (far) objects stay out, their
@@ -2311,8 +3485,12 @@ void setup_shadows(bool wire)
 {
 	gl_shadow_clear();
 	shadow_on = false;
+	planet_set_ground_ship(false, nullptr, 1);
+	for (size_t i = 0; i < (size_t)shown->n; i++)
+		if (shown->obj[i].addr == game_player_ship() && shown->obj[i].table == shown->obj[i].subtable)
+			planet_set_ground_ship(true, shown->obj[i].pos, shown->obj[i].shrink);
 	shadow_caster.assign(drawn.size(), 0);
-	shadow_layer.assign(drawn.size(), ShadowLayers{{-1, -1}});
+	shadow_layer.assign(drawn.size(), ShadowLayers{{-1, -1, -1}});
 	if (wire || !gl_shadow_wanted())
 		return;
 	shadow_tris.clear();
@@ -2325,6 +3503,8 @@ void setup_shadows(bool wire)
 		P3 c;
 		float r;
 		bool station; /* a station or base (models 43-54): always in the big cascade */
+		bool scenery; /* a mountain or building (models 101-104): own cascade (2), casts only, near the eye */
+		bool base;	  /* a ground base (a station model many km wide): only its triangles near the eye, in cascade 2 */
 	};
 	std::vector<Cand> cands;
 	for (size_t i = 0; i < drawn.size() && i < (size_t)shown->n; i++)
@@ -2332,40 +3512,87 @@ void setup_shadows(bool wire)
 		const Object &o = shown->obj[i];
 		const Drawn &d = drawn[i];
 		const bool station = o.model >= 43 && o.model <= 54;
-		if (o.table != o.subtable || (!station && (o.model < 10 || o.model > 41)) || d.shrink != 1.0f)
+		const bool scenery = o.model >= 101 && o.model <= 104;
+		if (o.table != o.subtable || (!station && !scenery && (o.model < 10 || o.model > 41)) || d.shrink != 1.0f)
 			continue;
 		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
 		bool any = false;
+		auto add = [&](const P3 &p) {
+			for (int k = 0; k < 3; k++)
+			{
+				lo[k] = std::min(lo[k], p[k]);
+				hi[k] = std::max(hi[k], p[k]);
+			}
+			any = true;
+		};
 		for (const Node &n : d.nodes)
 			if (!n.under)
+			{
+				if (n.g && n.gcount)
+					gpu_corners(n, add);
 				for (const Tri &t : n.tris)
 					for (const P3 &p : t.p)
-						for (int k = 0; k < 3; k++)
-						{
-							lo[k] = std::min(lo[k], p[k]);
-							hi[k] = std::max(hi[k], p[k]);
-							any = true;
-						}
+						add(p);
+			}
 		if (!any)
 			continue;
-		Cand c = {i, {}, 0, station};
+		Cand c = {i, {}, 0, station, scenery, false};
 		for (int k = 0; k < 3; k++)
 		{
 			c.c[k] = 0.5f * (lo[k] + hi[k]);
 			c.r += 0.25f * (hi[k] - lo[k]) * (hi[k] - lo[k]);
 		}
 		c.r = std::sqrt(c.r);
+		c.base = station && c.r > 5.0e6f; /* an orbital station is a couple of km, a ground base a whole town */
+		if (c.base)
+		{
+			/* only its parts within 2.5 km of the eye cast (below): none near, it is not run again whole
+			 * for nothing (49000 triangles placed and thrown away each frame, flying over Mars).
+			 * The nearest of the drawn parts' boxes, 1 km to spare for faces turned away. */
+			float nearest = 1e30f;
+			auto box_dist = [&](const P3 &blo, const P3 &bhi) {
+				float s = 0;
+				for (int k = 0; k < 3; k++)
+				{
+					float v = blo[k] > 0 ? blo[k] : bhi[k] < 0 ? -bhi[k] : 0;
+					s += v * v;
+				}
+				nearest = std::min(nearest, std::sqrt(s));
+			};
+			for (const Node &n : d.nodes)
+				if (!n.under)
+				{
+					P3 blo = {1e30f, 1e30f, 1e30f}, bhi = {-1e30f, -1e30f, -1e30f};
+					auto grow = [&](const P3 &p) {
+						for (int k = 0; k < 3; k++)
+						{
+							blo[k] = std::min(blo[k], p[k]);
+							bhi[k] = std::max(bhi[k], p[k]);
+						}
+					};
+					if (n.g && n.gcount)
+						gpu_corners(n, grow);
+					for (const Tri &t : n.tris)
+						for (const P3 &p : t.p)
+							grow(p);
+					if (blo[0] <= bhi[0])
+						box_dist(blo, bhi);
+				}
+			if (nearest > 3.5e6f)
+				continue;
+		}
 		cands.push_back(c);
 	}
 	const Object *first = nullptr;
 	if (!cands.empty())
 	{
 		auto dist0 = [](const Cand &c) { return std::sqrt(c.c[0] * c.c[0] + c.c[1] * c.c[1] + c.c[2] * c.c[2]); };
-		/* Two cascades by size: a map round a cruiser and a Cobra many km apart has texels as wide as the Cobra.
-		 * Cascade 0 has the ships up to 5 times the smallest in view, cascade 1 the bigger ones and the stations. */
+		/* Three cascades: a map round a cruiser and a Cobra many km apart has texels as wide as the Cobra.
+		 * Cascade 0 has the ships up to 5 times the smallest in view, cascade 1 the bigger ones and the stations,
+		 * cascade 2 the scenery near the eye (a hangar's shadow in a map as wide as the station is mush). */
 		float rmin = 1e30f;
 		for (const Cand &c : cands)
-			if (!c.station)
+			if (!c.station && !c.scenery)
 				rmin = std::min(rmin, c.r);
 		std::vector<std::vector<const Cand *>> chosen(GL_SHADOW_CASCADES);
 		std::vector<int> cascade_of(drawn.size(), -1);
@@ -2373,16 +3600,25 @@ void setup_shadows(bool wire)
 		{
 			std::vector<const Cand *> cls;
 			for (const Cand &c : cands)
-				if (cc == 0 ? !c.station && c.r <= 5.0f * rmin : c.station || c.r > 5.0f * rmin)
+				if (cc == 2 ? c.scenery || c.base
+					: cc == 0 ? !c.station && !c.scenery && c.r <= 5.0f * rmin
+							  : !c.scenery && !c.base && (c.station || c.r > 5.0f * rmin))
 					cls.push_back(&c);
 			if (cls.empty())
 				continue;
+			auto nearer = [&](const Cand *a, const Cand *b) { return dist0(*a) - a->r < dist0(*b) - b->r; };
+			std::stable_sort(cls.begin(), cls.end(), nearer);
+			if (cc == 2)
+			{
+				/* the 12 nearest within 10 km of the eye (what receives lies near the ground there) */
+				for (const Cand *c : cls)
+					if ((c->base || dist0(*c) - c->r <= 1.0e7f) && chosen[2].size() < 12)
+						chosen[2].push_back(c);
+				continue;
+			}
 			/* the map is fitted round the casters, so a ship far off would stretch it and make every texel
 			 * metres wide: only those near the class's nearest (within a few of its sizes, at least 100 m) cast */
 			const Cand *near = cls[0];
-			for (const Cand *c : cls)
-				if (dist0(*c) - c->r < dist0(*near) - near->r)
-					near = c;
 			const float reach = std::max(8.0f * near->r, 1.0e5f);
 			for (const Cand *c : cls)
 			{
@@ -2391,9 +3627,6 @@ void setup_shadows(bool wire)
 					continue;
 				chosen[(size_t)cc].push_back(c);
 			}
-			/* nearest the eye first: the first few have a map of their own (they receive) */
-			std::stable_sort(chosen[(size_t)cc].begin(), chosen[(size_t)cc].end(),
-							 [&](const Cand *a, const Cand *b) { return dist0(*a) - a->r < dist0(*b) - b->r; });
 		}
 		const float *light = nullptr;
 		float lightv[3];
@@ -2427,18 +3660,31 @@ void setup_shadows(bool wire)
 				/* the whole hull, run again without the facing tests: the drawn
 				 * model has only the faces turned to the camera */
 				static Drawn whole;
-				run_object(shown->obj[c.i], whole, false, false, true);
+				cached_run(shown->obj[c.i], whole, true, prof_ran, prof_reused);
+				if (c.i < bends.size())
+					bend_nodes(bends[c.i], whole.nodes);
 				for (const Node &n : whole.nodes)
 					if (!n.under)
 						for (const Tri &t : n.tris)
+						{
+							/* a ground base is a town: only what lies within 2.5 km of the eye casts, so the map is
+							 * fitted to the hangars round the ship, not to the whole base */
+							if (c.base)
+							{
+								float cx = (t.p[0][0] + t.p[1][0] + t.p[2][0]) / 3, cy = (t.p[0][1] + t.p[1][1] + t.p[2][1]) / 3,
+									  cz = (t.p[0][2] + t.p[1][2] + t.p[2][2]) / 3;
+								if (cx * cx + cy * cy + cz * cz > 2.5e6f * 2.5e6f)
+									continue;
+							}
 							for (const P3 &p : t.p)
 								shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
+						}
 				ends.push_back(shadow_tris.size() / 9);
 			}
 			if (!ends.empty())
 				made[cc] = gl_shadow_set(cc, light, shadow_tris.data(), shadow_tris.size() / 9, ends.data(), (int)ends.size());
 		}
-		shadow_on = made[0] || made[1];
+		shadow_on = made[0] || made[1] || made[2];
 		/* what each object looks up: each cascade's map with every caster, or for a caster of it the map
 		 * without itself (none at all for a caster that has no map of its own) */
 		for (size_t i = 0; i < drawn.size(); i++)
@@ -2450,8 +3696,8 @@ void setup_shadows(bool wire)
 					l = made[cc] ? own_layer[i] : -1;
 			}
 		for (size_t i = 0; i < drawn.size(); i++)
-			if (cascade_of[i] >= 0 && own_layer[i] < 0)
-				shadow_layer[i] = ShadowLayers{{-1, -1}};
+			if (cascade_of[i] >= 0 && (own_layer[i] < 0 || (cascade_of[i] == 2 && shown->obj[i].model >= 101)))
+				shadow_layer[i] = ShadowLayers{{-1, -1, -1}}; /* scenery receives nothing */
 	}
 	static const bool dbg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
 	static int frames;
@@ -2469,11 +3715,11 @@ void setup_shadows(bool wire)
 		{
 			size_t nt = 0;
 			for (const Node &n : drawn[i].nodes)
-				nt += n.tris.size();
+				nt += n.tris.size() + (size_t)n.gcount / 3;
 			if (nt)
-				log_printf("  object %zu model %d shrink %.3f nodes %zu tris %zu caster %d layers %d %d\n", i,
+				log_printf("  object %zu model %d shrink %.3f nodes %zu tris %zu caster %d layers %d %d %d\n", i,
 						   (int)shown->obj[i].model, drawn[i].shrink, drawn[i].nodes.size(), nt, (int)shadow_caster[i],
-						   shadow_layer[i].l[0], shadow_layer[i].l[1]);
+						   shadow_layer[i].l[0], shadow_layer[i].l[1], shadow_layer[i].l[2]);
 		}
 	}
 }
@@ -2487,16 +3733,24 @@ bool prepared = false;
  * spans again, which do depend on the view */
 uint32_t prepared_serial = 0;
 bool prepared_wire = false;
+bool shadow_kept = false; /* setup_shadows ran for prepared_serial */
 void prepare(bool wire)
 {
 	if (prepared)
 		return;
 	prepared = true;
+	uint64_t prof_t0 = PROF_BEGIN();
+	prof_ran = prof_reused = 0;
 	bool keep = shown->serial != 0 && shown->serial == prepared_serial && wire == prepared_wire &&
 				drawn.size() == (size_t)shown->n;
+	uint64_t tp0 = PROF_BEGIN(), tp1 = tp0, tp2 = tp0;
 	if (!keep)
 	{
 		run_objects(wire);
+		if (gpu_on())
+			gd_face_colours(face_rgba.data(), (int)(face_rgba.size() / 4));
+		make_bends(wire);
+		tp1 = PROF_BEGIN();
 		prepared_serial = shown->serial;
 		prepared_wire = wire;
 		for (Drawn &d : drawn)
@@ -2515,6 +3769,7 @@ void prepare(bool wire)
 				}
 		}
 	}
+	tp2 = PROF_BEGIN();
 	mat4 mvp = gd_mvp();
 	auto clip_w = [&](const P3 &p) { return mvp.m[3] * p[0] + mvp.m[7] * p[1] + mvp.m[11] * p[2] + mvp.m[15]; };
 	for (Drawn &d : drawn)
@@ -2530,6 +3785,21 @@ void prepare(bool wire)
 		for (const std::vector<Node> *nodes : {&d.before_planet, &d.nodes})
 			for (const Node &n : *nodes)
 			{
+				if (n.g && n.gcount)
+				{
+					/* w is linear: its least and most over the node's box */
+					const Cached::GNode &gn = n.g->e->gn[(size_t)n.gnode];
+					const Place &pl = n.g->pl;
+					float lo = clip_w(pl.pos), hi = lo;
+					for (int k = 0; k < 3; k++)
+					{
+						float a = mvp.m[3] * pl.ax[k][0] + mvp.m[7] * pl.ax[k][1] + mvp.m[11] * pl.ax[k][2];
+						lo += std::min(a * gn.lo[k], a * gn.hi[k]);
+						hi += std::max(a * gn.lo[k], a * gn.hi[k]);
+					}
+					d.near = std::min(d.near, lo);
+					d.far = std::max(d.far, hi);
+				}
 				for (const Tri &t : n.tris)
 					for (const P3 &p : t.p)
 						span(p);
@@ -2542,7 +3812,50 @@ void prepare(bool wire)
 					span(s.p);
 			}
 	}
-	setup_shadows(wire);
+	uint64_t tp3 = PROF_BEGIN();
+	/* the casters only change with the game's frame */
+	if (keep && shadow_kept)
+		gl_shadow_again();
+	else
+		setup_shadows(wire);
+	shadow_kept = cache_on();
+	if (prof_on)
+	{
+		prof_native_add(prof_t0, prof_ran, prof_reused);
+		/* GLF_NATIVE_CACHE=2: where prepare's time goes */
+		static const bool dbg = getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 2;
+		static double t_run, t_sort, t_span, t_shadow;
+		static int pics, frames;
+		static size_t tris;
+		uint64_t tp4 = PROF_BEGIN();
+		double f = 1000.0 / (double)SDL_GetPerformanceFrequency();
+		pics++;
+		if (!keep)
+		{
+			frames++;
+			t_run += (double)(tp1 - tp0) * f;
+			t_sort += (double)(tp2 - tp1) * f;
+			for (const Drawn &d : drawn)
+				for (const Node &n : d.nodes)
+					tris += n.tris.size() + (size_t)n.gcount / 3;
+		}
+		t_span += (double)(tp3 - tp2) * f;
+		t_shadow += (double)(tp4 - tp3) * f;
+		if (dbg && (double)(tp4 - tp0) * f > 15)
+			log_printf("native slow prepare %.1f ms: run %.1f sort %.1f spans %.1f shadows %.1f (keep %d, kept %d, %d ran, %d reused, %d objects)\n",
+					   (double)(tp4 - tp0) * f, keep ? 0 : (double)(tp1 - tp0) * f, keep ? 0 : (double)(tp2 - tp1) * f,
+					   (double)(tp3 - tp2) * f, (double)(tp4 - tp3) * f, (int)keep, (int)(keep && shadow_kept), prof_ran,
+					   prof_reused, shown->n);
+		if (dbg && pics >= 200)
+		{
+			log_printf("native prepare per game frame: run %.2f ms, sort %.2f; per picture: spans %.2f, shadows %.2f; %d pictures over %d frames, %zu triangles/frame\n",
+					   t_run / std::max(frames, 1), t_sort / std::max(frames, 1), t_span / pics, t_shadow / pics, pics, frames,
+					   tris / (size_t)std::max(frames, 1));
+			t_run = t_sort = t_span = t_shadow = 0;
+			pics = frames = 0;
+			tris = 0;
+		}
+	}
 }
 
 void draw_segs(const std::vector<Seg> &segs)
@@ -2660,10 +3973,27 @@ void draw_tris(const std::vector<Tri> &tris, bool defer_shadows = false)
 	gd_once_phase(2);
 }
 
+/* A node's GPU triangles (Node.g), as draw_tris would draw them */
+void draw_gpu(const Node &n)
+{
+	if (!n.g || !n.gcount)
+		return;
+	if (gd_wireframe())
+	{
+		std::vector<Tri> t;
+		gpu_tris(n, t);
+		draw_tris(t);
+		return;
+	}
+	set_colour(0); /* opaque: no blending */
+	gd_mesh_draw(n.g->e->mesh, n.g->pose, n.g->base, n.gfirst, n.gcount, n.g->bent ? &n.g->bend[0][0] : nullptr);
+}
+
 void draw_nodes(const std::vector<Node> &nodes)
 {
 	for (const Node &n : nodes)
 	{
+		draw_gpu(n);
 		draw_tris(n.tris);
 		draw_segs(n.segs);
 		draw_dots(n.dots);
@@ -2952,6 +4282,15 @@ void draw_fars()
  * model's order, not depth tested. Round the camera, so it is the same
  * whichever way that looks. Then the atmosphere bands and, farthest first,
  * the far bodies and the planets on it. */
+extern "C" bool native_view_axes(float m[9])
+{
+	const Object *o = shown->has_sky ? &shown->sky : shown->n > 0 ? &shown->obj[0] : nullptr;
+	if (!o)
+		return false;
+	std::memcpy(m, o->cols, 9 * sizeof(float));
+	return true;
+}
+
 extern "C" void native_draw_sky(void)
 {
 	if (!native_enabled() || enabled != 2)
@@ -3082,13 +4421,15 @@ extern "C" void native_draw(void)
 	};
 	const float *shadow_m0 = shadow_on ? gl_shadow_matrix(0) : nullptr;
 	const float *shadow_m1 = shadow_on ? gl_shadow_matrix(1) : nullptr;
+	const float *shadow_m2 = shadow_on ? gl_shadow_matrix(2) : nullptr;
 	/* the map layers an object looks up (-1: none of that cascade), all -1 if it receives none */
-	static const ShadowLayers no_layers = {{-1, -1}};
+	static const ShadowLayers no_layers = {{-1, -1, -1}};
 	auto receives = [&](const Drawn *d) {
 		return shadow_on && d->shrink == 1.0f ? shadow_layer[(size_t)(d - drawn.data())] : no_layers;
 	};
 	auto set_shadow = [&](const ShadowLayers &sl) {
-		gd_set_shadow(shadow_m0, shadow_m0 ? sl.l[0] : -1, shadow_m1, shadow_m1 ? sl.l[1] : -1);
+		gd_set_shadow(shadow_m0, shadow_m0 ? sl.l[0] : -1, shadow_m1, shadow_m1 ? sl.l[1] : -1, shadow_m2,
+					  shadow_m2 ? sl.l[2] : -1);
 	};
 	std::vector<Under> unders;
 	for (const Drawn *d : placed)
@@ -3118,7 +4459,7 @@ extern "C" void native_draw(void)
 				for (const Tri &t : n->tris)
 					if (t.colour & 0x8000)
 					{
-						gd_set_shadow(nullptr, -1, nullptr, -1);
+						gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
 						draw_shadow_group(under_shadows);
 						set_shadow(unders[next_under].layers);
 						shadows_drawn = true;
@@ -3127,7 +4468,7 @@ extern "C" void native_draw(void)
 			draw_segs(n->segs);
 			draw_dots(n->dots);
 		}
-		gd_set_shadow(nullptr, -1, nullptr, -1);
+		gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
 		return true;
 	};
 
@@ -3165,19 +4506,23 @@ extern "C" void native_draw(void)
 				if (draw_unders(n.dist * d.shrink))
 					gd_set_depth(&depth);
 				set_shadow(recv);
+				draw_gpu(n);
 				draw_tris(n.tris);
 				draw_segs(n.segs);
 				draw_dots(n.dots);
 			}
-			gd_set_shadow(nullptr, -1, nullptr, -1);
+			gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
 			/* ...then its depth, to hide what is behind it of the others */
 			depth.write = true;
 			depth.depth_only = true;
 			gd_set_depth(&depth);
 			for (const Node &n : d.nodes)
 				if (!n.under)
+				{
+					draw_gpu(n);
 					for (const Tri &t : n.tris)
 						gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
+				}
 		}
 	}
 	draw_unders(-1e30f);

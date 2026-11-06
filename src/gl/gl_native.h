@@ -119,6 +119,10 @@ extern int native_detail_boost;
  * straight down; GLF_CLOUD_SHADOWS=0/1 overrides, =2 logs the sun's height */
 extern bool native_cloud_shadows;
 
+/* GLF_MOTION_LOG: the shown frame's sky axes in view space (columns), or
+ * the first object's when it has no sky; false when it has neither */
+bool native_view_axes(float m[9]);
+
 #ifdef __cplusplus
 }
 #endif

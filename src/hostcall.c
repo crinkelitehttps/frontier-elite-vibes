@@ -37,6 +37,7 @@
 #include "station_resume.h"
 #include "strafe.h"
 #include "spawn_log.h"
+#include "rt_clock.h"
 #include "time_guard.h"
 
 /* D0.b = exception number, A0 = handler */
@@ -574,6 +575,9 @@ HOSTCALL hcalls[] = {
 	[0x9d] = Call_ScenMade,
 	[0x9e] = Call_VirtNext,
 	[0x9f] = Call_ScenDrive,
+	[0xa0] = Call_RtVbl, /* real-time clock, rt_clock.h */
+	[0xa1] = Call_RtCredit,
+	[0xa2] = Call_RtPace,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

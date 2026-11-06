@@ -19,6 +19,8 @@
  * once per eye, anything else on its virtual screen. The window follows,
  * as without one (the cockpit turned by the headset).
  */
+#include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <SDL.h>
@@ -324,6 +326,9 @@ typedef struct
 	unsigned int page_main_rgb[256];
 	unsigned int page_ctrl_rgb[16];
 	int page_bgcol;
+	uint32_t clock; /* GLF_MOTION_LOG: the game's clock (A6_time_of_day) at the flip */
+	Uint64 flip_t;	/* ... and when it flipped (performance counter) */
+	float rot[9];	/* ... and the player's ship's rotation matrix (object +0) */
 } ScreenFrame;
 static ScreenFrame scr_pub, scr_show;
 
@@ -352,6 +357,7 @@ volatile unsigned long dbg_frames; /* for the watchdog in main.c */
 bool render_thread_enabled = USE_RENDER_THREAD;
 
 static SDL_mutex *frame_lock;  /* scr_pub and the scene's published copy */
+static SDL_cond *taken_cond;   /* the drawing took the frame (frame_new cleared), with frame_lock */
 static bool frame_new;         /* published since the drawing last took one */
 
 static SDL_Thread *render_thread;
@@ -686,6 +692,7 @@ static void screen_blit_pass(const void *data)
 void Screen_Init(void)
 {
 	frame_lock = SDL_CreateMutex();
+	taken_cond = SDL_CreateCond();
 	ctx_lock = SDL_CreateMutex();
 	ctx_cond = SDL_CreateCond();
 	const char *rt = SDL_getenv("GLF_RENDER_THREAD"); /* 0: draw with the game, as before */
@@ -1201,6 +1208,13 @@ static void publish_frame(void)
 	mouse_shown = pointer_hold > 0;
 	scr_pub.mouse_shown = mouse_shown;
 	scr_pub.quiz = game_quiz_waiting();
+	scr_pub.clock = GAME_A6 ? (uint32_t)STMemory_ReadLong(GAME_A6 + 524) : 0;
+	scr_pub.flip_t = SDL_GetPerformanceCounter();
+	{
+		unsigned int ship = game_player_ship();
+		for (int i = 0; i < 9; i++)
+			scr_pub.rot[i] = ship ? (float)(int16_t)STMemory_ReadWord(ship + 2 * i) / 32768.0f : 0;
+	}
 
 	if (page && cockpit)
 	{
@@ -1320,6 +1334,7 @@ static bool acquire_frame(void)
 			scene_acquire_page();
 		hud_acquire();
 		frame_new = false;
+		SDL_CondBroadcast(taken_cond);
 	}
 	if (lab_new)
 	{
@@ -1556,12 +1571,175 @@ static void draw_page(void)
 
 static Uint32 last_draw_ticks;
 
+/* GLF_MOTION_LOG=1: motion.csv, a line per picture: when it was begun (ms),
+ * whether it took a new game frame, the game clock's advance since the last
+ * picture (in 1x vblanks: 994 units each), how old its frame was (ms since
+ * the flip) and how far the view turned since the last picture (degrees).
+ * Even motion: the same clock advance and turn every picture. */
+static void log_motion(bool new_frame)
+{
+	static int on = -1;
+	static FILE *f;
+	static uint32_t last_clock;
+	static float last_m[9];
+	static bool have_m;
+	if (on < 0)
+	{
+		on = SDL_getenv("GLF_MOTION_LOG") != NULL;
+		if (on)
+		{
+			f = fopen("motion.csv", "w");
+			if (f)
+				fprintf(f, "ms,new,vblanks,age_ms,turn_deg\n");
+		}
+	}
+	if (!on || !f)
+		return;
+	Uint64 now = SDL_GetPerformanceCounter();
+	double freq = (double)SDL_GetPerformanceFrequency();
+	float m[9], turn = -1;
+	memcpy(m, scr_show.rot, sizeof m);
+	if (m[0] != 0 || m[1] != 0 || m[2] != 0)
+	{
+		if (have_m)
+		{
+			/* the angle of the rotation from the last axes to these: trace = 1 + 2 cos */
+			float tr = 0;
+			for (int c = 0; c < 3; c++)
+			{
+				float l0 = sqrtf(last_m[c * 3] * last_m[c * 3] + last_m[c * 3 + 1] * last_m[c * 3 + 1] + last_m[c * 3 + 2] * last_m[c * 3 + 2]);
+				float l1 = sqrtf(m[c * 3] * m[c * 3] + m[c * 3 + 1] * m[c * 3 + 1] + m[c * 3 + 2] * m[c * 3 + 2]);
+				if (l0 > 0 && l1 > 0)
+					tr += (last_m[c * 3] * m[c * 3] + last_m[c * 3 + 1] * m[c * 3 + 1] + last_m[c * 3 + 2] * m[c * 3 + 2]) / (l0 * l1);
+			}
+			float cs = (tr - 1) / 2;
+			turn = acosf(cs > 1 ? 1 : cs < -1 ? -1 : cs) * 57.29578f;
+		}
+		memcpy(last_m, m, sizeof m);
+		have_m = true;
+	}
+	fprintf(f, "%.3f,%d,%.2f,%.2f,%.4f\n", (double)now * 1000.0 / freq, (int)new_frame,
+			(double)(uint32_t)(scr_show.clock - last_clock) / 994.0,
+			(double)(now - scr_show.flip_t) * 1000.0 / freq, (double)turn);
+	last_clock = scr_show.clock;
+}
+
+/* The picture counter (show_fps, top left of the window): pictures a second,
+ * the distinct ones among them (the game's clock moved since the picture
+ * before: a picture that repeats the last game frame, or a frame of no game
+ * time, is not counted) and the longest wait for a distinct one. Drawn here
+ * with the game's font, not ImGui, which would take the drawing off the
+ * render thread and so change what it measures. */
+bool show_fps;
+static GLuint fps_tex;
+static char fps_text[64];
+static bool fps_dirty;
+
+static void count_fps(void)
+{
+	static Uint64 since, last_distinct;
+	static uint32_t last_clock;
+	static int pictures, distinct;
+	static double worst;
+	Uint64 now = SDL_GetPerformanceCounter();
+	double freq = (double)SDL_GetPerformanceFrequency();
+	pictures++;
+	if (scr_show.clock != last_clock)
+	{
+		distinct++;
+		last_clock = scr_show.clock;
+		if (last_distinct)
+		{
+			double gap = (double)(now - last_distinct) * 1000.0 / freq;
+			if (gap > worst)
+				worst = gap;
+		}
+		last_distinct = now;
+	}
+	if (!since)
+		since = now;
+	double s = (double)(now - since) / freq;
+	if (s >= 1.0)
+	{
+		snprintf(fps_text, sizeof fps_text, "FPS %.0f  DISTINCT %.0f  WORST %.0fMS", pictures / s, distinct / s, worst);
+		fps_dirty = true;
+		pictures = distinct = 0;
+		worst = 0;
+		since = now;
+	}
+}
+
+static void draw_fps(int w, int h)
+{
+	if (!fps_text[0])
+		return;
+	if (!fps_tex)
+	{
+		void *clear = calloc((size_t)SCR_TEX_W * SCR_TEX_H, 4); /* (NULL would leave it undefined) */
+		glGenTextures(1, &fps_tex);
+		glBindTexture(GL_TEXTURE_2D, fps_tex);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SCR_TEX_W, SCR_TEX_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, clear);
+		free(clear);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		fps_dirty = true;
+	}
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, fps_tex);
+	if (fps_dirty)
+	{
+		/* the text in the top rows of a 320x200 page, yellow on a black shadow */
+		enum { ROWS = 12 };
+		static uint32_t px[SCR_W * ROWS];
+		memset(px, 0, sizeof px);
+		int x = 3;
+		for (const char *c = fps_text; *c && x < SCR_W - 9; c++)
+		{
+			const unsigned char *g = screen_text_glyph((unsigned char)*c);
+			if (!g)
+			{
+				x += 4;
+				continue;
+			}
+			for (int pass = 0; pass < 2; pass++)
+				for (int r = 0; r < 8; r++)
+					for (int b = 0; b < 8; b++)
+						if (g[r] & (0x80 >> b))
+						{
+							int px_x = x + b + (pass ? 0 : 1), px_y = 2 + r + (pass ? 0 : 1);
+							px[px_y * SCR_W + px_x] = pass ? 0xff00ffffu : 0xff000000u; /* ABGR in memory: yellow, black */
+						}
+			x += g[9] ? g[9] : 8;
+		}
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, SCR_W, ROWS, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		fps_dirty = false;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, h - h / 2, w / 2, h / 2); /* half the game's text size, top left */
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_BLEND);
+	glUseProgram(blit_prog);
+	glUniform1i(u_blit_tex, 0);
+	glUniform1i(u_blit_discard, 1);
+	glBindVertexArray(blit_vao);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
 	Uint64 lap = SDL_GetPerformanceCounter(), pic0 = lap;
 	bool new_frame = acquire_frame();
 	log_rates(new_frame);
+	log_motion(new_frame);
 	stage_ms[0] += stage_lap(&lap);
 	if (scr_show.sub)
 	{
@@ -1584,6 +1762,12 @@ static void draw_picture(bool with_menu)
 #endif
 	if (window_seen)
 		draw_frame(screen_w, screen_h, cockpit, true);
+	if (show_fps)
+	{
+		count_fps();
+		if (window_seen)
+			draw_fps(screen_w, screen_h);
+	}
 	stage_ms[3] += stage_lap(&lap);
 	if (with_menu && window_seen)
 		ui_render(); /* 4. emulator menu */
@@ -1714,6 +1898,22 @@ void Screen_RefreshVr(void)
 	}
 	context_to_main();
 	draw_picture(true);
+}
+
+void Screen_WaitFrameTaken(int max_ms)
+{
+	if (!render_thread || !ctx_on_render || !frame_lock)
+		return;
+	SDL_LockMutex(frame_lock);
+	Uint32 t0 = SDL_GetTicks();
+	while (frame_new)
+	{
+		int left = max_ms - (int)(SDL_GetTicks() - t0);
+		if (left <= 0)
+			break;
+		SDL_CondWaitTimeout(taken_cond, frame_lock, (Uint32)left);
+	}
+	SDL_UnlockMutex(frame_lock);
 }
 
 void Nu_DrawScreen(void)

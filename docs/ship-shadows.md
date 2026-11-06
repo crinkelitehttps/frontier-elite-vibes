@@ -77,7 +77,21 @@ cascade 1 with the station in it. At 3 km from Lave Station the map is 6.7 x 4.1
 Cobra inside the bay (the station's hull casts onto it); the station's baked night-face colours are darkened again.
 `GLF_SHIP_SHADOWS=2` also lists the objects in view (model, triangles, caster, layers).
 
-Next (see the discussion): scenery (buildings, mountains) as casters.
+Scenery: objects of models 101-104 (mountains, hangars and other buildings; not the cloud fields, model 99) are the
+casters of a third cascade (`GL_SHADOW_CASCADES` = 3, array 3 x 6 layers = 72 MB), the 12 nearest within 10 km of the eye, so
+its map is fitted to them alone (in cascade 1 with the station a hangar's shadow was mush). Receivers (ground, stations,
+ships) look up all three and take the darkest (`gd_set_shadow` takes three matrices/layers, the flat and planet shaders a
+third lookup, `GdVert.shadow3`). Scenery receives nothing from the maps. Untested on Quest (memory, one more lookup).
+
+Ground bases: at Mars/Earth the "hangars" are not scenery but nodes of the base's one station model (48: 12,700 triangles, r
+29 km), a cascade 1 caster, so its map was 52 x 12 km (50 m texels, 300 m depth bias): shadows soft, jagged and detached
+from the hangar's foot. A station model wider than 5 km (`Cand::base`) is now a caster of cascade 2 instead, with only the
+triangles whose centre lies within 2.5 km of the eye, so the map is fitted to the hangars round the ship. Cascade 2's depth bias
+is 0.1% of its size (0.3% first: small houses still floated) (cascade 0/1: 1%). The base keeps its own layer there (no self-shadowing), so a hangar does not shadow
+the base's own runway plates, only the planet's ground and ships.
+A base none of whose drawn parts' boxes come within 3.5 km of the eye is not a caster at all: before, flying 30 km over
+Mars, its whole hull (49,000 triangles at detail 5) was placed on the CPU every frame and all thrown away by the 2.5 km
+test, 3-5 ms a picture (39-44 -> 47-50 pictures/s there). Landed at the base it still casts (19,700 triangles).
 
 ## Limits / next steps
 
@@ -89,3 +103,15 @@ Next (see the discussion): scenery (buildings, mountains) as casters.
 - A shadow falls on the lit side of the planet only; flat-shaded receivers cannot tell night from day.
 - Quest/Android (GLES 3.0): depth textures and `sampler2DShadow` are core there, untested; the pass costs one more
   pass per frame (twice with VR eyes).
+
+External view and free camera (the free camera shows the front view with its own camera, so it is tested with `freecam_active()`): `shadow_k` (scale along the eye's ray by game altitude / sphere height) only holds when the eye
+is the ship's; in the external view and the free camera the shadow fell on the drawn sphere, which sits tens to hundreds of
+metres off the ground the scenery stands on, so it landed elsewhere (not seen). Now `setup_shadows` hands the player ship's
+view position to `planet_set_ground_ship`, and the sphere shader (`uGroundOn`, `uGroundUp`, `uGroundP0`) intersects the eye's
+ray with the plane under the ship (radial up at the ship, its altitude, A6+692, below it) instead. It is trusted only where
+the ship's distance from the planet's centre agrees with radius + altitude within 1/512 of the planet's distance (the game's
+planet position is rounded to 1/1024). Untested in game; flat plane, so far from the ship the curve of the planet is ignored.
+
+The trust check's tolerance is 1/64 of the planet's distance, not 1/512: the log (`ground plane:` lines) showed the game's planet
+centre drifting by up to ~1/450 of the distance as the free camera moved a kilometre from the ship, so the plane was rejected
+there and the shadows vanished. The up vector from that centre is then good to a couple of milliradians (about 2 m at 1 km).

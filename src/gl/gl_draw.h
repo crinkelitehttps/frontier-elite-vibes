@@ -85,7 +85,7 @@ void gd_set_depth(const GdDepth *d);
  * coordinates, and `layer`, its layer of the map (gl_shadow_layer, gl_shadow_all_layer);
  * a negative layer = that cascade is not looked up. Both off is the default at the
  * start of every frame */
-void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1);
+void gd_set_shadow(const float *m0, int layer0, const float *m1, int layer1, const float *m2, int layer2);
 
 /* Modelview stack */
 void gd_push(void);
@@ -138,6 +138,27 @@ void *gd_custom(gd_custom_fn fn, size_t size);
  * phase 0, again (nothing visible) after phase 1, then phase 2 restores
  * the stencil as it was. Custom commands. */
 void gd_once_phase(int phase);
+
+/* ---- kept meshes -------------------------------------------------------
+ * Triangles uploaded once in their own frame and drawn many times by a pose
+ * (the native scene's cached models). Each vertex is x, y, z and a face
+ * index; the face's colour comes from the face table (gd_face_colours),
+ * alpha 0 = the face is not drawn. */
+typedef struct GdMesh GdMesh;
+GdMesh *gd_mesh_new(void);
+void gd_mesh_free(GdMesh *m);
+/* n vertices of 4 floats each (x, y, z, face), 3 per triangle */
+void gd_mesh_upload(GdMesh *m, const float *xyzf, int n);
+/* The face table (RGBA8 per face) the meshes drawn until the next call use */
+void gd_face_colours(const uint8_t *rgba, int n);
+/* Vertices first..first + count of m placed by pose (column-major: the
+ * mesh's frame -> the modelview's), their faces at face_base + index in the
+ * table: in the current state, as gd_tri would draw them (depth, shadows,
+ * cull, blend). Never wireframed: draw those with gd_tri. */
+/* bend: NULL, or 24 floats bending the mesh onto a planet (gl_native.cpp, Bend): the pose's 3 axes (.xyz), the
+ * bend point in mesh units (.xyz) and the planet radius there (.w), the up direction in view units (.xyz) and
+ * 1 (.w), the up direction in mesh units (.xyz) */
+void gd_mesh_draw(GdMesh *m, const float pose[16], int face_base, int first, int count, const float *bend);
 
 /* ---- shader helper ------------------------------------------------------
  * Compiles a program from GLSL bodies (no #version line: the right header

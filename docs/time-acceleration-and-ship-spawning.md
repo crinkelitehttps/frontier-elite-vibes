@@ -92,6 +92,19 @@ add 49700: the clock runs 0.02 percent slow. A day is 86400 x 49710 = about 2^32
 high long is the day: it is incremented by the carry of the low long (`add.l d4,d2 / addx.l d5,d3` in
 the main loop at `L428c6_GameLoop`).
 
+**Real-time clock (host, `src/rt_clock.c`, glfrontier.cfg `realtime_clock`, default on).** In the
+original the tick is a whole number of vblanks, so with pictures not locked to 50 Hz each picture showed
+0, 1 or 2 steps of motion (choppy turning). With the clock on, the vblank handler no longer adds to
+`14450`, `14458` and `666(a6)` (`Lrt_vbl`); instead each take of an accumulator (`Lrt_take_game`,
+`Lrt_take_real`) first credits the real time since the last take, `rate * elapsed / 20 ms` with the
+remainders kept, at most 100 ms a take. The frame limit (`Lrt_limit` in `L41bc4_LimitFrameRate`) then
+waits until the render thread has taken the last frame instead of waiting for a vblank, so the game
+makes about one frame per picture and its `dt` is the real time between frames (it can now be under one
+vblank, e.g. 828 units at 60 pictures a second). Input is still read in the vblank handler, 50 times a
+second. `GLF_RTCLOCK=0/1` overrides the setting; `GLF_RTPACE=US` (experiment) runs the game freely with a
+frame every US microseconds at most instead of waiting for the drawing. [measured] the clock keeps time
+(494575 units in 10 s on, 494500 off).
+
 [measured] At 10000x the day counter advances once every 8.6 real seconds (the day number went
 `0x11d5a2 -> 0x11d5a8` in 61 s).
 

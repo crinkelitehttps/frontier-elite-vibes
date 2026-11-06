@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "cheats.h"
+#include "freecam.h"
 #include "gl_api.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
@@ -259,6 +260,10 @@ typedef struct
 	double pos[3]; /* centre, GL view space */
 	float radius;
 	float shrink; /* native_frame_shrink of the object's frame */
+	/* The game's true radius over the drawn one, made a power of two (8 at Mars landed): the drawn sphere is the
+	 * true one shrunk by this about the eye, so the same on screen, but the objects round it are drawn at their
+	 * true size. 0 if unknown. */
+	float ground_k;
 	float light[3];
 	float axes[9]; /* as PlanetDesc.axes, in the game camera's view */
 	int light_col, obj_col;
@@ -570,6 +575,10 @@ static void record_native(const PlanetDesc *p)
 	n->radius = p->radius;
 	exact_distance(n);
 	n->shrink = native_frame_shrink(a6);
+	{
+		double true_mm = (double)STMemory_ReadWord(obj + 270) * 4294967296.0 + (double)(uint32_t)STMemory_ReadLong(obj + 266);
+		n->ground_k = true_mm > 0 && p->radius > 0 ? (float)exp2(round(log2(true_mm / p->radius))) : 0;
+	}
 	cockpit_pass_to_view(p->light, n->light);
 	n->light_col = p->light_col;
 	n->obj_col = p->obj_col;
@@ -710,6 +719,17 @@ bool planet_native_centre(float radius, float centre[3])
 	return false;
 }
 
+bool planet_native_ground(int i, double c[3], double *r)
+{
+	if (native_mode() != 2 || i < 0 || i >= drawn_planets->n || drawn_planets->p[i].ground_k <= 0)
+		return false;
+	double k = drawn_planets->p[i].ground_k;
+	for (int j = 0; j < 3; j++)
+		c[j] = drawn_planets->p[i].pos[j] * k;
+	*r = drawn_planets->p[i].radius * k;
+	return true;
+}
+
 uint32_t planet_native_object_addr(int i)
 {
 	return drawn_planets->p[i].obj;
@@ -842,7 +862,7 @@ static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
 	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
-	GLint shadow_k, shadow_on, shadow_u, shadow_v, shadow_d, shadow_u2, shadow_v2, shadow_d2, shadow_layer, shadow_dark, shadow_bias,
+	GLint shadow_k, ground_on, ground_up, ground_p0, shadow_on, shadow_u, shadow_v, shadow_d, shadow_u2, shadow_v2, shadow_d2, shadow_u3, shadow_v3, shadow_d3, shadow_layer, shadow_dark, shadow_bias,
 		shadow, to_view, view_r;
 } us;
 static struct
@@ -883,13 +903,19 @@ static const char *FS_SPHERE =
 	"uniform vec4 uShadowU2;\n" /* the second cascade */
 	"uniform vec4 uShadowV2;\n"
 	"uniform vec4 uShadowD2;\n"
-	"uniform vec2 uShadowLayer;\n" /* each cascade's layer, negative: none */
+	"uniform vec4 uShadowU3;\n"
+	"uniform vec4 uShadowV3;\n"
+	"uniform vec4 uShadowD3;\n"
+	"uniform vec3 uShadowLayer;\n" /* each cascade's layer, negative: none */
 	"uniform float uShadowDark;\n"
-	"uniform vec2 uShadowBias;\n"
+	"uniform vec3 uShadowBias;\n"
 	"uniform sampler2DArrayShadow uShadow;\n"
 	"uniform mat3 uToView;\n"
 	"uniform float uViewR;\n"
 	"uniform float uShadowK;\n"
+	"uniform float uGroundOn;\n" /* the external view: shadows fall on a plane under the ship (draw_sphere) */
+	"uniform vec3 uGroundUp;\n"
+	"uniform vec3 uGroundP0;\n"
 	"out vec4 fragColor;\n"
 	"void main(){\n"
 	"  vec3 d = normalize(vRay);\n"
@@ -930,12 +956,23 @@ static const char *FS_SPHERE =
 	"  if (uShadowOn > 0.5 && l > 0.0) {\n"
 	"    vec3 pv = (uToView * (tt * d)) * uViewR * uShadowK;\n"
 	"    float lit = 1.0;\n"
+	"    bool onground = true;\n"
+	"    if (uGroundOn > 0.5) {\n"
+	"      vec3 gd = normalize(pv);\n"
+	"      float den = dot(gd, uGroundUp);\n"
+	"      float gt = dot(uGroundP0, uGroundUp) / den;\n"
+	"      onground = den < -0.003 && gt > 0.0;\n"
+	"      pv = gd * gt;\n"
+	"    }\n"
 	"    vec3 s = vec3(dot(uShadowU.xyz, pv) + uShadowU.w, dot(uShadowV.xyz, pv) + uShadowV.w, dot(uShadowD.xyz, pv) + uShadowD.w);\n"
-	"    if (uShadowLayer.x >= 0.0 && s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
+	"    if (onground && uShadowLayer.x >= 0.0 && s.x >= 0.0 && s.x <= 1.0 && s.y >= 0.0 && s.y <= 1.0)\n"
 	"      lit = shadowLit(uShadow, s.xy, uShadowLayer.x, min(s.z, 1.0) - uShadowBias.x);\n"
 	"    vec3 s2 = vec3(dot(uShadowU2.xyz, pv) + uShadowU2.w, dot(uShadowV2.xyz, pv) + uShadowV2.w, dot(uShadowD2.xyz, pv) + uShadowD2.w);\n"
-	"    if (uShadowLayer.y >= 0.0 && s2.x >= 0.0 && s2.x <= 1.0 && s2.y >= 0.0 && s2.y <= 1.0)\n"
+	"    if (onground && uShadowLayer.y >= 0.0 && s2.x >= 0.0 && s2.x <= 1.0 && s2.y >= 0.0 && s2.y <= 1.0)\n"
 	"      lit = min(lit, shadowLit(uShadow, s2.xy, uShadowLayer.y, min(s2.z, 1.0) - uShadowBias.y));\n"
+	"    vec3 s3 = vec3(dot(uShadowU3.xyz, pv) + uShadowU3.w, dot(uShadowV3.xyz, pv) + uShadowV3.w, dot(uShadowD3.xyz, pv) + uShadowD3.w);\n"
+	"    if (onground && uShadowLayer.z >= 0.0 && s3.x >= 0.0 && s3.x <= 1.0 && s3.y >= 0.0 && s3.y <= 1.0)\n"
+	"      lit = min(lit, shadowLit(uShadow, s3.xy, uShadowLayer.z, min(s3.z, 1.0) - uShadowBias.z));\n"
 	"    sh = mix(uShadowDark, 1.0, lit);\n"
 	"  }\n"
 	"  if (uTextured != 0) {\n"
@@ -1002,6 +1039,9 @@ void gl_planet_init(void)
 	us.shadow_u2 = glGetUniformLocation(sphere_prog, "uShadowU2");
 	us.shadow_v2 = glGetUniformLocation(sphere_prog, "uShadowV2");
 	us.shadow_d2 = glGetUniformLocation(sphere_prog, "uShadowD2");
+	us.shadow_u3 = glGetUniformLocation(sphere_prog, "uShadowU3");
+	us.shadow_v3 = glGetUniformLocation(sphere_prog, "uShadowV3");
+	us.shadow_d3 = glGetUniformLocation(sphere_prog, "uShadowD3");
 	us.shadow_layer = glGetUniformLocation(sphere_prog, "uShadowLayer");
 	us.shadow_dark = glGetUniformLocation(sphere_prog, "uShadowDark");
 	us.shadow_bias = glGetUniformLocation(sphere_prog, "uShadowBias");
@@ -1009,6 +1049,9 @@ void gl_planet_init(void)
 	us.to_view = glGetUniformLocation(sphere_prog, "uToView");
 	us.view_r = glGetUniformLocation(sphere_prog, "uViewR");
 	us.shadow_k = glGetUniformLocation(sphere_prog, "uShadowK");
+	us.ground_on = glGetUniformLocation(sphere_prog, "uGroundOn");
+	us.ground_up = glGetUniformLocation(sphere_prog, "uGroundUp");
+	us.ground_p0 = glGetUniformLocation(sphere_prog, "uGroundP0");
 
 	static const float quad[4][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
 	glGenVertexArrays(1, &quad_vao);
@@ -1043,6 +1086,8 @@ typedef struct
 	float flat;
 	float to_view[9]; /* eye space -> view space (the head's turn undone), column major */
 	float view_r;     /* view units to the unit the sphere is drawn in */
+	float ground_up[3], ground_p0[3]; /* external view: the ground under the ship (a plane, view space), ground_on */
+	bool ground_on;
 	float shadow_k;   /* the ground the ships' shadows fall on is this many times as far below the eye as the sphere's */
 	GLuint surface;   /* 0: plain */
 	float to_local[9];
@@ -1064,12 +1109,14 @@ static void planet_sphere_pass(const void *data)
 	glUniform1i(us.textured, p->surface != 0);
 	/* the ships' shadows, near the ground */
 	static const float no_map[12];
-	const float *sm = gl_shadow_matrix(0), *sm2 = gl_shadow_matrix(1);
+	const float *sm = gl_shadow_matrix(0), *sm2 = gl_shadow_matrix(1), *sm3 = gl_shadow_matrix(2);
 	GLuint stex = gl_shadow_texture();
 	if (!sm)
 		sm = no_map;
 	if (!sm2)
 		sm2 = no_map;
+	if (!sm3)
+		sm3 = no_map;
 	glUniform1f(us.shadow_on, stex ? 1.0f : 0.0f);
 	if (stex)
 	{
@@ -1083,12 +1130,19 @@ static void planet_sphere_pass(const void *data)
 		glUniform4fv(us.shadow_u2, 1, sm2);
 		glUniform4fv(us.shadow_v2, 1, sm2 + 4);
 		glUniform4fv(us.shadow_d2, 1, sm2 + 8);
-		glUniform2f(us.shadow_layer, (float)gl_shadow_all_layer(0), (float)gl_shadow_all_layer(1));
+		glUniform4fv(us.shadow_u3, 1, sm3);
+		glUniform4fv(us.shadow_v3, 1, sm3 + 4);
+		glUniform4fv(us.shadow_d3, 1, sm3 + 8);
+		glUniform3f(us.shadow_layer, (float)gl_shadow_all_layer(0), (float)gl_shadow_all_layer(1),
+					(float)gl_shadow_all_layer(2));
 		glUniform1f(us.shadow_dark, gl_shadow_dark());
-		glUniform2f(us.shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1));
+		glUniform3f(us.shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1), gl_shadow_bias(2));
 		glUniformMatrix3fv(us.to_view, 1, GL_FALSE, p->to_view);
 		glUniform1f(us.view_r, p->view_r);
 		glUniform1f(us.shadow_k, p->shadow_k);
+		glUniform1f(us.ground_on, p->ground_on ? 1.0f : 0.0f);
+		glUniform3fv(us.ground_up, 1, p->ground_up);
+		glUniform3fv(us.ground_p0, 1, p->ground_p0);
 	}
 	if (p->surface)
 	{
@@ -1175,6 +1229,19 @@ static void draw_list(const PlanetDesc *p)
 			return;
 		}
 	}
+}
+
+/* Where the player's ship is this frame (GL view space), set by gl_native.cpp for the shadows in the external view */
+static bool ground_ship_ok;
+static double ground_ship[3];
+static double ground_ship_shrink = 1;
+void planet_set_ground_ship(bool ok, const float pos[3], float shrink)
+{
+	ground_ship_ok = ok;
+	if (ok)
+		for (int k = 0; k < 3; k++)
+			ground_ship[k] = pos[k];
+	ground_ship_shrink = shrink > 0 ? shrink : 1;
 }
 
 /* A planet as the sphere pass draws it */
@@ -1286,6 +1353,31 @@ static void draw_sphere(const SphereIn *in)
 		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692);
 		if (alt > h)
 			pass->shadow_k = (float)(alt / h < 200 ? alt / h : 200);
+	}
+
+	/* The external view and the free camera: the eye is not the ship's, so the ground is the plane under the ship
+	 * (radial up at the ship, its altitude down), the shadows are cast on that. The game's planet position is
+	 * only good to 1/1024, so the plane is trusted only where the ship's distance agrees with radius + altitude. */
+	pass->ground_on = false;
+	if (flat > 1 && ground_ship_ok && (STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL || freecam_active()))
+	{
+		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692) / ground_ship_shrink;
+		double rel[3] = {ground_ship[0] - in->pos[0], ground_ship[1] - in->pos[1], ground_ship[2] - in->pos[2]};
+		double d = sqrt(rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]);
+		static int gn;
+		if (getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2 && gn++ % 20 == 0)
+			log_printf("ground plane: alt %.0f ship-centre %.0f radius+alt %.0f off %.0f tol %.0f ship %.0f %.0f %.0f\n", alt, d,
+					   (double)in->radius + alt, d - ((double)in->radius + alt), dist / 64, ground_ship[0], ground_ship[1],
+					   ground_ship[2]);
+		if (alt >= 0 && d > 0 && fabs(d - ((double)in->radius + alt)) < dist / 64)
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				pass->ground_up[k] = (float)(rel[k] / d);
+				pass->ground_p0[k] = (float)(ground_ship[k] - alt * rel[k] / d);
+			}
+			pass->ground_on = true;
+		}
 	}
 
 	memcpy(pass->light, light, sizeof(pass->light));

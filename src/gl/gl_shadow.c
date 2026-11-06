@@ -227,7 +227,8 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 		matrix[row * 4 + 3] = (margin - lo[row]) * scale[row];
 	}
 	/* a depth a hundredth of the ships' size apart is the same surface */
-	cs->bias = 0.01f * R / span;
+	/* (the scenery cascade is fitted tight, a hundredth of its box would be a gap at the foot of a hangar) */
+	cs->bias = (cascade == 2 ? 0.001f : 0.01f) * R / span;
 	{
 		static int dbg = -1, fr;
 		if (dbg < 0)
@@ -267,6 +268,17 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 	pd->cascade = cascade;
 	cs->have = true;
 	return true;
+}
+
+void gl_shadow_again(void)
+{
+	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
+		if (cas[c].have)
+		{
+			PassData *pd = gd_custom(shadow_pass, sizeof(PassData));
+			if (pd)
+				pd->cascade = c;
+		}
 }
 
 void gl_shadow_clear(void)

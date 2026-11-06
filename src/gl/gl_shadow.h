@@ -12,7 +12,7 @@
  * ship is darkened.
  *
  * The matrix turns a view space point into the map's coordinates: u, v in
- * 0..1 across the map, d the depth along the light in 0..1. The map is a texture array (see gl_shadow_layer), 2 * (1 + GL_SHADOW_CASTER_LAYERS) layers.
+ * 0..1 across the map, d the depth along the light in 0..1. The map is a texture array (see gl_shadow_layer), GL_SHADOW_CASCADES * (1 + GL_SHADOW_CASTER_LAYERS) layers.
  */
 #ifndef GL_SHADOW_H
 #define GL_SHADOW_H
@@ -49,9 +49,9 @@ bool gl_shadow_wanted(void);
  * receive shadows from the others */
 #define GL_SHADOW_CASTER_LAYERS 5
 /* The maps (cascades): a map fitted round all the casters would be as wide as the farthest of them, so the small
- * ones (a Cobra beside a cruiser) would be a texel or two. Cascade 0 has the small ships, 1 the big ones, each
- * fitted to its own; whatever receives looks both up and is as dark as the darker says. */
-#define GL_SHADOW_CASCADES 2
+ * ones (a Cobra beside a cruiser) would be a texel or two. Cascade 0 has the small ships, 1 the big ones and stations, 2 the scenery near the eye
+ * (hangars, mountains: a station-wide map made their shadows mush), each fitted to its own; whatever receives looks both up and is as dark as the darker says. */
+#define GL_SHADOW_CASCADES 3
 
 /* Render thread, while the frame's draw list is being made, before anything
  * that receives the shadows: `tris` is 9 floats per triangle (view space),
@@ -67,6 +67,8 @@ int gl_shadow_layer(int cascade, int caster);
 int gl_shadow_all_layer(int cascade);
 /* No map this frame (the draw list has no pass) */
 void gl_shadow_clear(void);
+/* the maps made for this game frame drawn again for another picture of it (same casters, same light) */
+void gl_shadow_again(void);
 
 /* The map of this frame, if any: the 3x4 matrix (rows u, v, d), its texture,
  * and how much of the colour stays in shadow */

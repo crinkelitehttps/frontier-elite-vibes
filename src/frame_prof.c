@@ -99,12 +99,15 @@ static double cpu_last;
 /* other threads, µs */
 static SDL_atomic_t audio_us, render_us, swap_us, acquire_us, pictures;
 static SDL_atomic_t vr_wait_us, vr_eyes_us, vr_end_us, vr_gpu_us, vr_gpu_n, vr_n;
+static SDL_atomic_t nat_us, nat_max_us, nat_ran, nat_reused;
 
 /* summary interval */
 static unsigned long frame_no, sum_frames, over_slow;
 static double sum_frame_ms, max_frame_ms, sum_group[G_COUNT], sum_emu, sum_drawscreen, sum_part[PS_COUNT], sum_audio, sum_render, sum_swap;
 static unsigned long sum_pics, sum_vr, sum_vr_gpu_n;
 static double sum_vr_wait, sum_vr_eyes, sum_vr_end, sum_vr_gpu;
+static double sum_nat, max_nat;
+static unsigned long sum_nat_ran, sum_nat_reused;
 static uint64_t sum_start;
 static double slow_ms = 40.0;
 static FILE *csv;
@@ -128,7 +131,7 @@ void prof_init(void)
 		fprintf(csv, ",drawscreen_ms");
 		for (int p = 0; p < PS_COUNT; p++)
 			fprintf(csv, ",%s_ms", part_name[p]);
-		fprintf(csv, ",audio_ms,render_ms,swap_ms,acquire_ms,pictures,cpu_ms,hostupd_calls,idle_calls,vr_pictures,vr_wait_ms,vr_eyes_cpu_ms,vr_end_ms,vr_gpu_ms,vr_gpu_n\n");
+		fprintf(csv, ",audio_ms,render_ms,swap_ms,acquire_ms,pictures,cpu_ms,hostupd_calls,idle_calls,vr_pictures,vr_wait_ms,vr_eyes_cpu_ms,vr_end_ms,vr_gpu_ms,vr_gpu_n,native_ms,native_max_ms,native_ran,native_reused\n");
 	}
 	log_printf("Frame profile on: frameprof.csv%s, slow frames over %.0f ms\n", csv ? "" : " (cannot open)", slow_ms);
 	prof_on = true;
@@ -222,6 +225,16 @@ void prof_vr_gpu(unsigned ns)
 	SDL_AtomicAdd(&vr_gpu_n, 1);
 }
 
+void prof_native_add(uint64_t t0, int ran, int reused)
+{
+	int us = (int)((SDL_GetPerformanceCounter() - t0) * 1000000 / freq);
+	SDL_AtomicAdd(&nat_us, us);
+	for (int m = SDL_AtomicGet(&nat_max_us); us > m && !SDL_AtomicCAS(&nat_max_us, m, us); m = SDL_AtomicGet(&nat_max_us))
+		;
+	SDL_AtomicAdd(&nat_ran, ran);
+	SDL_AtomicAdd(&nat_reused, reused);
+}
+
 void prof_render_add(uint64_t t0, uint64_t swap0, uint64_t swap1)
 {
 	SDL_AtomicAdd(&render_us, (int)((SDL_GetPerformanceCounter() - t0) * 1000000 / freq));
@@ -251,6 +264,9 @@ static void summary(uint64_t now)
 	if (sum_vr)
 		log_printf("PROF headset %.1f pictures/s, per picture: xrWaitFrame %.2f ms, eyes drawn (CPU) %.2f, xrEndFrame %.2f, eyes on the GPU %.2f (%lu measured)\n", sum_vr / secs,
 				   sum_vr_wait / sum_vr, sum_vr_eyes / sum_vr, sum_vr_end / sum_vr, sum_vr_gpu_n ? sum_vr_gpu / sum_vr_gpu_n : 0.0, sum_vr_gpu_n);
+	if (sum_nat > 0)
+		log_printf("PROF native models %.2f ms/frame, worst picture %.2f ms; per frame %.1f objects ran, %.1f reused\n", sum_nat / n, max_nat,
+				   sum_nat_ran / n, sum_nat_reused / n);
 	/* every host call made: calls per frame, and its ms per frame */
 	put("PROF calls/frame:");
 	for (int i = 0; i < 256; i++)
@@ -274,6 +290,8 @@ static void summary(uint64_t now)
 	memset(top_count, 0, sizeof top_count);
 	sum_frames = over_slow = sum_pics = sum_vr = sum_vr_gpu_n = 0;
 	sum_vr_wait = sum_vr_eyes = sum_vr_end = sum_vr_gpu = 0;
+	sum_nat = max_nat = 0;
+	sum_nat_ran = sum_nat_reused = 0;
 	sum_frame_ms = max_frame_ms = sum_emu = sum_drawscreen = sum_audio = sum_render = sum_swap = 0;
 	memset(sum_group, 0, sizeof sum_group);
 	memset(sum_part, 0, sizeof sum_part);
@@ -311,6 +329,8 @@ void prof_frame_end(int mode)
 	int vrn = SDL_AtomicSet(&vr_n, 0), vrgn = SDL_AtomicSet(&vr_gpu_n, 0);
 	double vrw = SDL_AtomicSet(&vr_wait_us, 0) / 1000.0, vre = SDL_AtomicSet(&vr_eyes_us, 0) / 1000.0;
 	double vrd = SDL_AtomicSet(&vr_end_us, 0) / 1000.0, vrg = SDL_AtomicSet(&vr_gpu_us, 0) / 1000.0;
+	double nat = SDL_AtomicSet(&nat_us, 0) / 1000.0, natmax = SDL_AtomicSet(&nat_max_us, 0) / 1000.0;
+	int natran = SDL_AtomicSet(&nat_ran, 0), natre = SDL_AtomicSet(&nat_reused, 0);
 
 	frame_no++;
 	if (csv)
@@ -322,8 +342,8 @@ void prof_frame_end(int mode)
 		for (int p = 0; p < PS_COUNT; p++)
 			fprintf(csv, ",%.3f", part[p]);
 		double cpu_now = thread_cpu_ms();
-		fprintf(csv, ",%.3f,%.3f,%.3f,%.3f,%d,%.3f,%u,%u,%d,%.3f,%.3f,%.3f,%.3f,%d\n", audio, render, swap, acq, pics, cpu_now - cpu_last,
-				call_count[0x07], call_count[0x1f], vrn, vrw, vre, vrd, vrg, vrgn);
+		fprintf(csv, ",%.3f,%.3f,%.3f,%.3f,%d,%.3f,%u,%u,%d,%.3f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%d,%d\n", audio, render, swap, acq, pics,
+				cpu_now - cpu_last, call_count[0x07], call_count[0x1f], vrn, vrw, vre, vrd, vrg, vrgn, nat, natmax, natran, natre);
 		cpu_last = cpu_now;
 		if (frame_no % 50 == 0)
 			fflush(csv);
@@ -349,6 +369,11 @@ void prof_frame_end(int mode)
 	sum_vr_eyes += vre;
 	sum_vr_end += vrd;
 	sum_vr_gpu += vrg;
+	sum_nat += nat;
+	if (natmax > max_nat)
+		max_nat = natmax;
+	sum_nat_ran += (unsigned long)natran;
+	sum_nat_reused += (unsigned long)natre;
 
 	/* a frame past the limit says where it went (idle sleeping is not slowness) */
 	if (frame_ms - group[G_IDLE] > slow_ms)

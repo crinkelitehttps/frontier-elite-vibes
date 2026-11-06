@@ -33,6 +33,7 @@
 #include "renderer.h"
 #include "settings.h"
 #include "scenery.h"
+#include "rt_clock.h"
 #include "time_guard.h"
 #include "touch_input.h"
 #include "vr.h"
@@ -71,6 +72,8 @@ typedef struct
 	int manual_book;
 	int orbit_assist;
 	int exact_step;
+	int realtime_clock;
+	int show_fps;
 	int smoke_inherit;
 	int smoke_cap;
 	int mine_prox;
@@ -124,6 +127,8 @@ static const struct
 	{"manual_book", offsetof(Settings, manual_book)},
 	{"orbit_assist", offsetof(Settings, orbit_assist)},
 	{"exact_step", offsetof(Settings, exact_step)},
+	{"realtime_clock", offsetof(Settings, realtime_clock)},
+	{"show_fps", offsetof(Settings, show_fps)},
 	{"smoke_inherit", offsetof(Settings, smoke_inherit)},
 	{"smoke_cap", offsetof(Settings, smoke_cap)},
 	{"mine_prox", offsetof(Settings, mine_prox)},
@@ -247,6 +252,8 @@ static Settings current(void)
 	s.manual_book = manual_book;
 	s.orbit_assist = orbit_assist;
 	s.exact_step = exact_step;
+	s.realtime_clock = realtime_clock;
+	s.show_fps = show_fps;
 	s.smoke_inherit = smoke_inherit;
 	s.smoke_cap = smoke_cap_ms;
 	s.mine_prox = mine_prox;
@@ -313,6 +320,8 @@ static void apply(const Settings *s)
 		vr_near_cm = s->vr_near;
 	orbit_assist = s->orbit_assist != 0;
 	exact_step = s->exact_step != 0;
+	realtime_clock = s->realtime_clock != 0;
+	show_fps = s->show_fps != 0;
 	smoke_inherit = s->smoke_inherit != 0;
 	if (s->smoke_cap >= 10 && s->smoke_cap <= 2000)
 		smoke_cap_ms = s->smoke_cap;

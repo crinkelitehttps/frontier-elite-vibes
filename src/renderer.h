@@ -60,6 +60,7 @@ void Screen_UnInit(void);
 void Screen_StopRenderThread(void);
 /* Draw on a thread of its own (default where there are threads) */
 extern bool render_thread_enabled;
+extern bool show_fps; /* the picture counter, top left (gl_screen.c count_fps) */
 void Screen_ToggleFullScreen(void);
 void Screen_SetLetterboxMode(bool keep_aspect);
 bool Screen_GetLetterboxMode(void);
@@ -102,6 +103,9 @@ void Nu_ComplexStartInner(void);
 void Nu_ComplexBezier(void);
 void Nu_DrawScreen(void);
 void Screen_RefreshVr(void); /* a frame for the headset while the game draws nothing */
+/* Game thread: waits (up to max_ms) until the render thread has taken the last frame; at once
+ * when the game thread draws itself (rt_clock.c paces game frames to pictures by it) */
+void Screen_WaitFrameTaken(int max_ms);
 void Nu_PutTeardrop(void);
 void Nu_PutOval(void);
 void Nu_IsGLRenderer(void);

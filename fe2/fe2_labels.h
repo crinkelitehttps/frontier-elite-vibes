@@ -464,5 +464,9 @@
 #define FE2_Lnative_clip2                            0xaa1c2 /* Lnative_clip2 */
 #define FE2_Lnet_damage                              0xaa1e6 /* Lnet_damage */
 #define FE2_Lnet_physics                             0xaa1f6 /* Lnet_physics */
+#define FE2_Lrt_vbl                                  0xaa21a /* Lrt_vbl */
+#define FE2_Lrt_take_game                            0xaa220 /* Lrt_take_game */
+#define FE2_Lrt_take_real                            0xaa22e /* Lrt_take_real */
+#define FE2_Lrt_limit                                0xaa23c /* Lrt_limit */
 
 #endif /* FE2_LABELS_H */

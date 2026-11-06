@@ -118,6 +118,11 @@ Call_ScenNext	equ	$9c
 Call_ScenMade	equ	$9d
 Call_VirtNext	equ	$9e
 Call_ScenDrive	equ	$9f
+* Real-time game clock (src/rt_clock.c): the game's time by the host's clock, not in whole
+* 50 Hz vblanks; game frames paced to the pictures. Vblank adds, the time take, the frame limit.
+Call_RtVbl	equ	$a0
+Call_RtCredit	equ	$a1
+Call_RtPace	equ	$a2
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -23026,8 +23031,8 @@ L41b98_WaitVBlank:
 * Used to limit to 25fps
 	l41ba4:	hcall	#Call_Idle
 L41bc4_LimitFrameRate:
-		tst.w	L5eb2_vblank_waits
-		bgt.s	l41ba4
+		jmp	Lrt_limit
+		nop
 		* XXX This breaks some interface clicks (fe2 bug)
 		* It was #$2, but that limits to 25fps
 		move.w	#$1,L5eb2_vblank_waits
@@ -23221,10 +23226,16 @@ L41e2a_vblank:
 		bsr.w	L41fe8_UpdateMouse
 		bsr.w	L42114_UpdateKBnJoystick
 		
-		move.l	14482(a6),d0
-		add.l	d0,14450(a6)
-		addi.l	#$3e2,14458(a6)
-		addi.l	#$3e2,666(a6)
+		jsr	Lrt_vbl
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
+		nop
 		movem.l	(a7)+,d0-7/a0-6
 		
 		* Zero fps counter every 50 vblanks (1 second)
@@ -23726,8 +23737,8 @@ L425a4_TombstoneLoop:
 		jsr	Fn_Draw3DView
 		jsr	L41b2e_FlipScreen
 		move.l	(a7)+,d2
-		move.l	14458(a6),d4
-		sub.l	d4,14458(a6)
+		jsr	Lrt_take_real
+		nop
 		move.l	d4,14454(a6)
 		sub.l	d4,d2
 		cmp.l	#$fff551a0,d2
@@ -23808,8 +23819,8 @@ L4275e:
 L427dc_IntroLoop:
 		jsr	L385ea_Clear3DView
 		movem.l	A6_time_of_day(a6),d2-3
-		move.l	14450(a6),d4
-		sub.l	d4,14450(a6)
+		jsr	Lrt_take_game
+		nop
 		move.l	d4,14446(a6)
 		moveq	#0,d5
 		add.l	d4,d2
@@ -23880,8 +23891,8 @@ L428c6_GameLoop:
 		beq.s	l428d4
 		movem.l	A6_time_of_day(a6),d2-3
 		move.l	d3,d6
-		move.l	14450(a6),d4
-		sub.l	d4,14450(a6)
+		jsr	Lrt_take_game
+		nop
 		move.l	d4,14446(a6)
 		moveq	#0,d5
 		add.l	d4,d2
@@ -23911,8 +23922,8 @@ L428c6_GameLoop:
 		jsr	L458b4
 	l42946:	moveq	#15,d0
 		jsr	L458b4
-	l4294e:	move.l	14458(a6),d4
-		sub.l	d4,14458(a6)
+	l4294e:	jsr	Lrt_take_real
+		nop
 		move.l	d4,14454(a6)
 		movem.l	A6_time_of_day(a6),d2-3
 		movea.l	A6_big_space(a6),a4
@@ -68661,4 +68672,46 @@ Lscen_cap:
 		move.w	596(a6),d1
 		cmp.w	d0,d1
 		movem.l	(a7)+,d0-1
+		rts
+
+******************************************************************************
+* Real-time game clock (src/rt_clock.c, glfrontier.cfg realtime_clock).
+* The vblank handler added the time step (game time 14482(a6), real time $3e2)
+* to the accumulators 14450(a6), 14458(a6) and 666(a6) once per 20 ms, so the
+* game moved in whole vblanks: 0, 1 or 2 steps a picture, choppy motion.
+* Lrt_vbl replaces the 24 bytes of adds in L41e2a_vblank (jsr + 9 nops): the
+* host does them there only with the clock off. Lrt_take_game / Lrt_take_real
+* replace each "move.l acc(a6),d4; sub.l d4,acc(a6)" (jsr + nop): the host
+* first credits the time since the last take (Call_RtCredit). Lrt_limit
+* replaces the start of L41bc4_LimitFrameRate (jmp + nop, the rest is dead):
+* with the clock on the host paces the frame (Call_RtPace) and clears the
+* vblank wait, else the old wait for a vblank.
+******************************************************************************
+Lrt_vbl:
+		hcall	#Call_RtVbl
+		rts
+
+Lrt_take_game:
+		hcall	#Call_RtCredit
+		move.l	14450(a6),d4
+		sub.l	d4,14450(a6)
+		rts
+
+Lrt_take_real:
+		hcall	#Call_RtCredit
+		move.l	14458(a6),d4
+		sub.l	d4,14458(a6)
+		rts
+
+* (a pending vblank is only taken at a taken conditional branch: the loop
+* goes back by the bgt, as the original's did)
+Lrt_limit:
+		hcall	#Call_RtPace
+		bra.s	lrt_limit_test
+lrt_limit_idle:
+		hcall	#Call_Idle
+lrt_limit_test:
+		tst.w	L5eb2_vblank_waits
+		bgt.s	lrt_limit_idle
+		move.w	#$1,L5eb2_vblank_waits
 		rts
