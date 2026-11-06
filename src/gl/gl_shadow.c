@@ -10,10 +10,12 @@
 #include "main.h"
 
 bool ship_shadows = true;
+bool low_sun_shadows = true;
 
 #define MAP_SIZE   1024
 #define N_LAYERS   (1 + GL_SHADOW_CASTER_LAYERS) /* per cascade */
-#define DEPTH_SPAN 1000.0f /* the map's depth reaches this many radii of the ships along the light */
+/* the map's depth reaches this many radii of the ships along the light (low_sun_shadows off: the old 200) */
+#define DEPTH_SPAN (low_sun_shadows ? 1000.0f : 200.0f)
 #define DARK       0.5f   /* the colour left in shadow */
 
 static GLuint tex, fbo, prog, vao, vbo;

@@ -17,7 +17,7 @@ sub-model call (op `$1b`; it was named `ProjectCloudShadowPos` by mistake, now `
 When the shadow sub-model (206) is placed from a field, its origin moves to where the ray from the cloud's vertex,
 along the light vector (`o.light`, the game's lighting vector in view space, pointing away from the light), meets the
 field's ground plane (the field's own y axis is up): `shift = d - (d.up / light.up) light`, d = cloud - shadow vertex.
-Sun overhead: no shift, as before. Sun lower than about 3.4 degrees (sin < 0.06; was 7 degrees), or below the horizon: no shadow.
+Sun overhead: no shift, as before. Sun lower than about 3.4 degrees (sin < 0.06; 7 degrees, sin < 0.12, with the cog menu's "Shadows at low sun" off, `low_sun_shadows=0`), or below the horizon: no shadow.
 The shadow stays a flat polygon at the field's plane (hills and buildings do not receive it) and keeps the cloud's
 outline (no stretching along the light).
 

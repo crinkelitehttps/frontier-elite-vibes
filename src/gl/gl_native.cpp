@@ -2288,7 +2288,7 @@ struct Runner
 		}
 		if (rec)
 			rec->light = true;
-		if (-lu < 0.06f) /* below about 3.4 degrees: no shadow */
+		if (-lu < (low_sun_shadows ? 0.06f : 0.12f)) /* below about 3.4 (or 7) degrees: no shadow */
 			return false;
 		for (int j = 0; j < 3; j++)
 			at[j] += d[j] - du / lu * light[j];

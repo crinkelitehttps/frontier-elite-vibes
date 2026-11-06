@@ -257,6 +257,7 @@ void page_settings()
 	ImGui::SliderInt("##detailboost", &native_detail_boost, 0, 8, boost_fmt);
 	wrapped_checkbox("Cloud shadows fall away from the sun (native scene)", &native_cloud_shadows);
 	wrapped_checkbox("Ship shadows on the ground and stations (native scene)", &ship_shadows);
+	wrapped_checkbox("Shadows at low sun (clouds down to 3.4 degrees, was 7; ship shadows reach farther along the light)", &low_sun_shadows);
 
 	ui_heading("HUD");
 	wrapped_checkbox("Own crosshair and velocity markers (exact, with retrograde)", &own_hud);

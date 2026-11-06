@@ -9,7 +9,7 @@ casters chosen in `gl_native.cpp` (`setup_shadows`).
 1. `prepare()` (once per frame, first thing in `native_draw_sky`) collects the triangles of every ship in view
    (objects of the game's model table with model number 10-41, not shrunk) and hands them with the light vector
    (`Object.light`, view space, away from the light) to `gl_shadow_set`.
-2. That builds an orthographic light view round the ships (1024x1024 depth texture, 24 bit, depth reaching 1000 radii (was 200) of
+2. That builds an orthographic light view round the ships (1024x1024 depth texture, 24 bit, depth reaching 1000 radii (200 with the cog menu's "Shadows at low sun" off, `low_sun_shadows=0`) of
    the ships along the light) and records a custom command, the first of the frame's draw list, that renders the
    triangles depth only into an FBO, restoring the framebuffer, viewport and enables after.
 3. The scene's objects are drawn with `gd_set_shadow(matrix)` set, except the ships themselves. `gd_tri` etc. then

@@ -28,6 +28,8 @@ extern "C"
 #endif
 
 extern bool ship_shadows; /* the setting */
+/* Shadows down to a lower sun: clouds to 3.4 degrees (off: 7), ship map depth 1000 radii (off: 200) */
+extern bool low_sun_shadows;
 
 /* Whether the experiment is on (setting or GLF_SHIP_SHADOWS) */
 bool gl_shadow_wanted(void);
