@@ -2862,7 +2862,10 @@ struct Cached
 		int first = 0, count = 0; /* vertices in mesh */
 		P3 lo, hi;                /* the box round them */
 		std::vector<uint16_t> faces; /* the faces they belong to */
+		int ground = 0, roof = 0;    /* triangles flat at the model's ground level / flat above it (GLF_SHADOW_FLAT) */
 	};
+	int ground_axis = -1; /* the axis and level of the flat plane with the most triangles (GLF_SHADOW_FLAT) */
+	float ground_level = 0;
 	GdMesh *mesh = nullptr;
 	std::vector<GNode> gn;
 	bool meshed = false; /* gn, mesh made for this run */
@@ -2909,6 +2912,7 @@ void build_mesh(Cached &e)
 		Cached::GNode &g = e.gn[ni];
 		g.gpu = false;
 		g.first = g.count = 0;
+		g.ground = g.roof = 0;
 		g.faces.clear();
 		if (s.under || s.planet || s.tris.empty())
 			continue;
@@ -2963,6 +2967,77 @@ void build_mesh(Cached &e)
 	{
 		e.gn.clear();
 		return;
+	}
+	/* GLF_SHADOW_FLAT=1: how many triangles lie flat on the ground (roads, lakes), which could cast no
+	 * shadow anyone sees. The ground is the flat level (any axis) with the most triangles. */
+	static const bool flat_on = getenv("GLF_SHADOW_FLAT") && atoi(getenv("GLF_SHADOW_FLAT")) != 0;
+	e.ground_axis = -1;
+	if (flat_on)
+	{
+		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
+		for (const Cached::GNode &g : e.gn)
+			if (g.gpu)
+				for (int k = 0; k < 3; k++)
+				{
+					lo[k] = std::min(lo[k], g.lo[k]);
+					hi[k] = std::max(hi[k], g.hi[k]);
+				}
+		float tol[3];
+		for (int k = 0; k < 3; k++)
+			tol[k] = std::max(1e-4f * (hi[k] - lo[k]), 1e-3f);
+		auto flat = [&](const Tri &t, int k) {
+			return std::fabs(t.p[0][k] - t.p[1][k]) <= tol[k] && std::fabs(t.p[0][k] - t.p[2][k]) <= tol[k];
+		};
+		/* up: the thinnest axis (a town is wide and low); a face level across it at the busiest level is ground,
+		 * at another level a roof (a face flat along another axis is a wall) */
+		int up = 0;
+		for (int k = 1; k < 3; k++)
+			if (hi[k] - lo[k] < hi[up] - lo[up])
+				up = k;
+		const float near_ground = std::max(2e-3f * (hi[up] - lo[up]), 4 * tol[up]);
+		std::unordered_map<int64_t, int> levels;
+		int best = 0;
+		for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
+			if (e.gn[ni].gpu)
+				for (const Tri &t : e.d.nodes[ni].tris)
+					if (flat(t, up))
+					{
+						int64_t b = (int64_t)std::llround(t.p[0][up] / near_ground);
+						int n = ++levels[b];
+						if (n > best)
+						{
+							best = n;
+							e.ground_axis = up;
+							e.ground_level = (float)b * near_ground;
+						}
+					}
+		if (e.ground_axis >= 0)
+		{
+			const int k = e.ground_axis;
+			int total = 0, ground = 0, roof = 0;
+			for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
+			{
+				Cached::GNode &g = e.gn[ni];
+				if (!g.gpu)
+					continue;
+				for (const Tri &t : e.d.nodes[ni].tris)
+					if (flat(t, k))
+					{
+						if (std::fabs(t.p[0][k] - e.ground_level) <= near_ground)
+							g.ground++;
+						else
+							g.roof++;
+					}
+				total += g.count / 3;
+				ground += g.ground;
+				roof += g.roof;
+			}
+			if (total >= 500)
+				log_printf("shadow flat: model %d mesh %d tris, ground axis %d level %.0f (range %.0f..%.0f): ground %d "
+						   "(%.0f%%), other flat %d (%.0f%%)\n",
+						   e.key.model, total, k, e.ground_level, lo[k], hi[k], ground, 100.0 * ground / total, roof,
+						   100.0 * roof / total);
+		}
 	}
 	if (!e.mesh)
 		e.mesh = gd_mesh_new();
@@ -3812,6 +3887,9 @@ void setup_shadows(bool wire)
 		float lightv[3];
 		bool made[GL_SHADOW_CASCADES] = {};
 		std::vector<int> own_layer(drawn.size(), -1);
+		/* GLF_SHADOW_FLAT=1: the GPU triangles cast this frame, those flat on the ground, flat above it */
+		long flat_mesh[GL_SHADOW_CASCADES] = {}, flat_ground[GL_SHADOW_CASCADES] = {}, flat_roof[GL_SHADOW_CASCADES] = {};
+		size_t flat_cpu[GL_SHADOW_CASCADES] = {}, flat_layers[GL_SHADOW_CASCADES] = {};
 		for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
 		{
 			std::vector<size_t> ends;
@@ -3876,6 +3954,9 @@ void setup_shadows(bool wire)
 								const GpuDraw &g = *n.g;
 								gl_shadow_add_mesh(cc, g.e->mesh, g.pose, g.bent ? &g.bend[0][0] : nullptr, caster, n.gfirst,
 												   n.gcount);
+								flat_mesh[cc] += n.gcount / 3;
+								flat_ground[cc] += g.e->gn[(size_t)n.gnode].ground;
+								flat_roof[cc] += g.e->gn[(size_t)n.gnode].roof;
 								for (int k = 0; k < 3; k++)
 								{
 									lo[k] = std::max(lo[k], -R);
@@ -3906,7 +3987,20 @@ void setup_shadows(bool wire)
 			if (!ends.empty())
 				made[cc] = gl_shadow_set(cc, light, shadow_tris.data(), shadow_tris.size() / 9, ends.data(), (int)ends.size(),
 										 shadow_fit.data(), shadow_fit.size() / 3);
+			flat_cpu[cc] = shadow_tris.size() / 9;
+			flat_layers[cc] = ends.empty() ? 0 : ends.size() + 1;
 		}
+		static const bool flat_on = getenv("GLF_SHADOW_FLAT") && atoi(getenv("GLF_SHADOW_FLAT")) != 0;
+		static int flat_frames;
+		if (flat_on && flat_frames++ % 60 == 0)
+			for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
+				if (flat_layers[cc])
+					log_printf("shadow flat: cascade %d, %zu layers: gpu %ld tris, ground %ld (%.0f%%), other flat %ld (%.0f%%); "
+							   "cpu %zu tris; drawn %ld tris per picture\n",
+							   cc, flat_layers[cc], flat_mesh[cc], flat_ground[cc],
+							   flat_mesh[cc] ? 100.0 * flat_ground[cc] / flat_mesh[cc] : 0.0, flat_roof[cc],
+							   flat_mesh[cc] ? 100.0 * flat_roof[cc] / flat_mesh[cc] : 0.0, flat_cpu[cc],
+							   (long)((flat_mesh[cc] + (long)flat_cpu[cc]) * (long)flat_layers[cc]));
 		shadow_on = made[0] || made[1] || made[2];
 		/* what each object looks up: each cascade's map with every caster, or for a caster of it the map
 		 * without itself (none at all for a caster that has no map of its own) */
