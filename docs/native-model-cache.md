@@ -25,7 +25,7 @@ with the object's pose (`Place`: view = pos + R v) while what the run decided st
 | Light direction used for placement (`msetup`, cloud shadows) | `Rec.light`: runs again when the light turns about 0.06 degrees relative to the object |
 | Which faces face the camera, their shade | worked out each frame per face (`CFace`, `face_colour`); triangles carry their face index as colour |
 | Circles, exhausts (sizes in pixels) | per frame (`CCircle`/`circle_eval`, `CTear`/`tear_eval`) |
-| Depth-sort keys | from the kept key points (`Node.kpt`, `kcam` for `$7fd`/`$7fe` keys measured from the camera) |
+| Depth-sort keys | from the kept key points (`Node.kpt`, `kcam` for `$7fd`/`$7fe` keys measured from the camera); a batch keyed on the farthest (`$1xx`) or nearest (`$3xx`) of several vertices keeps them all (`Node.kalt`) and picks again for each view (`cache_place`, `sort_nodes_view`) |
 | Random vertices (types 7/8), the camera matrix (`msetup` bit 15) | *volatile*: a sub-model that uses them is cut out and run each frame on its own (`Rec.live`); a top-level model that uses them runs every frame as before (ships' exhausts) |
 
 The ship-shadow casting runs go through the same cache, and the shadow casters are only gathered once per game
@@ -33,6 +33,11 @@ frame (`gl_shadow_again` re-queues the map pass for further pictures of the same
 
 Fixed on the way: `Runner::unplace` (parent vertices passed to sub-models) treated the game's axes as unit
 length; they are 127/128 long, so those vertices came out 1.6% short (seen on station bays' ground plates).
+
+Fixed later (2026-11-07): a `$1xx` batch's farthest vertex was chosen once, in the object's own axes, and kept.
+The Long Range Cruiser's hull (model 41, first batch) was then keyed at its near end, sorted almost last and
+painted over its panels and "FW-337" name (save Snap28, cockpit, ~9.8 km off Lave Station). Whether it showed
+depended on how the ship faced when the run was made.
 
 ## Switches and checks
 

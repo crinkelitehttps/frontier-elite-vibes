@@ -1281,6 +1281,12 @@ struct Node
 	std::array<P3, ZTREE_MAX + 1> kpt;
 	std::array<float, ZTREE_MAX + 1> kpush;
 	uint8_t kcam = 0; /* bit i: level i's point is the camera ($7fd, $7fe), not one of the model's */
+	/* A batch keyed on the farthest ($1xx) or nearest ($3xx, knear) of several vertices: all of them (view
+	 * space), the own level's point chosen again for each view (best_kpt). Which one it is depends on the
+	 * view: a cached run, made in the object's axes, would keep the wrong one (the Long Range Cruiser's hull
+	 * keyed at its near end, drawn over its panels and name) */
+	std::vector<P3> kalt;
+	bool knear = false;
 	std::array<float, ZTREE_MAX + 1> dpath; /* the keys for the view drawn */
 	int seq = 0; /* made in this order (the model's), for equal keys */
 	int depth;
@@ -1740,6 +1746,9 @@ struct Runner
 		/* the key, and its point and push (Node.kpt) */
 		float key, push = 0;
 		P3 pt = r.org;
+		/* $1xx / $3xx: every point it may be keyed on (Node.kalt) */
+		std::vector<P3> alt;
+		bool nearest = false;
 		auto at = [&](int i, P3 &q) {
 			auto p = vertex(r, fe2::s8(i));
 			q = p ? *p : r.org;
@@ -1764,12 +1773,14 @@ struct Runner
 		}
 		else if (v & 0x100)
 		{
-			bool nearest = v & 0x200;
+			nearest = v & 0x200;
 			key = at(v, pt);
+			alt.push_back(pt);
 			for (size_t i = 1; i < w.size(); i++)
 			{
 				P3 q;
 				float k = at(w[i], q);
+				alt.push_back(q);
 				if (nearest ? k < key : k > key)
 				{
 					key = k;
@@ -1780,7 +1791,12 @@ struct Runner
 		else
 			key = at(v, pt);
 		bool under = v == 0x7fe || v == 0x7fd || ((v & 0x700) == 0x700 && v != 0x7ff && w.size() > 1 && (int16_t)w[1] > 0);
-		new_node(key, under, pt, push, v == 0x7fe || v == 0x7fd);
+		Node &nn = new_node(key, under, pt, push, v == 0x7fe || v == 0x7fd);
+		if (alt.size() > 1)
+		{
+			nn.kalt = std::move(alt);
+			nn.knear = nearest;
+		}
 		batch = (int)out.nodes.size() - 1;
 	}
 
@@ -3283,6 +3299,20 @@ void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bo
 			n.kpt[(size_t)i] = p;
 			n.path[(size_t)i] = Runner::zkey(p) + s.kpush[(size_t)i];
 		}
+		/* the farthest / nearest of its points from here (Node.kalt) */
+		n.kalt.resize(s.kalt.size());
+		n.knear = s.knear;
+		for (size_t i = 0; i < s.kalt.size(); i++)
+		{
+			n.kalt[i] = pl.at(s.kalt[i]);
+			const size_t lv = (size_t)s.depth - 1;
+			float k = Runner::zkey(n.kalt[i]) + s.kpush[lv];
+			if (i == 0 || (s.knear ? k < n.path[lv] : k > n.path[lv]))
+			{
+				n.kpt[lv] = n.kalt[i];
+				n.path[lv] = k;
+			}
+		}
 		n.key = s.depth > 0 ? n.path[(size_t)(s.depth > 1 ? 0 : s.depth - 1)] : s.key;
 		if (g && e.gn[ni].gpu)
 		{
@@ -4631,18 +4661,31 @@ void sort_nodes_view(std::vector<Node> &nodes)
 {
 	mat4 mvp = gd_mvp();
 	const float *m = mvp.m, *pr = gd_projection()->m;
+	auto key_at = [&](const P3 &p, float push) {
+		float cx = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+		float cy = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+		float w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+		float x = pr[0] != 0 ? (cx + pr[8] * w - pr[12]) / pr[0] : 0;
+		float y = pr[5] != 0 ? (cy + pr[9] * w - pr[13]) / pr[5] : 0;
+		return push >= 1e30f ? push : w + (std::fabs(x) + std::fabs(y)) / 8 + push;
+	};
 	for (Node &n : nodes)
 	{
 		for (int i = 0; i < n.depth; i++)
+			n.dpath[(size_t)i] = key_at(n.kpt[(size_t)i], n.kpush[(size_t)i]);
+		/* the farthest / nearest of its points along this view (Node.kalt) */
+		if (!n.kalt.empty() && n.depth > 0)
 		{
-			const P3 &p = n.kpt[(size_t)i];
-			float cx = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
-			float cy = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
-			float w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
-			float x = pr[0] != 0 ? (cx + pr[8] * w - pr[12]) / pr[0] : 0;
-			float y = pr[5] != 0 ? (cy + pr[9] * w - pr[13]) / pr[5] : 0;
-			float push = n.kpush[(size_t)i];
-			n.dpath[(size_t)i] = push >= 1e30f ? push : w + (std::fabs(x) + std::fabs(y)) / 8 + push;
+			const size_t lv = (size_t)n.depth - 1;
+			for (const P3 &p : n.kalt)
+			{
+				float k = key_at(p, n.kpush[lv]);
+				if (n.knear ? k < n.dpath[lv] : k > n.dpath[lv])
+				{
+					n.dpath[lv] = k;
+					n.kpt[lv] = p;
+				}
+			}
 		}
 		n.dist = n.dpath[0];
 	}
