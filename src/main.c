@@ -615,21 +615,11 @@ static int watchdog_main(void *arg)
 	return 0;
 }
 
-static void sig_handler(int signum)
-{
-	if (signum == SIGSEGV)
-	{
-		log_printf("Segfault! All is lost! Abandon ship!\n");
-		Call_DumpDebug();
-		/* returning would re-run the faulting instruction forever */
-		signal(SIGSEGV, SIG_DFL);
-		raise(SIGSEGV);
-	}
-}
+void crash_log_install(void); /* crash_log.c */
 
 int main(int argc, char *argv[])
 {
-	signal(SIGSEGV, sig_handler);
+	crash_log_install(); /* crash.log: where a segfault happened */
 	srand((unsigned)time(NULL));
 	read_parameters(argc, argv);
 	log_printf("Logger started: %s\n", __TIME__);

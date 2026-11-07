@@ -29,6 +29,7 @@
 #define SCRATCH_SIZE 0x1000u
 
 int fe2vm_depth;
+uint32_t fe2vm_cur_addr; /* the routine fe2vm_call runs, for crash.log */
 
 static long ticks;
 static int failed; /* 1 error, 2 ran too long */
@@ -447,8 +448,11 @@ int fe2vm_call(uint32_t addr, fe2vm_regs *r)
 	ticks = 0;
 	failed = 0;
 	int depth = fe2vm_depth;
+	uint32_t outer = fe2vm_cur_addr;
 	fe2vm_depth = 1;
+	fe2vm_cur_addr = addr;
 	Start680x0_at((s32)addr);
+	fe2vm_cur_addr = outer;
 	fe2vm_depth = depth;
 	for (int i = 0; i < 8; i++)
 	{
