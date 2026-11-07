@@ -185,8 +185,9 @@ void laser_update(bool cockpit)
 	}
 	if (!hands[current].active && hands[!current].active)
 		current = !current;
-	/* the emulator menu's screen: the beam is its pointer, the trigger its button */
-	for (int i = 0; i < 2; i++)
+	/* the emulator menu's screen: the beam is its pointer, the trigger its
+	 * button (hands that touch set it in hands_update) */
+	for (int i = 0; !vr_hands && i < 2; i++)
 		cockpit_menu_pointer(i, beams[i].on && on_host[i] && host_id[i] == COCKPIT_HOST_MENU, host_u[i], host_v[i],
 							 trigger_on[i]);
 
