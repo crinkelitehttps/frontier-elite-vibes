@@ -2500,6 +2500,7 @@ struct Runner
 		}
 		std::vector<float> zp = zpath;
 		std::vector<P3> zq = zpt;
+		const Run called = c; /* run changes its Run (temporaries, axes): Rec.live replays the call as made */
 		run(c, depth + 1);
 		if (!vol || was)
 			return;
@@ -2523,8 +2524,8 @@ struct Runner
 			batch = -1; /* its own batch, made again with it */
 		shadow_node = sh0;
 		/* the temporaries it is given stay as they were */
-		rec->tread |= (uint8_t)(c.tsrc[0] | c.tsrc[1] | c.tsrc[2]);
-		rec->live.push_back({c, depth + 1, b0, sh0, zq});
+		rec->tread |= (uint8_t)(called.tsrc[0] | called.tsrc[1] | called.tsrc[2]);
+		rec->live.push_back({called, depth + 1, b0, sh0, zq});
 	}
 
 	/* vtext (L3c676_ProjectVectorText): the string the game formatted for
@@ -2864,6 +2865,8 @@ struct Cached
 	};
 	GdMesh *mesh = nullptr;
 	std::vector<GNode> gn;
+	bool meshed = false; /* gn, mesh made for this run */
+	uint32_t ran = 0;    /* cache_tick when it ran */
 };
 std::unordered_map<uint64_t, Cached> cache;
 
@@ -2892,12 +2895,21 @@ bool gpu_on()
 void build_mesh(Cached &e)
 {
 	static std::vector<float> v;
-	v.clear();
-	e.gn.assign(e.d.nodes.size(), Cached::GNode());
+	/* the node each face was last listed for (GNode.faces once each, no sort) */
+	static std::vector<uint32_t> listed;
+	static uint32_t stamp;
+	e.meshed = true;
+	e.gn.resize(e.d.nodes.size());
+	listed.resize(std::max(listed.size(), e.rec.faces.size()), 0);
+	/* which nodes go, and how many vertices: v is filled in place */
+	size_t nv = 0;
 	for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
 	{
 		const Node &s = e.d.nodes[ni];
 		Cached::GNode &g = e.gn[ni];
+		g.gpu = false;
+		g.first = g.count = 0;
+		g.faces.clear();
 		if (s.under || s.planet || s.tris.empty())
 			continue;
 		bool shadows = false;
@@ -2906,25 +2918,46 @@ void build_mesh(Cached &e)
 		if (shadows)
 			continue;
 		g.gpu = true;
-		g.first = (int)(v.size() / 4);
-		g.lo = {1e30f, 1e30f, 1e30f};
-		g.hi = {-1e30f, -1e30f, -1e30f};
-		for (const Tri &t : s.tris)
+		g.first = (int)nv;
+		g.count = (int)(3 * s.tris.size());
+		nv += 3 * s.tris.size();
+	}
+	v.resize(4 * nv);
+	float *out = v.data();
+	for (size_t ni = 0; ni < e.d.nodes.size(); ni++)
+	{
+		Cached::GNode &g = e.gn[ni];
+		if (!g.gpu)
+			continue;
+		if (++stamp == 0)
 		{
-			g.faces.push_back(t.colour);
+			std::fill(listed.begin(), listed.end(), 0);
+			stamp = 1;
+		}
+		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
+		for (const Tri &t : e.d.nodes[ni].tris)
+		{
+			if (listed[t.colour] != stamp)
+			{
+				listed[t.colour] = stamp;
+				g.faces.push_back(t.colour);
+			}
 			for (const P3 &p : t.p)
 			{
-				v.insert(v.end(), {p[0], p[1], p[2], (float)t.colour});
+				out[0] = p[0];
+				out[1] = p[1];
+				out[2] = p[2];
+				out[3] = (float)t.colour;
+				out += 4;
 				for (int k = 0; k < 3; k++)
 				{
-					g.lo[k] = std::min(g.lo[k], p[k]);
-					g.hi[k] = std::max(g.hi[k], p[k]);
+					lo[k] = std::min(lo[k], p[k]);
+					hi[k] = std::max(hi[k], p[k]);
 				}
 			}
 		}
-		std::sort(g.faces.begin(), g.faces.end());
-		g.faces.erase(std::unique(g.faces.begin(), g.faces.end()), g.faces.end());
-		g.count = (int)(v.size() / 4) - g.first;
+		g.lo = lo;
+		g.hi = hi;
 	}
 	if (v.empty())
 	{
@@ -3017,7 +3050,9 @@ bool cache_inputs_same(const Object &o, const Cached &e)
 	return true;
 }
 
-bool cache_holds(const Object &o, const Place &pl, const Cached &e)
+/* view false: only the light, not the tests on the view (distances, faces turned to the camera, sizes on the
+ * screen, shades) */
+bool cache_holds(const Object &o, const Place &pl, const Cached &e, bool view = true)
 {
 	if (e.rec.light)
 	{
@@ -3027,6 +3062,8 @@ bool cache_holds(const Object &o, const Place &pl, const Cached &e)
 		if (dot(d, d) > 1e-6f)
 			return false;
 	}
+	if (!view)
+		return true;
 	for (const Rec::Dist &g : e.rec.dist)
 	{
 		P3 p = pl.at(g.at);
@@ -3075,8 +3112,12 @@ void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bo
 	d.nodes.resize(e.d.nodes.size());
 	static std::vector<int> fc;
 	fc.resize(e.rec.faces.size());
-	for (size_t i = 0; i < fc.size(); i++)
-		fc[i] = face_colour(o, pl, e.rec.faces[i]);
+	/* a shadow caster's faces are all drawn (casting runs don't cull), their colour is never used */
+	if (e.key.casting)
+		std::fill(fc.begin(), fc.end(), 0);
+	else
+		for (size_t i = 0; i < fc.size(); i++)
+			fc[i] = face_colour(o, pl, e.rec.faces[i]);
 	GpuDraw *g = nullptr;
 	if (gpu && !e.gn.empty())
 	{
@@ -3097,8 +3138,9 @@ void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bo
 		m[15] = 1;
 		g->fc = fc;
 		g->base = (int)(face_rgba.size() / 4);
-		for (int c : fc)
+		for (size_t i = 0; i < (e.key.casting ? 0 : fc.size()); i++)
 		{
+			const int c = fc[i];
 			if (c < 0)
 			{
 				face_rgba.insert(face_rgba.end(), {0, 0, 0, 0});
@@ -3208,12 +3250,29 @@ void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bo
 
 void cache_check(const Object &o, bool casting, const Drawn &got, const char *how);
 
+/* A big model whose run no longer holds only for the view (a distance, a size on the screen, a face turning to
+ * or from the camera, a shade; not its variables, text or the light) is kept a few frames more before it runs
+ * again. Flying low over a city (Earth's London: 13000 faces at Detail x16) one of its many tests turns most
+ * frames, and every run took about 8 ms, and as much again for its shadow. A part going finer, or a face edge on
+ * to the camera changing, a few frames late doesn't show. Off with GLF_NATIVE_LOD_LAG=0, and for the
+ * self-check (GLF_NATIVE_CACHE=3). */
+constexpr uint32_t LOD_LAG_FRAMES = 8;
+constexpr size_t LOD_LAG_FACES = 2000;
+bool cache_lags(const Object &o, const Place &pl, const Cached &e)
+{
+	static const bool on = !(getenv("GLF_NATIVE_LOD_LAG") && atoi(getenv("GLF_NATIVE_LOD_LAG")) == 0) &&
+						   !(getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 3);
+	return on && e.rec.faces.size() >= LOD_LAG_FACES && cache_tick - e.ran < LOD_LAG_FRAMES &&
+		   cache_holds(o, pl, e, false);
+}
+
 /* Object o's model (filled, not the sky) into d, from the cache when the
  * run it holds still holds; ran / reused counted */
-void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused)
+void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, bool cast_gpu = false)
 {
-	/* the shadow casters' runs stay on the CPU (setup_shadows reads their triangles) */
-	const bool gpu = !casting && gpu_on();
+	/* the shadow casters' runs stay on the CPU (setup_shadows reads their triangles), but a ground base's:
+	 * its GPU nodes are drawn into the map (setup_shadows) */
+	const bool gpu = (!casting || cast_gpu) && gpu_on();
 	if (!cache_on())
 	{
 		run_object(o, d, false, false, casting);
@@ -3251,13 +3310,15 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused)
 			if (why.empty() && !cache_inputs_same(o, e))
 				why = "bit/text";
 			if (why.empty() && !cache_holds(o, pl, e))
-				why = "test";
+				why = cache_lags(o, pl, e) ? "test, lagged" : "test";
 		}
 		if (!why.empty())
 			cache_why[std::to_string(o.model) + " " + why]++;
 	}
-	if (same && !e.vol && cache_holds(o, pl, e))
+	if (same && !e.vol && (cache_holds(o, pl, e) || cache_lags(o, pl, e)))
 	{
+		if (gpu && !e.meshed)
+			build_mesh(e);
 		cache_place(o, pl, e, d, gpu);
 		reused++;
 		cache_check(o, casting, d, "reused");
@@ -3271,6 +3332,7 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused)
 	}
 	e.key = k;
 	e.made = true;
+	e.ran = cache_tick;
 	e.rec = Rec();
 	e.light = light_in(o);
 	std::memcpy(e.vars, o.vars, sizeof e.vars);
@@ -3289,13 +3351,17 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused)
 		e.rec.tears.clear();
 		e.rec.live.clear();
 		e.gn.clear();
+		e.meshed = false;
 		run_object(o, d, false, false, casting);
 		return;
 	}
 	if (gpu)
 		build_mesh(e);
 	else
+	{
 		e.gn.clear();
+		e.meshed = false;
+	}
 	cache_place(o, pl, e, d, gpu);
 	cache_check(o, casting, d, "made");
 }
@@ -3359,6 +3425,8 @@ void cache_check(const Object &o, bool casting, const Drawn &got, const char *ho
 		return s;
 	};
 	Sum a = sum(have), b = sum(want);
+	if (casting)
+		a.colour = b.colour = 0; /* a caster's colours are never used (cache_place) */
 	static int bad, good;
 	bool same = a.tris == b.tris && a.segs == b.segs && a.dots == b.dots && a.colour == b.colour &&
 				std::fabs(a.p - b.p) <= 1e-3 * std::max(1.0, b.p);
@@ -3578,6 +3646,7 @@ void make_bends(bool wire)
  * receives (not the ships themselves). Shrunk (far) objects stay out, their
  * space is not the others'. A flyable ship's model is 10-41. */
 std::vector<float> shadow_tris;
+std::vector<float> shadow_fit; /* points the map is fitted round besides the triangles: the GPU casters' (gl_shadow_set) */
 std::vector<char> shadow_caster;
 /* the layer of each cascade's map an object looks up (gl_shadow_layer, gl_shadow_all_layer):
  * every caster for what is no caster, the map without itself for a ship, -1 = none */
@@ -3747,6 +3816,7 @@ void setup_shadows(bool wire)
 		{
 			std::vector<size_t> ends;
 			shadow_tris.clear();
+			shadow_fit.clear();
 			for (const Cand *cp : chosen[(size_t)cc])
 			{
 				const Cand &c = *cp;
@@ -3771,11 +3841,51 @@ void setup_shadows(bool wire)
 				/* the whole hull, run again without the facing tests: the drawn
 				 * model has only the faces turned to the camera */
 				static Drawn whole;
-				cached_run(shown->obj[c.i], whole, true, prof_ran, prof_reused);
+				cached_run(shown->obj[c.i], whole, true, prof_ran, prof_reused, c.base);
 				if (c.i < bends.size())
+				{
 					bend_nodes(bends[c.i], whole.nodes);
+					if (c.base && whole.gpu)
+						bend_gpu(bends[c.i], *whole.gpu);
+				}
+				const int caster = (int)ends.size();
 				for (const Node &n : whole.nodes)
 					if (!n.under)
+					{
+						/* a ground base's nodes on the GPU: drawn into the map from there when their box comes within
+						 * 2.5 km of the eye; the map is fitted to the part of the box within 2.5 km */
+						if (n.g && n.gcount)
+						{
+							const float R = 2.5e6f;
+							P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
+							gpu_corners(n, [&](const P3 &p) {
+								for (int k = 0; k < 3; k++)
+								{
+									lo[k] = std::min(lo[k], p[k]);
+									hi[k] = std::max(hi[k], p[k]);
+								}
+							});
+							float d2 = 0;
+							for (int k = 0; k < 3; k++)
+							{
+								float v = lo[k] > 0 ? lo[k] : hi[k] < 0 ? -hi[k] : 0;
+								d2 += v * v;
+							}
+							if (d2 <= R * R)
+							{
+								const GpuDraw &g = *n.g;
+								gl_shadow_add_mesh(cc, g.e->mesh, g.pose, g.bent ? &g.bend[0][0] : nullptr, caster, n.gfirst,
+												   n.gcount);
+								for (int k = 0; k < 3; k++)
+								{
+									lo[k] = std::max(lo[k], -R);
+									hi[k] = std::min(hi[k], R);
+								}
+								for (int i = 0; i < 8; i++)
+									shadow_fit.insert(shadow_fit.end(), {(i & 1) ? hi[0] : lo[0], (i & 2) ? hi[1] : lo[1],
+																		 (i & 4) ? hi[2] : lo[2]});
+							}
+						}
 						for (const Tri &t : n.tris)
 						{
 							/* a ground base is a town: only what lies within 2.5 km of the eye casts, so the map is
@@ -3790,10 +3900,12 @@ void setup_shadows(bool wire)
 							for (const P3 &p : t.p)
 								shadow_tris.insert(shadow_tris.end(), p.begin(), p.end());
 						}
+					}
 				ends.push_back(shadow_tris.size() / 9);
 			}
 			if (!ends.empty())
-				made[cc] = gl_shadow_set(cc, light, shadow_tris.data(), shadow_tris.size() / 9, ends.data(), (int)ends.size());
+				made[cc] = gl_shadow_set(cc, light, shadow_tris.data(), shadow_tris.size() / 9, ends.data(), (int)ends.size(),
+										 shadow_fit.data(), shadow_fit.size() / 3);
 		}
 		shadow_on = made[0] || made[1] || made[2];
 		/* what each object looks up: each cascade's map with every caster, or for a caster of it the map

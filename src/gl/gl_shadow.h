@@ -63,7 +63,14 @@ bool gl_shadow_wanted(void);
  * says where each of the `ncasters` ends (a triangle count), nearest first. Makes the map's pass the next
  * command. Returns whether there is a map this frame. */
 bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t ntris, const size_t *caster_tris_end,
-				   int ncasters);
+				   int ncasters, const float *fit, size_t nfit);
+/* Before gl_shadow_set: a kept mesh's vertices first..first + count (gl_draw.h, gd_mesh_draw: placed by pose,
+ * bend NULL or bending it onto a planet) cast too, as part of caster `caster` (the index the triangles'
+ * caster_tris_end would give it). The map is fitted round the triangles and the `nfit` points `fit` (3 floats each,
+ * view space) given to gl_shadow_set, which should hold the meshes' parts that matter. */
+struct GdMesh;
+void gl_shadow_add_mesh(int cascade, struct GdMesh *mesh, const float pose[16], const float *bend, int caster, int first,
+						int count);
 /* The layer of the map (gd_set_shadow) a caster (its index in that order) looks up: the map without
  * itself; -1 if it has none (it receives nothing). Layer 0 is the map with every caster, for the rest */
 int gl_shadow_layer(int cascade, int caster);

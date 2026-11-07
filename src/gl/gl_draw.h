@@ -159,6 +159,9 @@ void gd_face_colours(const uint8_t *rgba, int n);
  * bend point in mesh units (.xyz) and the planet radius there (.w), the up direction in view units (.xyz) and
  * 1 (.w), the up direction in mesh units (.xyz) */
 void gd_mesh_draw(GdMesh *m, const float pose[16], int face_base, int first, int count, const float *bend);
+/* m's vertex array (attribute 0 the position, 1 the face) and vertex count, for passes of their own (gl_shadow.c) */
+GLuint gd_mesh_vao(const GdMesh *m);
+int gd_mesh_count(const GdMesh *m);
 
 /* ---- shader helper ------------------------------------------------------
  * Compiles a program from GLSL bodies (no #version line: the right header

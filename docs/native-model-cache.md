@@ -139,3 +139,27 @@ from devtools/run, BIN=build-modded). Risks: draw order inside a node (keep the 
 underlays and cloud shadows (blend, no depth write), log depth matching the CPU path exactly (seams between
 GPU and CPU-path objects), shadow bias, Android GLES (no TBO, no glMultiDrawArrays in GLES 3.0: loop
 glDrawArrays there).
+
+## Flying over a city (measured 2026-11-06, London, Detail x16)
+
+Earth's London (model 48: calls 164, 167 and five 103s, about 13000 faces, 100000 triangles at x16) ran again
+on most frames while flying low over it, for the drawn model and again for its shadow (about 8 ms each), and
+each run built its mesh again. 28-36 pictures/s on this laptop.
+
+- **Lag** (`cache_lags`): a model of 2000 faces or more whose run no longer holds only for the view (distance,
+  size on the screen, a face turning to or from the camera, a shade) is kept up to 8 frames before it runs
+  again; its variables, text and the light still run it at once. London: runs on about 13 frames in 60
+  instead of 36. `GLF_NATIVE_LOD_LAG=0` turns it off; the self-check (`GLF_NATIVE_CACHE=3`) does too.
+- **A ground base's shadow from the GPU** (step 6, for bases only): its casting run gets a mesh too
+  (`cached_run(..., cast_gpu)`), and `setup_shadows` hands the GPU nodes whose box comes within 2.5 km of the
+  eye to the map whole (`gl_shadow_add_mesh`, drawn by `gl_shadow.c`'s own mesh shader, bent like `VS_MESH`);
+  the map is fitted to those boxes cut to 2.5 km. Casting runs no longer work out face colours. Ships and
+  scenery still cast from CPU triangles.
+- `build_mesh` fills its buffer in place and lists each node's faces without sorting (about 4.8 to 3 ms for
+  London).
+- Tried and dropped: keeping each sub-model call's output and putting it in again when its own tests still
+  held. It worked (the calls' temporaries had to be compared only where they weren't the object's, and the
+  call kept as made: `run` changes its `Run`), but copying 100000 triangles in and out cost as much as running
+  them. Found on the way: `Rec.live` kept the call's `Run` after running it; now as made.
+
+Result, same flight: 50-53 pictures/s in the slowest seconds.

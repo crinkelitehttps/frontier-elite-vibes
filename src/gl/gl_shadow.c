@@ -20,8 +20,20 @@ bool low_sun_shadows = true;
 #define DARK       0.5f   /* the colour left in shadow */
 
 static GLuint tex, fbo, prog, vao, vbo;
+static GLuint mesh_prog;
+static GLint um_m, um_bend;
 static size_t vbo_bytes;
 static bool inited, failed;
+
+/* a kept mesh's range that casts (gl_shadow_add_mesh) */
+typedef struct
+{
+	GdMesh *mesh;
+	float pose[16];
+	float bend[24]; /* [19] (up .w) = 1 when bent */
+	int caster;
+	int first, count;
+} MeshCast;
 
 /* one map per cascade (casters of a size; see gl_shadow.h): its matrix, the pass's triangles in its clip space
  * (x, y, z in -1..1) until the frame is drawn, and where each caster's triangles end in them (in vertices) */
@@ -34,6 +46,8 @@ typedef struct
 	size_t clip_cap, clip_n; /* floats */
 	size_t caster_end[GL_SHADOW_CASTER_LAYERS];
 	int n_casters;
+	MeshCast *meshes;
+	int n_meshes, cap_meshes;
 } Cascade;
 static Cascade cas[GL_SHADOW_CASCADES];
 
@@ -41,6 +55,22 @@ static const char *VS = "in vec3 aPos;\n"
 						"void main(){ gl_Position = vec4(aPos, 1.0); }\n";
 static const char *FS = "out vec4 fragColor;\n"
 						"void main(){ fragColor = vec4(1.0); }\n";
+/* a kept mesh: uM takes its own frame to the map's clip space; bent onto the planet as VS_MESH (gl_draw.c) */
+static const char *VS_MESH = "in vec3 aPos;\n"
+							 "uniform mat4 uM;\n"
+							 "uniform vec4 uBend[6];\n"
+							 "void main(){\n"
+							 "  vec4 q = vec4(aPos, 1.0);\n"
+							 "  if (uBend[4].w > 0.5) {\n"
+							 "    vec3 dq = q.xyz - uBend[3].xyz;\n"
+							 "    vec3 d = uBend[0].xyz * dq.x + uBend[1].xyz * dq.y + uBend[2].xyz * dq.z;\n"
+							 "    float h = dot(d, uBend[4].xyz);\n"
+							 "    float w2 = max(dot(d, d) - h * h, 0.0);\n"
+							 "    float R = uBend[3].w;\n"
+							 "    q.xyz -= uBend[5].xyz * (w2 / (R + sqrt(max(R * R - w2, 0.0))));\n"
+							 "  }\n"
+							 "  gl_Position = uM * q;\n"
+							 "}\n";
 
 bool gl_shadow_wanted(void)
 {
@@ -59,6 +89,9 @@ static void init(void)
 	inited = true;
 	static const char *const attribs[] = {"aPos"};
 	prog = gd_build_program(VS, FS, attribs, 1);
+	mesh_prog = gd_build_program(VS_MESH, FS, attribs, 1);
+	um_m = glGetUniformLocation(mesh_prog, "uM");
+	um_bend = glGetUniformLocation(mesh_prog, "uBend");
 
 	glGenTextures(1, &tex);
 	/* cascade c: layer c * N_LAYERS has every caster of it; layer c * N_LAYERS + k + 1 every caster but the k-th (what
@@ -105,6 +138,41 @@ typedef struct
 	int cascade;
 } PassData;
 
+/* The cascade's meshes but caster `skip`'s (-1: all) into the bound layer */
+static void draw_meshes(const Cascade *cs, int skip)
+{
+	if (!cs->n_meshes)
+		return;
+	glUseProgram(mesh_prog);
+	const float *mx = cs->matrix;
+	for (int i = 0; i < cs->n_meshes; i++)
+	{
+		const MeshCast *mc = &cs->meshes[i];
+		GLuint mv = gd_mesh_vao(mc->mesh);
+		if (mc->caster == skip || !mv || mc->first < 0 || mc->first + mc->count > gd_mesh_count(mc->mesh))
+			continue;
+		/* clip = 2 (matrix (pose q)) - 1 for x, y, z; w = 1. Column-major. */
+		float m[16];
+		for (int c = 0; c < 4; c++)
+		{
+			for (int r = 0; r < 3; r++)
+			{
+				float v = 0;
+				for (int k = 0; k < 4; k++)
+					v += mx[r * 4 + k] * mc->pose[c * 4 + k];
+				m[c * 4 + r] = 2.0f * v - (c == 3 ? 1.0f : 0.0f);
+			}
+			m[c * 4 + 3] = c == 3 ? 1.0f : 0.0f;
+		}
+		glUniformMatrix4fv(um_m, 1, GL_FALSE, m);
+		glUniform4fv(um_bend, 6, mc->bend);
+		glBindVertexArray(mv);
+		glDrawArrays(GL_TRIANGLES, mc->first, mc->count);
+	}
+	glUseProgram(prog);
+	glBindVertexArray(vao);
+}
+
 /* The map's pass, at the start of the frame's draw list */
 static void shadow_pass(const void *payload)
 {
@@ -112,7 +180,7 @@ static void shadow_pass(const void *payload)
 	const int base = ((const PassData *)payload)->cascade * N_LAYERS;
 	if (!inited)
 		init();
-	if (failed || !cs->clip_n)
+	if (failed || (!cs->clip_n && !cs->n_meshes))
 		return;
 
 	GLint prev_fbo = 0, vp[4];
@@ -148,9 +216,14 @@ static void shadow_pass(const void *payload)
 		glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tex, 0, base + layer);
 		glClear(GL_DEPTH_BUFFER_BIT);
 		if (layer == 0)
-			glDrawArrays(GL_TRIANGLES, 0, (GLsizei)nverts);
+		{
+			if (nverts)
+				glDrawArrays(GL_TRIANGLES, 0, (GLsizei)nverts);
+			draw_meshes(cs, -1);
+		}
 		else
 		{
+			draw_meshes(cs, layer - 1);
 			/* all the casters but the (layer - 1)-th: the runs before and after it */
 			size_t a = layer > 1 ? cs->caster_end[layer - 2] : 0, b = cs->caster_end[layer - 1];
 			if (a)
@@ -176,13 +249,52 @@ static void shadow_pass(const void *payload)
 		glDisable(GL_DEPTH_TEST);
 }
 
+void gl_shadow_add_mesh(int cascade, GdMesh *mesh, const float pose[16], const float *bend, int caster, int first,
+						int count)
+{
+	Cascade *cs = &cas[cascade];
+	if (!mesh || count <= 0)
+		return;
+	/* the next range of the same draw: one longer range */
+	if (cs->n_meshes)
+	{
+		MeshCast *l = &cs->meshes[cs->n_meshes - 1];
+		if (l->mesh == mesh && l->caster == caster && l->first + l->count == first &&
+			memcmp(l->pose, pose, sizeof l->pose) == 0 &&
+			(bend ? memcmp(l->bend, bend, sizeof l->bend) == 0 : l->bend[19] == 0))
+		{
+			l->count += count;
+			return;
+		}
+	}
+	if (cs->n_meshes == cs->cap_meshes)
+	{
+		int cap = cs->cap_meshes ? cs->cap_meshes * 2 : 64;
+		MeshCast *n = realloc(cs->meshes, (size_t)cap * sizeof *n);
+		if (!n)
+			return;
+		cs->meshes = n;
+		cs->cap_meshes = cap;
+	}
+	MeshCast *mc = &cs->meshes[cs->n_meshes++];
+	mc->mesh = mesh;
+	memcpy(mc->pose, pose, sizeof mc->pose);
+	if (bend)
+		memcpy(mc->bend, bend, sizeof mc->bend);
+	else
+		memset(mc->bend, 0, sizeof mc->bend);
+	mc->caster = caster;
+	mc->first = first;
+	mc->count = count;
+}
+
 bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t ntris, const size_t *caster_tris_end,
-				   int ncasters)
+				   int ncasters, const float *fit, size_t nfit)
 {
 	Cascade *cs = &cas[cascade];
 	float *matrix = cs->matrix;
 	cs->have = false;
-	if (!ntris || !gl_shadow_wanted() || failed)
+	if ((!ntris && !(nfit && cs->n_meshes)) || !gl_shadow_wanted() || failed)
 		return false;
 
 	/* an orthonormal frame with z along the light */
@@ -207,6 +319,13 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 		for (int row = 0; row < 3; row++)
 		{
 			float v = axis[row][0] * tris[i * 3] + axis[row][1] * tris[i * 3 + 1] + axis[row][2] * tris[i * 3 + 2];
+			lo[row] = fminf(lo[row], v);
+			hi[row] = fmaxf(hi[row], v);
+		}
+	for (size_t i = 0; i < nfit; i++)
+		for (int row = 0; row < 3; row++)
+		{
+			float v = axis[row][0] * fit[i * 3] + axis[row][1] * fit[i * 3 + 1] + axis[row][2] * fit[i * 3 + 2];
 			lo[row] = fminf(lo[row], v);
 			hi[row] = fmaxf(hi[row], v);
 		}
@@ -247,7 +366,7 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 		cs->caster_end[i] = caster_tris_end[i] * 3;
 
 	size_t need = ntris * 9;
-	if (need > cs->clip_cap)
+	if (need && need > cs->clip_cap)
 	{
 		float *n = realloc(cs->clip, need * sizeof(float));
 		if (!n)
@@ -292,6 +411,7 @@ void gl_shadow_clear(void)
 		cas[c].have = false;
 		cas[c].clip_n = 0;
 		cas[c].n_casters = 0;
+		cas[c].n_meshes = 0;
 	}
 }
 
@@ -335,6 +455,7 @@ void gl_shadow_shutdown(void)
 		glDeleteTextures(1, &tex);
 		glDeleteFramebuffers(1, &fbo);
 		glDeleteProgram(prog);
+		glDeleteProgram(mesh_prog);
 		glDeleteVertexArrays(1, &vao);
 		glDeleteBuffers(1, &vbo);
 	}
@@ -343,6 +464,9 @@ void gl_shadow_shutdown(void)
 		free(cas[c].clip);
 		cas[c].clip = NULL;
 		cas[c].clip_cap = cas[c].clip_n = 0;
+		free(cas[c].meshes);
+		cas[c].meshes = NULL;
+		cas[c].n_meshes = cas[c].cap_meshes = 0;
 	}
 	inited = false;
 }

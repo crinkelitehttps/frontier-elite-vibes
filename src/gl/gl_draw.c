@@ -862,6 +862,16 @@ void gd_mesh_upload(GdMesh *m, const float *xyzf, int n)
 	m->n = n;
 }
 
+GLuint gd_mesh_vao(const GdMesh *m)
+{
+	return m ? m->vao : 0;
+}
+
+int gd_mesh_count(const GdMesh *m)
+{
+	return m ? m->n : 0;
+}
+
 void gd_face_colours(const uint8_t *rgba, int n)
 {
 	int rows = (n + FACE_W - 1) / FACE_W;
