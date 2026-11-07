@@ -3,12 +3,17 @@
  */
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -65,12 +70,17 @@ const fe2::Image &fe2::Image::game()
 	return img;
 }
 
+/* image_for's and code_for's tables are filled as models are first met, from
+ * the render thread and the thread big models run again on (async_run) */
+static std::recursive_mutex models_mx;
+
 /* The game's other model tables (the intro's has the hangar and the launch
- * lift): the same image, another table. Only used on the render thread. */
+ * lift): the same image, another table. */
 static const fe2::Image &image_for(uint32_t table)
 {
 	if (table == FE2_gamedata1)
 		return fe2::Image::game();
+	std::lock_guard<std::recursive_mutex> lock(models_mx);
 	static std::unordered_map<uint32_t, std::unique_ptr<fe2::Image>> others;
 	auto &slot = others[table];
 	if (!slot)
@@ -277,6 +287,7 @@ std::unordered_map<uint64_t, std::unique_ptr<Code>> codes;
 const Code *code_for(uint32_t table, int index, uint32_t at = 0)
 {
 	uint64_t key = at ? 1ull << 63 | (uint64_t)at << 16 | (uint32_t)index : (uint64_t)table << 32 | (uint32_t)index;
+	std::lock_guard<std::recursive_mutex> lock(models_mx);
 	auto it = codes.find(key);
 	if (it != codes.end())
 		return it->second.get();
@@ -1629,6 +1640,8 @@ struct Runner
 	Rec *rec = nullptr;
 	mutable bool vol = false;
 	P3 L = {0, 0, 0};
+	/* the strings drawn: shown's, or a copy of them (async_run) */
+	const std::unordered_map<uint64_t, std::string> *texts = nullptr;
 
 	void volatile_(const char *why) const
 	{
@@ -2546,11 +2559,12 @@ struct Runner
 		int n = w[1] & 0xff;
 		if (!sky && !casting && n > 1 && !normal_faces(r, n))
 			return;
-		auto it = shown->texts.find(text_key(o.addr, w[3]));
+		const auto &strs = texts ? *texts : shown->texts;
+		auto it = strs.find(text_key(o.addr, w[3]));
 		if (rec)
-			rec->texts.push_back({text_key(o.addr, w[3]), it == shown->texts.end() ? std::string("\1") : it->second});
+			rec->texts.push_back({text_key(o.addr, w[3]), it == strs.end() ? std::string("\1") : it->second});
 		auto org = vertex(r, fe2::s8(w[2]));
-		if (it == shown->texts.end() || !org)
+		if (it == strs.end() || !org)
 			return;
 		const fe2::Image &img = image_for(FE2_gamedata2);
 		int font = (w[1] >> 12) & 15;
@@ -2779,17 +2793,19 @@ uint32_t frame_seed;
  * object's own axes (a cached run, rec), false when what it made is good
  * for this frame only. */
 bool run_object(const Object &o, Drawn &d, bool wire, bool sky, bool casting = false, const Place *pl = nullptr,
-				Rec *rec = nullptr)
+				Rec *rec = nullptr, const std::unordered_map<uint64_t, std::string> *texts = nullptr,
+				uint32_t seed = frame_seed)
 {
 	d = Drawn();
 	const Code *c = code_for(o.table, o.model);
 	if (!c)
 		return true;
-	Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, frame_seed};
+	Runner rn{o, d, wire, c->model.scale + c->model.scale2 - o.scale, seed};
 	rn.sky = sky;
 	rn.casting = casting;
 	rn.pl = pl;
 	rn.rec = rec;
+	rn.texts = texts;
 	Run r;
 	r.c = c;
 	if (pl)
@@ -2870,6 +2886,7 @@ struct Cached
 	std::vector<GNode> gn;
 	bool meshed = false; /* gn, mesh made for this run */
 	uint32_t ran = 0;    /* cache_tick when it ran */
+	uint32_t gen = 0;    /* the run's number (cache_gen): a run made off the thread from it may replace it */
 };
 std::unordered_map<uint64_t, Cached> cache;
 
@@ -2894,13 +2911,13 @@ bool gpu_on()
 	return cache_on() && (!env || atoi(env) != 0);
 }
 
-/* Puts e's triangles on the GPU (e.gn, e.mesh) */
-void build_mesh(Cached &e)
+/* e's GPU nodes (e.gn) and their vertices for the mesh into v (4 floats each; empty: none). No GL: also
+ * run off the render thread (async_run). */
+void mesh_prep(Cached &e, std::vector<float> &v)
 {
-	static std::vector<float> v;
 	/* the node each face was last listed for (GNode.faces once each, no sort) */
-	static std::vector<uint32_t> listed;
-	static uint32_t stamp;
+	static thread_local std::vector<uint32_t> listed;
+	static thread_local uint32_t stamp;
 	e.meshed = true;
 	e.gn.resize(e.d.nodes.size());
 	listed.resize(std::max(listed.size(), e.rec.faces.size()), 0);
@@ -2963,6 +2980,7 @@ void build_mesh(Cached &e)
 		g.lo = lo;
 		g.hi = hi;
 	}
+	e.ground_axis = -1;
 	if (v.empty())
 	{
 		e.gn.clear();
@@ -2971,7 +2989,6 @@ void build_mesh(Cached &e)
 	/* GLF_SHADOW_FLAT=1: how many triangles lie flat on the ground (roads, lakes), which could cast no
 	 * shadow anyone sees. The ground is the flat level (any axis) with the most triangles. */
 	static const bool flat_on = getenv("GLF_SHADOW_FLAT") && atoi(getenv("GLF_SHADOW_FLAT")) != 0;
-	e.ground_axis = -1;
 	if (flat_on)
 	{
 		P3 lo = {1e30f, 1e30f, 1e30f}, hi = {-1e30f, -1e30f, -1e30f};
@@ -3039,9 +3056,25 @@ void build_mesh(Cached &e)
 						   100.0 * roof / total);
 		}
 	}
+}
+
+/* v (mesh_prep's) into e's mesh */
+void mesh_upload(Cached &e, const std::vector<float> &v)
+{
+	e.meshed = true;
+	if (v.empty())
+		return;
 	if (!e.mesh)
 		e.mesh = gd_mesh_new();
 	gd_mesh_upload(e.mesh, v.data(), (int)(v.size() / 4));
+}
+
+/* Puts e's triangles on the GPU (e.gn, e.mesh) */
+void build_mesh(Cached &e)
+{
+	static std::vector<float> v;
+	mesh_prep(e, v);
+	mesh_upload(e, v);
 }
 
 /* A GPU node's triangles as the CPU would have placed them (the self-check, wireframe) */
@@ -3341,6 +3374,129 @@ bool cache_lags(const Object &o, const Place &pl, const Cached &e)
 		   cache_holds(o, pl, e, false);
 }
 
+/* A big model (LOD_LAG_FACES or more) whose run no longer holds for the view (once its lag is over) or for its
+ * variables, bits or text runs again on a thread of its own, and the run it has stays drawn till that one is
+ * done (a frame or two): over London at Detail x16 its run took about 12 ms and its shadow's another 13, in one
+ * picture several times a second. Only the mesh upload is left to the render thread. The light, the detail or
+ * the scale changing still run it at once. Off with GLF_NATIVE_ASYNC=0, and for the self-check
+ * (GLF_NATIVE_CACHE=3). */
+bool async_on()
+{
+	static const bool on = !(getenv("GLF_NATIVE_ASYNC") && atoi(getenv("GLF_NATIVE_ASYNC")) == 0) &&
+						   !(getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 3);
+	return on;
+}
+
+/* One such run: what it starts from (copies), and what it made */
+struct AsyncJob
+{
+	uint64_t id;  /* the cache entry's */
+	uint32_t gen; /* its run's when asked (Cached.gen) */
+	Object o;
+	Place pl;
+	bool casting, gpu;
+	uint32_t seed;
+	std::unordered_map<uint64_t, std::string> texts;
+	Cached r;             /* the run, its GPU nodes */
+	std::vector<float> v; /* its mesh's vertices (mesh_prep) */
+	std::atomic<bool> done{false};
+};
+std::unordered_map<uint64_t, std::shared_ptr<AsyncJob>> async_jobs;
+uint32_t cache_gen;
+
+void async_run(AsyncJob &j)
+{
+	Cached &r = j.r;
+	r.made = true;
+	r.light = light_in(j.o);
+	std::memcpy(r.vars, j.o.vars, sizeof r.vars);
+	std::memcpy(r.t, j.o.t, sizeof r.t);
+	r.vol = !run_object(j.o, r.d, false, false, j.casting, &j.pl, &r.rec, &j.texts, j.seed);
+	if (!r.vol && j.gpu)
+		mesh_prep(r, j.v);
+}
+
+struct AsyncWorker
+{
+	std::mutex mx;
+	std::condition_variable cv;
+	std::deque<std::shared_ptr<AsyncJob>> q;
+	bool stop = false;
+	std::thread th{[this] { loop(); }}; /* last: the others are made first */
+	~AsyncWorker()
+	{
+		{
+			std::lock_guard<std::mutex> lock(mx);
+			stop = true;
+		}
+		cv.notify_all();
+		th.join();
+	}
+	void loop()
+	{
+		for (;;)
+		{
+			std::shared_ptr<AsyncJob> j;
+			{
+				std::unique_lock<std::mutex> lock(mx);
+				cv.wait(lock, [this] { return stop || !q.empty(); });
+				if (stop)
+					return;
+				j = q.front();
+				q.pop_front();
+			}
+			async_run(*j);
+			j->done.store(true, std::memory_order_release);
+		}
+	}
+	void add(std::shared_ptr<AsyncJob> j)
+	{
+		{
+			std::lock_guard<std::mutex> lock(mx);
+			q.push_back(std::move(j));
+		}
+		cv.notify_one();
+	}
+};
+
+AsyncWorker &async_worker()
+{
+	static AsyncWorker w;
+	return w;
+}
+
+/* A done run of e's into it, when it was made from e's present run */
+void async_take(Cached &e, AsyncJob &j)
+{
+	if (j.gen != e.gen || !e.made || e.vol || std::memcmp(&e.key, &j.r.key, sizeof e.key) != 0)
+		return;
+	if (j.r.vol)
+	{
+		/* good for one frame only: run here, as it would have been */
+		e.made = false;
+		return;
+	}
+	e.d = std::move(j.r.d);
+	e.rec = std::move(j.r.rec);
+	e.light = j.r.light;
+	std::memcpy(e.vars, j.r.vars, sizeof e.vars);
+	std::memcpy(e.t, j.r.t, sizeof e.t);
+	e.ran = cache_tick;
+	e.gen = ++cache_gen;
+	if (j.gpu)
+	{
+		e.gn = std::move(j.r.gn);
+		e.ground_axis = j.r.ground_axis;
+		e.ground_level = j.r.ground_level;
+		mesh_upload(e, j.v);
+	}
+	else
+	{
+		e.gn.clear();
+		e.meshed = false;
+	}
+}
+
 /* Object o's model (filled, not the sky) into d, from the cache when the
  * run it holds still holds; ran / reused counted */
 void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, bool cast_gpu = false)
@@ -3360,12 +3516,41 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 	Cached &e = cache[id];
 	e.seen = cache_tick;
 	Place pl = place_of(o);
-	bool same = e.made && std::memcmp(&e.key, &k, sizeof k) == 0 && cache_inputs_same(o, e);
+	auto job = async_jobs.find(id);
+	if (job != async_jobs.end() && job->second->done.load(std::memory_order_acquire))
+	{
+		async_take(e, *job->second);
+		async_jobs.erase(job);
+		job = async_jobs.end();
+	}
+	const bool key_same = e.made && std::memcmp(&e.key, &k, sizeof k) == 0;
+	bool same = key_same && cache_inputs_same(o, e);
 	static const bool dbg = getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 2;
+	std::string why;
+	/* GLF_NATIVE_CACHE=2: an object taking over 3 ms is logged */
+	struct Slow
+	{
+		bool on;
+		const Object &o;
+		bool casting;
+		const Cached &e;
+		const std::string &why;
+		int &ran;
+		int ran0;
+		uint64_t t0;
+		~Slow()
+		{
+			if (!on)
+				return;
+			double ms = (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency();
+			if (ms > 3)
+				log_printf("native slow object: model %d%s %.1f ms, %s (%s), %zu faces\n", o.model, casting ? " casting" : "",
+						   ms, ran != ran0 ? "ran" : "reused", why.empty() ? "-" : why.c_str(), e.rec.faces.size());
+		}
+	} slow{dbg, o, casting, e, why, ran, ran, dbg ? SDL_GetPerformanceCounter() : 0};
 	if (dbg)
 	{
 		/* why each model runs again (GLF_NATIVE_CACHE=2), counted: logged by cache_trim */
-		std::string why;
 		if (!e.made)
 			why = "new";
 		else if (std::memcmp(&e.key, &k, sizeof k) != 0)
@@ -3390,7 +3575,31 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 		if (!why.empty())
 			cache_why[std::to_string(o.model) + " " + why]++;
 	}
-	if (same && !e.vol && (cache_holds(o, pl, e) || cache_lags(o, pl, e)))
+	bool keep = same && !e.vol && (cache_holds(o, pl, e) || cache_lags(o, pl, e));
+	if (!keep && key_same && !e.vol && async_on() && e.rec.faces.size() >= LOD_LAG_FACES && cache_holds(o, pl, e, false))
+	{
+		/* run again on the worker (also for its variables, bits or text: London's variable 6 changes a few times
+		 * a second); this one stays till it is done */
+		if (job == async_jobs.end())
+		{
+			auto j = std::make_shared<AsyncJob>();
+			j->id = id;
+			j->gen = e.gen;
+			j->o = o;
+			j->pl = pl;
+			j->casting = casting;
+			j->gpu = gpu;
+			j->seed = frame_seed;
+			j->texts = shown->texts;
+			j->r.key = k;
+			async_jobs[id] = j;
+			async_worker().add(std::move(j));
+			if (dbg)
+				cache_why[std::to_string(o.model) + " async"]++;
+		}
+		keep = true;
+	}
+	if (keep)
 	{
 		if (gpu && !e.meshed)
 			build_mesh(e);
@@ -3408,6 +3617,7 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 	e.key = k;
 	e.made = true;
 	e.ran = cache_tick;
+	e.gen = ++cache_gen;
 	e.rec = Rec();
 	e.light = light_in(o);
 	std::memcpy(e.vars, o.vars, sizeof e.vars);
@@ -3551,6 +3761,15 @@ void cache_trim()
 	}
 	if (++cache_tick % 64)
 		return;
+	/* done runs of objects gone (a run not done yet is left to finish) */
+	for (auto it = async_jobs.begin(); it != async_jobs.end();)
+	{
+		auto c = cache.find(it->first);
+		if (it->second->done.load(std::memory_order_acquire) && (c == cache.end() || cache_tick - c->second.seen > 8))
+			it = async_jobs.erase(it);
+		else
+			++it;
+	}
 	for (auto it = cache.begin(); it != cache.end();)
 		if (cache_tick - it->second.seen > 600)
 		{

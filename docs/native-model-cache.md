@@ -163,3 +163,25 @@ each run built its mesh again. 28-36 pictures/s on this laptop.
   them. Found on the way: `Rec.live` kept the call's `Run` after running it; now as made.
 
 Result, same flight: 50-53 pictures/s in the slowest seconds.
+
+### Big models run again on a thread of their own (2026-11-07)
+
+Profiled again after the above: still bound by the render thread, and one picture every few frames took 25-31 ms.
+Those were London running again, about 12 ms for the drawn run and 13 for its casting run, in the same picture.
+The lag only covered the view tests; most of these runs were for London's variable 6 (35 in 8 s) or a bit/text
+test (12), each run for the picture and again for the shadow.
+
+- **`async_run`**: a model of `LOD_LAG_FACES` (2000) faces or more whose run no longer holds for the view (once
+  its lag is over) or for its variables, bits or text is run again on one worker thread (`AsyncWorker`), from
+  copies of the object, its pose, the frame seed and the shown strings (`Runner.texts`). The run it has stays
+  drawn till the new one is done, a frame or two. The worker also fills the mesh's vertices (`mesh_prep`); the
+  render thread only uploads them (`mesh_upload`) when it takes the run (`async_take`, in `cached_run`).
+- A done run is taken only if it was made from the entry's present run (`Cached.gen`, numbered by `cache_gen`)
+  with the same key. A run that turns out volatile is dropped and the object runs at once.
+- The light, the detail or the scale changing, and every model under 2000 faces, still run at once.
+- `code_for`/`image_for` fill their tables under `models_mx` (both threads meet new models).
+- `GLF_NATIVE_ASYNC=0` turns it off; the self-check (`GLF_NATIVE_CACHE=3`) does too. `GLF_NATIVE_CACHE=2` now
+  also logs every object over 3 ms (`native slow object`), with why it ran, and counts `async` runs.
+
+Same flight (Snap27, Detail x16, no vsync): prepares over 15 ms 49 -> 1 (the town's first run), worst picture
+over London about 30 -> 14 ms, slowest two seconds 49 -> 67 pictures/s. With vsync it holds 59-60 there (was 50-55).
