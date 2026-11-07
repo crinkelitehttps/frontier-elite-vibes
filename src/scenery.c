@@ -175,7 +175,16 @@ static double wind_r[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}; /* wind frame ->
 static void wind_set(uint32_t seed, double rp)
 {
 	double t = (double)(int32_t)rdlong(GAME_A6 + A6_DAY) * 86400.0 + (double)(uint32_t)rdlong(GAME_A6 + A6_TIME) / GAME_SECOND;
-	double th = fmod((double)scenery_cloud_wind_mps * 1000.0 * t / rp, 2.0 * M_PI);
+	/* a new speed (the menu's slider) goes on from where the clouds are, not from the clock's start */
+	static int speed = INT32_MIN;
+	static double off_m;
+	if (scenery_cloud_wind_mps != speed)
+	{
+		if (speed != INT32_MIN)
+			off_m += (double)(speed - scenery_cloud_wind_mps) * t;
+		speed = scenery_cloud_wind_mps;
+	}
+	double th = fmod(((double)speed * t + off_m) * 1000.0 / rp, 2.0 * M_PI);
 	double u[3], l = 0;
 	for (int a = 0; a < 3; a++)
 	{

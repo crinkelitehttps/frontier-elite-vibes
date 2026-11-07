@@ -39,6 +39,7 @@ extern "C"
 #include "headtrack.h"
 #include "hostcall.h"
 #include "rt_clock.h"
+#include "scenery.h"
 #include "time_guard.h"
 #include "vr.h"
 }
@@ -207,6 +208,9 @@ void page_settings()
 	ImGui::TextWrapped("Volume");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##volume", &audio_volume, 0, 100, "%d%%");
+	ImGui::TextWrapped("Cloud speed");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##cloud_wind", &scenery_cloud_wind_mps, 0, 200, "%d m/s");
 	if (ui_button("Fullscreen Toggle"))
 		Screen_ToggleFullScreen();
 	if (ui_button("Cycle Renderer"))
