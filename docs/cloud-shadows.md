@@ -38,3 +38,10 @@ underlay node that has any, with the stencil counting (`gd_once_phase`: the firs
 increments, later ones fail; a second invisible draw decrements back, so the cockpit's stencil refs are untouched).
 `GLF_CLOUD_SHADOWS=3` logs shadow group sizes (per-node draws only). Shadows are painted at that point of the underlay
 order, so a nearer ground plate drawn later could hide one.
+
+Cloud shadows over ship/building shadows: the shadow maps darken the ground in its own shader (to 0.5 in full
+shadow), and a cloud's shadow is painted over it afterwards, so where both fell the ground went twice as dark. The
+cloud shadows are drawn with `gd_set_shadow_blend` (blend mode 2): the flat shader looks the maps up at the shadow
+triangle's point (every caster's layer, as the planet's ground does; only when all the underlays' objects are at
+true size) and lowers the alpha to `max(1 - (1 - a) / sh, 0)`, sh the map's darkening there. The ground then ends
+as dark as the darker of the two, never both. (2026-11-08)

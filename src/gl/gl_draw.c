@@ -89,7 +89,7 @@ static bool xf_dirty = true;
 static uint8_t cur_col[4] = {255, 255, 255, 255};
 static uint8_t cur_vp = GD_VP_VIEW3D;
 static uint8_t cur_cull;
-static uint8_t cur_blend;
+static uint8_t cur_blend; /* 0 off, 1 blended, 2 a cloud's shadow (gd_set_shadow_blend) */
 static uint8_t cur_depth; /* 0 off, else 1 | 2 write | 4 depth only */
 static uint32_t cur_shadow;
 static float shadow_m[12], shadow_m2[12], shadow_m3[12]; /* view point -> shadow map u, v, depth (3 rows of 4), per cascade */
@@ -100,7 +100,7 @@ static int vp_rects[GD_VP_COUNT][4];
 
 /* ---- GL objects ----------------------------------------------------- */
 static GLuint prog, vao, vbo;
-static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow, u_shadow_eye;
+static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow, u_shadow_eye, u_shadow_over;
 static size_t vbo_bytes;
 static GLuint mesh_prog, face_tex;
 static int face_rows;
@@ -191,6 +191,7 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "uniform vec3 uShadowLayer;\n"
 							 "uniform vec3 uShadowEye;\n"
 							 "uniform float uShadowFacing;\n"
+							 "uniform float uShadowOver;\n"
 							 "uniform sampler2DArrayShadow uShadow;\n"
 							 "out vec4 fragColor;\n"
 							 "void main(){\n"
@@ -202,7 +203,7 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "  vec3 sF = uShadowLayer.x >= 0.0 ? vShadow : uShadowLayer.y >= 0.0 ? vShadow2 : vShadow3;\n"
 							 "  vec3 nF = cross(dFdx(sF), dFdy(sF));\n"
 							 "  if (dot(nF, sF - uShadowEye) > 0.0) nF = -nF;\n"
-							 "  bool away = uShadowFacing > 0.5 && nF.z > 0.0;\n"
+							 "  bool away = uShadowFacing > 0.5 && nF.z > 0.0 && uShadowOver < 0.5;\n"
 							 /* in the ships' shadow maps (outside one: lit by it) */
 							 "  if (uShadowOn > 0.5 && !away) {\n"
 							 "    float lit = 1.0;\n"
@@ -212,7 +213,11 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "      lit = min(lit, shadowLit(uShadow, vShadow2.xy, uShadowLayer.y, min(vShadow2.z, 1.0) - uShadowBias.y));\n"
 							 "    if (uShadowLayer.z >= 0.0 && vShadow3.x >= 0.0 && vShadow3.x <= 1.0 && vShadow3.y >= 0.0 && vShadow3.y <= 1.0)\n"
 							 "      lit = min(lit, shadowLit(uShadow, vShadow3.xy, uShadowLayer.z, min(vShadow3.z, 1.0) - uShadowBias.z));\n"
-							 "    fragColor.rgb *= mix(uShadowDark, 1.0, lit);\n"
+							 "    float sh = mix(uShadowDark, 1.0, lit);\n"
+							 /* a cloud's shadow (gd_set_shadow_blend) over ground the maps darkened to sh:
+							  * only as much more as takes it to the cloud's own 1 - alpha */
+							 "    if (uShadowOver > 0.5) fragColor.a = max(1.0 - (1.0 - vColor.a) / sh, 0.0);\n"
+							 "    else fragColor.rgb *= sh;\n"
 							 "  }\n"
 							 /* GLF_SHADOW_FACING=2: the faces taken as turned from the sun tinted magenta */
 							 "  if (uShadowFacing > 1.5 && uShadowOn > 0.5 && nF.z > 0.0) fragColor.rgb = mix(fragColor.rgb, vec3(1.0, 0.0, 1.0), 0.5);\n"
@@ -300,6 +305,7 @@ void gd_init(void)
 	u_shadow_bias = glGetUniformLocation(prog, "uShadowBias");
 	u_shadow = glGetUniformLocation(prog, "uShadow");
 	u_shadow_eye = glGetUniformLocation(prog, "uShadowEye");
+	u_shadow_over = glGetUniformLocation(prog, "uShadowOver");
 	/* GLF_SHADOW_FACING=0: faces turned from the sun look the maps up too (as before 2026-11-08); 2: tints them */
 	const char *fe = getenv("GLF_SHADOW_FACING");
 	const float facing = fe ? (float)atoi(fe) : 1.0f;
@@ -428,6 +434,10 @@ void gd_set_cull(bool c)
 void gd_set_blend(bool b)
 {
 	cur_blend = b ? 1 : 0;
+}
+void gd_set_shadow_blend(void)
+{
+	cur_blend = 2;
 }
 void gd_set_wireframe(bool w)
 {
@@ -671,9 +681,14 @@ static inline void put(GdVert *v, const float p[3], const uint8_t col[4], float 
 
 void gd_point(const float p[3], float size)
 {
+	/* points and disks (smoke, round trees, hyperspace clouds) face the eye:
+	 * no ship shadows on them, they came out as a dark spot in the middle */
+	uint32_t sh = cur_shadow;
+	cur_shadow = 0;
 	GdVert *v = reserve(GD_POINTS, 1);
 	if (v)
 		put(v, p, cur_col, size);
+	cur_shadow = sh;
 }
 
 void gd_line(const float a[3], const float b[3])
@@ -791,8 +806,11 @@ void gd_disk(float radius, int slices)
 	ring[slices][2] = 0.0f;
 
 	static const float centre[3] = {0, 0, 0};
+	uint32_t sh = cur_shadow; /* no ship shadows, as gd_point */
+	cur_shadow = 0;
 	for (int s = 0; s < slices; s++)
 		gd_tri(centre, ring[s + 1], ring[s]);
+	cur_shadow = sh;
 }
 
 /* A new command with `size` bytes of data (its first) */
@@ -1091,6 +1109,7 @@ void gd_flush(void)
 	bind_flat();
 
 	int vp = -1, cull = 0, blend = 0, depth = 0, shadow = -1;
+	glUniform1f(u_shadow_over, 0.0f);
 	for (int i = 0; i < n_cmds; i++)
 	{
 		const GdCmd *c = &cmds[i];
@@ -1145,6 +1164,7 @@ void gd_flush(void)
 			if (c->blend != blend)
 			{
 				blend = c->blend;
+				glUniform1f(u_shadow_over, blend == 2 ? 1.0f : 0.0f);
 				if (blend)
 				{
 					glEnable(GL_BLEND);
@@ -1184,6 +1204,7 @@ void gd_flush(void)
 			c->fn(custom_data + c->first);
 			/* callback may have touched any state: re-apply ours */
 			bind_flat();
+			glUniform1f(u_shadow_over, 0.0f);
 			vp = -1;
 			cull = -1;
 			blend = 0;

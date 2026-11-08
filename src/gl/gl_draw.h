@@ -60,6 +60,11 @@ void gd_set_wireframe(bool wire); /* triangles become outlines */
 /* Alpha blending (src alpha, 1 - src alpha) for what follows; off at the
  * start of every frame */
 void gd_set_blend(bool blend);
+/* Blending as gd_set_blend, for a cloud's shadow (translucent black): where
+ * the shadow maps (gd_set_shadow) already darken the ground, the alpha drops
+ * so the two together are no darker than the darker of them (one sun, one
+ * shadow) */
+void gd_set_shadow_blend(void);
 bool gd_wireframe(void);
 
 /* Depth testing for what follows (the native scene, gl_native.cpp), NULL =

@@ -2828,7 +2828,13 @@ void set_colour(int rgb444)
 	static bool blended;
 	bool sh = rgb444 & 0x8000;
 	if (sh != blended)
-		gd_set_blend(blended = sh);
+	{
+		/* the shadow blend: no darker where a ship's or building's shadow is (gd_set_shadow_blend) */
+		if ((blended = sh))
+			gd_set_shadow_blend();
+		else
+			gd_set_blend(false);
+	}
 	if (sh)
 	{
 		gd_color4ub(0, 0, 0, 110);
@@ -5157,10 +5163,15 @@ extern "C" void native_draw(void)
 	/* All the underlays' cloud shadows (of every object) are drawn together,
 	 * once per pixel, at the first underlay node that has any */
 	std::vector<const Tri *> under_shadows;
+	bool under_shadows_mapped = true; /* all their objects at true size: the maps fit them */
 	for (const Under &u : unders)
 		for (const Tri &t : u.node->tris)
 			if (t.colour & 0x8000)
+			{
 				under_shadows.push_back(&t);
+				if (u.layers.l[0] < 0 && u.layers.l[1] < 0 && u.layers.l[2] < 0)
+					under_shadows_mapped = false;
+			}
 	bool shadows_drawn = false;
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
@@ -5176,7 +5187,14 @@ extern "C" void native_draw(void)
 				for (const Tri &t : n->tris)
 					if (t.colour & 0x8000)
 					{
-						gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
+						/* looking up the maps as the ground does (every caster), so
+						 * where a ship's shadow is the cloud's adds no more dark */
+						if (under_shadows_mapped)
+							gd_set_shadow(shadow_m0, shadow_m0 ? gl_shadow_all_layer(0) : -1, shadow_m1,
+										  shadow_m1 ? gl_shadow_all_layer(1) : -1, shadow_m2,
+										  shadow_m2 ? gl_shadow_all_layer(2) : -1);
+						else
+							gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
 						draw_shadow_group(under_shadows);
 						set_shadow(unders[next_under].layers);
 						shadows_drawn = true;
