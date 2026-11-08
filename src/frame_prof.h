@@ -45,6 +45,9 @@ enum
 extern volatile bool prof_on;
 
 void prof_init(void);
+/* switches the profile on now (the menu's diagnostics page), rows to csv_path */
+void prof_start(const char *csv_path);
+void prof_flush(void); /* the csv written out so far, before it is read */
 uint64_t prof_now(void);
 
 /* hostcall.c's wrappers */

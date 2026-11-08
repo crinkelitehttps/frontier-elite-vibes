@@ -14,6 +14,8 @@
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Send diagnostics (menu, Debug page): only when the player presses it -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- the OpenXR loader finds the headset's runtime through these -->
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
     <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />

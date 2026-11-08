@@ -7,3 +7,5 @@ build-original
 __pycache__
 temp
 build-smoke
+# the diagnostics upload secret (build_android.py)
+tools/androidBuild/upload_token.txt

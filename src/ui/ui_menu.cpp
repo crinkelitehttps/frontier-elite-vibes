@@ -25,6 +25,7 @@ extern "C"
 #include "cheats.h"
 #include "game_state.h"
 #include "custom_ships.h"
+#include "diag_upload.h"
 #include "mods.h"
 #include "freecam.h"
 #include "gl/gl_shadow.h"
@@ -56,6 +57,7 @@ enum class Page
 	Mods,
 	Debug,
 	DebugOptions,
+	Diagnostics,
 	About,
 };
 
@@ -194,6 +196,8 @@ void page_home()
 		page = Page::Mods;
 	if (ui_button("DEBUG"))
 		page = Page::Debug;
+	if (diag_upload_available() && ui_button("SEND DIAGNOSTICS"))
+		page = Page::Diagnostics;
 	if (ui_button("ABOUT"))
 		page = Page::About;
 	side = Side::None;
@@ -496,6 +500,41 @@ void page_debug_options()
 	ui_heading("Emulator speed (default 20ms)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##speed", &emulation_speed, 1, 100, "%d ms");
+}
+
+/* Send diagnostics: only on Android builds that have the upload address */
+void page_diagnostics()
+{
+	ui_heading("Send diagnostics");
+	ImGui::TextWrapped("Sends this game's log, the last game's log, your settings (glfrontier.cfg), the frame profile "
+					   "if it is on, and the device's model, Android version, memory, temperature and battery. "
+					   "No saved games or personal files. Nothing is sent until you press Send.");
+	ImGui::TextWrapped("You get a short ID: put it in your GitHub issue so the logs can be found.");
+
+	ui_heading("Frame profile");
+	if (diag_profile_on())
+		ImGui::TextWrapped("On (until the game ends). Play for a minute where it is slow, then come back and send.");
+	else
+	{
+		ImGui::TextWrapped("Records where the time of every frame goes: best for slowness. Switch it on, play where "
+						   "it is slow for a minute, then send.");
+		if (ui_button("Record a frame profile"))
+			diag_profile_start();
+	}
+
+	ui_heading("Send");
+	int st = diag_upload_state();
+	if (st == DIAG_SENDING)
+		ImGui::TextWrapped("Sending...");
+	else if (ui_button(st == DIAG_SENT ? "Send again" : "Send"))
+		diag_upload_start();
+	if (st == DIAG_SENT)
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.2f, 1.0f), "Sent. ID: %s", diag_upload_message());
+		ImGui::TextWrapped("Quote this ID in your GitHub issue.");
+	}
+	else if (st == DIAG_FAILED)
+		ImGui::TextWrapped("Not sent: %s", diag_upload_message());
 }
 
 void page_about()
@@ -935,6 +974,9 @@ void ui_menu_draw(void)
 			break;
 		case Page::DebugOptions:
 			page_debug_options();
+			break;
+		case Page::Diagnostics:
+			page_diagnostics();
 			break;
 		case Page::About:
 			page_about();

@@ -286,6 +286,39 @@ def build_native(sdk, abi, modded, quest, jobs):
         die(f"{so} was not built")
     return bdir, so
 
+# "Send diagnostics" (src/diag_upload.c): where the zip goes. The token is a
+# shared secret the upload Worker checks; it is never committed: it comes from
+# GLF_UPLOAD_TOKEN or tools/androidBuild/upload_token.txt (git-ignored). With
+# neither, the build works but the menu says diagnostics can't be sent.
+UPLOAD_ENDPOINT = "https://hello-world.donegandiarmuid.workers.dev/upload"
+
+def java_string(s):
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+def upload_config(work):
+    token = os.environ.get("GLF_UPLOAD_TOKEN", "").strip()
+    token_file = ANDROID_DIR / "upload_token.txt"
+    if not token and token_file.exists():
+        token = token_file.read_text().strip()
+    endpoint = os.environ.get("GLF_UPLOAD_ENDPOINT", UPLOAD_ENDPOINT).strip()
+    try:
+        build = subprocess.run(["git", "-C", str(ROOT), "describe", "--tags", "--always", "--dirty"],
+                               capture_output=True, text=True).stdout.strip()
+    except OSError:
+        build = ""
+    log("diagnostics upload: " + ("on" if token else "OFF (no GLF_UPLOAD_TOKEN or upload_token.txt)")
+        + f", build {build or '?'}")
+    gen = work / "gen" / "org" / "glfrontier"
+    gen.mkdir(parents=True, exist_ok=True)
+    out = gen / "UploadConfig.java"
+    out.write_text("package org.glfrontier;\n\n/* written by build_android.py, not committed */\n"
+                   "final class UploadConfig {\n"
+                   f"    static final String ENDPOINT = {java_string(endpoint if token else '')};\n"
+                   f"    static final String TOKEN = {java_string(token)};\n"
+                   f"    static final String BUILD = {java_string(build)};\n"
+                   "}\n")
+    return out
+
 def build_dex(sdk, jdk, sdl_src, work):
     log("Java: SDL glue + tools/androidBuild/java -> classes.dex")
     classes = work / "classes"
@@ -293,6 +326,7 @@ def build_dex(sdk, jdk, sdl_src, work):
     classes.mkdir(parents=True)
     sources = sorted((sdl_src / "android-project" / "app" / "src" / "main" / "java").rglob("*.java"))
     sources += sorted((ANDROID_DIR / "java").rglob("*.java"))
+    sources.append(upload_config(work))
     argfile = work / "sources.txt"
     argfile.write_text("\n".join(f'"{s.as_posix()}"' for s in sources))
     # core-lambda-stubs: android.jar has no LambdaMetafactory (d8 desugars lambdas)

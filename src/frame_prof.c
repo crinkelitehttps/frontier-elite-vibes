@@ -120,9 +120,18 @@ void prof_init(void)
 	const char *s = SDL_getenv("GLF_FRAME_PROF_SLOW");
 	if (s && atof(s) > 0)
 		slow_ms = atof(s);
+	prof_start("frameprof.csv");
+}
+
+void prof_start(const char *csv_path)
+{
+	if (prof_on)
+		return;
 	freq = SDL_GetPerformanceFrequency();
 	start_ticks = SDL_GetPerformanceCounter();
-	csv = fopen("frameprof.csv", "w");
+	last_end = 0; /* the first frame end only starts the count */
+	if (!csv)
+		csv = fopen(csv_path, "w");
 	if (csv)
 	{
 		fprintf(csv, "frame,wall_s,mode,frame_ms,emu_ms");
@@ -133,8 +142,14 @@ void prof_init(void)
 			fprintf(csv, ",%s_ms", part_name[p]);
 		fprintf(csv, ",audio_ms,render_ms,swap_ms,acquire_ms,pictures,cpu_ms,hostupd_calls,idle_calls,vr_pictures,vr_wait_ms,vr_eyes_cpu_ms,vr_end_ms,vr_gpu_ms,vr_gpu_n,native_ms,native_max_ms,native_ran,native_reused\n");
 	}
-	log_printf("Frame profile on: frameprof.csv%s, slow frames over %.0f ms\n", csv ? "" : " (cannot open)", slow_ms);
+	log_printf("Frame profile on: %s%s, slow frames over %.0f ms\n", csv_path, csv ? "" : " (cannot open)", slow_ms);
 	prof_on = true;
+}
+
+void prof_flush(void)
+{
+	if (csv)
+		fflush(csv);
 }
 
 uint64_t prof_now(void)
