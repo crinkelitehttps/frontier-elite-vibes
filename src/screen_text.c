@@ -22,11 +22,39 @@ const unsigned char *screen_text_glyph(int ch)
 	return font_bmp + (ch - FONT_FIRST) * 10;
 }
 
-static int draw_char(int col, int xoffset, char *scrline, int chr)
+int screen_text_glyph_count(void)
+{
+	return FONT_COUNT;
+}
+
+static TextGlyphs *rec_to;
+static int rec_below;
+
+void screen_text_record(TextGlyphs *to, int below)
+{
+	rec_to = to;
+	rec_below = below;
+}
+
+static char *text_base; /* screen_text_render_queue's buffer, else the logical screen */
+
+static int draw_char(int col, int xoffset, int y, char *scrline, int chr)
 {
 	const unsigned char *glyph = font_bmp + (chr & 0xff) * 10;
 	if (xoffset < 0)
 		return xoffset + glyph[9];
+	if (rec_to && !text_base && y + 8 <= rec_below && xoffset <= 319)
+	{
+		if (rec_to->n < TEXT_GLYPHS_MAX && (chr & 0xff) < FONT_COUNT)
+		{
+			TextGlyph *g = &rec_to->g[rec_to->n++];
+			g->x = (int16_t)xoffset;
+			g->y = (int16_t)y;
+			g->glyph = (uint8_t)chr;
+			g->col = (uint8_t)col;
+		}
+		return xoffset + glyph[9];
+	}
 	for (int row = 0; row < 8; row++, scrline += SCREENBYTES_LINE)
 	{
 		unsigned char bits = glyph[row];
@@ -36,8 +64,6 @@ static int draw_char(int col, int xoffset, char *scrline, int chr)
 	}
 	return xoffset + glyph[9];
 }
-
-static char *text_base; /* screen_text_render_queue's buffer, else the logical screen */
 
 int DrawStr(int xpos, int ypos, int col, unsigned char *str, bool shadowed)
 {
@@ -74,8 +100,8 @@ set_line:
 			goto set_line;
 		}
 		if (shadowed)
-			draw_char(0, x + 1, screen + SCREENBYTES_LINE, chr - 0x20);
-		x = draw_char(col, x, screen, chr - 0x20);
+			draw_char(0, x + 1, y + 1, screen + SCREENBYTES_LINE, chr - 0x20);
+		x = draw_char(col, x, y, screen, chr - 0x20);
 	}
 	return x;
 }

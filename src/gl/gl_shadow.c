@@ -72,8 +72,12 @@ static const char *VS_MESH = "in vec3 aPos;\n"
 							 "  gl_Position = uM * q;\n"
 							 "}\n";
 
+bool gl_shadow_off = false;
+
 bool gl_shadow_wanted(void)
 {
+	if (gl_shadow_off)
+		return false;
 	static int env = -2;
 	if (env == -2)
 	{

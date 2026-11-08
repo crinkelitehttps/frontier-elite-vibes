@@ -100,9 +100,13 @@ float planet_native_shrink(int i); /* true distance = dist * shrink */
 void planet_native_draw(int i);
 /* The player's ship this frame (GL view space, view units; shrink as native_frame_shrink), for the ground the shadows fall on in the external view */
 void planet_set_ground_ship(bool ok, const float pos[3], float shrink);
+/* The ground ship as it is, put aside and back (the camera screen's picture is drawn without it) */
+void planet_ground_ship_push(void);
+void planet_ground_ship_pop(void);
 /* drawing the cockpit screen's picture: its planets, not the world's */
 void planet_use_screen(bool screen);
 void planet_use_page(bool page); /* the page's (scene_use_page) */
+void planet_use_camera(bool on); /* the camera screen's (scene_use_camera) */
 /* The atmosphere bands round them (gl_atmos.c), before the planets */
 void atmos_draw_native(void);
 

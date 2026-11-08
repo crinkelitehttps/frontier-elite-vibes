@@ -59,6 +59,10 @@ static SceneBuf show = {.n_passes = 1, .passes = {{-1, -1, 0}}};
  * scene_use_page is on */
 static SceneBuf pub_page = {.n_passes = 1, .passes = {{-1, -1, 0}}};
 static SceneBuf show_page = {.n_passes = 1, .passes = {{-1, -1, 0}}};
+/* ... and the camera screen's high-res picture (gl_camera.h), drawn when
+ * scene_use_camera is on */
+static SceneBuf pub_cam = {.n_passes = 1, .passes = {{-1, -1, 0}}};
+static SceneBuf show_cam = {.n_passes = 1, .passes = {{-1, -1, 0}}};
 static SceneBuf *drawn = &show;
 
 static int cur_node = -1; /* -1: no node, records are dropped */
@@ -361,6 +365,15 @@ void scene_publish_page(void)
 	native_publish_page();
 }
 
+void scene_publish_camera(void)
+{
+	close_current();
+	scene_capture_soft_nodes();
+	copy_scene(&pub_cam, &rec);
+	planet_camera_publish();
+	native_publish_camera();
+}
+
 void scene_publish_world(void)
 {
 	close_current();
@@ -411,6 +424,19 @@ void scene_use_page(bool on)
 {
 	drawn = on ? &show_page : &show;
 	native_use_page(on);
+}
+
+void scene_acquire_camera(void)
+{
+	copy_scene(&show_cam, &pub_cam);
+	planet_camera_acquire();
+	native_acquire_camera();
+}
+
+void scene_use_camera(bool on)
+{
+	drawn = on ? &show_cam : &show;
+	native_use_camera(on);
 }
 
 void scene_draw(void)

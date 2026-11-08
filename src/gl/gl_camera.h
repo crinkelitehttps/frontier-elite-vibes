@@ -34,6 +34,19 @@
  *   target's range is drawn, so that is the true one. The game's own
  *   relative vector (Lcam_relvec) does the distances.
  *
+ *   HIGH RESOLUTION (camera_hires, the default): the same batch with the
+ *   game's GL renderer on and its own host calls, so the flight view is
+ *   recorded (gl_scene, gl_planet, the native scene's capture) as a cockpit
+ *   capture pass records it, in the camera's turned (and, for the target
+ *   view, moved) view. That frame is published apart (scene_publish_camera)
+ *   and the render thread draws it, as the classic view draws its frame but
+ *   without shadows, into a 960x504 texture (camera_draw_hires). The labels,
+ *   the target and the buttons are still the batch's 320x168 picture, drawn
+ *   after the view with the software renderer onto nothing, and laid over
+ *   it. The planets' exact view (gl_planet.c), which goes by the ship's own
+ *   axes, is left out for the batch, and so is what the cockpit's capture
+ *   passes remember of where planets are.
+ *
  *   gl_cockpit.c shows it on a screen beside the cockpit's screen; a tap
  *   on it (mouse, laser, hand) on a thing makes that the target, else goes
  *   to the next direction.
@@ -57,6 +70,22 @@ extern "C"
 extern bool cockpit_camera;
 /* Setting: the most the target view magnifies (glfrontier.cfg camera_zoom_max), a power of two is used */
 extern int camera_zoom_max;
+/* Setting: drawn by the native scene in high resolution (glfrontier.cfg
+ * camera_hires); off, the original game's picture */
+extern bool camera_hires;
+
+/* Game thread: the camera's batch is running (the planets' exact view and
+ * the capture passes' memory of planets are not for it) */
+bool camera_in_batch(void);
+
+/* Render thread, after a high-res picture's frame is taken
+ * (scene_acquire_camera): the framebuffer to draw its view into, w x h,
+ * then camera_compose_hires lays the labels and buttons over it into the
+ * shown texture */
+#define CAMERA_HIRES_W (CAMERA_W * 3)
+#define CAMERA_HIRES_H (CAMERA_H * 3)
+GLuint camera_hires_target(void);
+void camera_compose_hires(void);
 
 /* With the GL context */
 void camera_init(void);

@@ -5,6 +5,7 @@
 #define SCREEN_TEXT_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -18,6 +19,26 @@ int DrawStr(int xpos, int ypos, int col, unsigned char *str, bool shadowed);
 /* The game's 8x8 font: 10 bytes per glyph, rows 0..7 (bit 7 = leftmost
  * pixel), byte 9 = advance width. NULL if the character has no glyph. */
 const unsigned char *screen_text_glyph(int ch);
+
+/* A character DrawStr would have drawn: its glyph (screen_text_glyph's
+ * ch - 0x20 index), its top left on the 320x200 screen and its colour */
+typedef struct
+{
+	int16_t x, y;
+	uint8_t glyph, col;
+} TextGlyph;
+#define TEXT_GLYPHS_MAX 1500
+typedef struct
+{
+	int n;
+	TextGlyph g[TEXT_GLYPHS_MAX];
+} TextGlyphs;
+/* From now on the characters DrawStr puts wholly above screen row `below`
+ * are noted in `to` (appended) instead of drawn, to be drawn in high
+ * resolution (gl_text.h); the rest are drawn as before. NULL: none noted. */
+void screen_text_record(TextGlyphs *to, int below);
+/* The number of glyphs in the font */
+int screen_text_glyph_count(void);
 
 /* Host call: queue a string to be drawn at present time */
 void Nu_QueueDrawStr(void);

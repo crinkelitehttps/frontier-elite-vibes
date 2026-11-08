@@ -35,6 +35,8 @@ extern bool low_sun_shadows;
 
 /* Whether the experiment is on (setting or GLF_SHIP_SHADOWS) */
 bool gl_shadow_wanted(void);
+/* Render thread: none for what is drawn while set (the camera screen's picture) */
+extern bool gl_shadow_off;
 
 /* GLSL for the shaders that look the map up: shadowLit(map, u, v, layer, depth) = how much of the light
  * reaches the point, 0..1: a 3x3 grid of the hardware's 2x2 comparisons, a texel apart, so the stairs of

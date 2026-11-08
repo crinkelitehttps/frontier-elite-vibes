@@ -1109,11 +1109,21 @@ static void draw_text(MapPage *out, int x, int y, int col, const char *text)
 {
 	for (; *text; text++)
 	{
-		const unsigned char *g = screen_text_glyph((unsigned char)*text);
-		if (!g)
-			g = screen_text_glyph(' ');
+		int ch = screen_text_glyph((unsigned char)*text) ? (unsigned char)*text : ' ';
+		const unsigned char *g = screen_text_glyph(ch);
 		if (!g)
 			continue;
+		/* in high resolution (gl_text.h) where it is wholly on the page */
+		if (x >= 0 && x <= 319 && y >= 0 && y + 8 <= SHIP_PAGE_ROWS && out->text.n < TEXT_GLYPHS_MAX)
+		{
+			TextGlyph *t = &out->text.g[out->text.n++];
+			t->x = (int16_t)x;
+			t->y = (int16_t)y;
+			t->glyph = (uint8_t)(ch - 0x20);
+			t->col = (uint8_t)col;
+			x += g[9];
+			continue;
+		}
 		for (int row = 0; row < 8; row++)
 			for (int bit = 0; bit < 8; bit++)
 				if ((g[row] >> (7 - bit) & 1) && x + bit < 320 && y + row < SHIP_PAGE_ROWS)
@@ -1174,6 +1184,7 @@ static void draw_debug_page(MapPage *out)
 	int bright, mid, dark;
 	page_colours(out, &bright, &mid, &dark);
 	memset(out->screen, dark, (size_t)320 * SHIP_PAGE_ROWS);
+	out->text.n = 0; /* (the game's page is gone) */
 	static char lines[DEBUG_SCREEN_ROWS][DEBUG_SCREEN_COLS + 1];
 	int count = debug_screen_lines(lines);
 	draw_text(out, 4, 2, bright, "DEBUG");
@@ -1199,6 +1210,7 @@ static void draw_ship_log_page(MapPage *out)
 	int bright, mid, dark;
 	page_colours(out, &bright, &mid, &dark);
 	memset(out->screen, dark, (size_t)320 * SHIP_PAGE_ROWS);
+	out->text.n = 0; /* (the game's page is gone) */
 
 	static CheatShip ships[CHEAT_SHIPS_MAX];
 	const int total = cheat_ships(ships);
@@ -1281,6 +1293,9 @@ bool mapscreen_page(int group, MapPage *out)
 	hcalls[HC_IDLE] = vblank_now;
 	flipped = out;
 	got_page = false;
+	/* the page's text, above the panel, in high resolution */
+	out->text.n = 0;
+	screen_text_record(&out->text, SHIP_PAGE_ROWS);
 
 	int step = 0;
 	uint8_t state[KEEP_END - KEEP_FIRST], end_state[KEEP_END - KEEP_FIRST];
@@ -1420,6 +1435,7 @@ bool mapscreen_page(int group, MapPage *out)
 				   rdbyte(a6 + PICKED), set_target);
 	int d_owner = (uint16_t)rdword(a6 + A6_SCREEN_OWNER), d_clr = (uint8_t)rdbyte(a6 + A6_DO_CLR);
 	memcpy(hcalls, saved, (size_t)hcalls_count * sizeof(HOSTCALL));
+	screen_text_record(NULL, 0);
 	fe2vm_end();
 	fe2vm_game_hcalls(0);
 	if (keep)

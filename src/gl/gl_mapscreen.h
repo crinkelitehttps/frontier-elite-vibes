@@ -42,6 +42,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "screen_text.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -58,6 +60,9 @@ typedef struct
 	int len_main;
 	unsigned short ctrl_pal[16];
 	int bgcol;
+	/* the MAP page's text in the view, not in `screen` but noted to be drawn
+	 * in high resolution (gl_text.h) */
+	TextGlyphs text;
 } MapPage;
 
 /* Input for the screens (groups COCKPIT_SCREEN_MAP, COCKPIT_SCREEN_SHIP), from

@@ -11,6 +11,7 @@
 #include "cheats.h"
 #include "freecam.h"
 #include "gl_api.h"
+#include "gl_camera.h"
 #include "gl_cockpit.h"
 #include "gl_draw.h"
 #include "gl_fill2d.h"
@@ -287,6 +288,7 @@ static NativePlanets native_rec, native_pub, native_show, native_last;
  * world's while its picture is drawn (planet_use_screen) */
 static NativePlanets screen_pub, screen_show;
 static NativePlanets page_pub, page_show; /* ... and a page's beside it (gl_scene.h) */
+static NativePlanets cam_pub, cam_show;   /* ... and the camera screen's picture */
 static NativePlanets *drawn_planets = &native_show;
 static uint32_t native_frame;
 
@@ -363,6 +365,23 @@ void planet_use_page(bool page)
 	drawn_planets = page ? &page_show : &native_show;
 }
 
+void planet_camera_publish(void)
+{
+	cam_pub.n = native_rec.n;
+	memcpy(cam_pub.p, native_rec.p, sizeof native_rec.p[0] * (size_t)native_rec.n);
+}
+
+void planet_camera_acquire(void)
+{
+	cam_show.n = cam_pub.n;
+	memcpy(cam_show.p, cam_pub.p, sizeof cam_pub.p[0] * (size_t)cam_pub.n);
+}
+
+void planet_use_camera(bool on)
+{
+	drawn_planets = on ? &cam_show : &native_show;
+}
+
 /* A turned pass's game view vector (z ahead) in the game camera's */
 static void pass_to_view_game(const float v[3], float out[3])
 {
@@ -404,7 +423,7 @@ static void exact_distance(NativePlanet *n)
 {
 	/* only a view from the ship (not the external one, a map, a screen's page) */
 	FlightView v = game_flight_view();
-	if (game_screen() != SCREEN_FLIGHT || v == VIEW_EXTERNAL || v >= VIEW_COUNT)
+	if (game_screen() != SCREEN_FLIGHT || v == VIEW_EXTERNAL || v >= VIEW_COUNT || camera_in_batch())
 		return;
 	double ratio = cheat_ship_height_ratio(n->obj);
 	double d = sqrt(n->pos[0] * n->pos[0] + n->pos[1] * n->pos[1] + n->pos[2] * n->pos[2]);
@@ -563,7 +582,8 @@ static void record_native(const PlanetDesc *p)
 	/* A capture pass's planet is as rounded as the game camera's (more: its camera too), so it gets the exact view
 	 * as well, once turned into the game camera's view: over London at 16 km its map was ~5 mrad (30 km) off the
 	 * game camera's (save "flickeri"). */
-	if (game_screen() == SCREEN_FLIGHT && game_flight_view() != VIEW_EXTERNAL)
+	/* (not the camera screen's: its camera is turned off the ship's axes, or moved) */
+	if (game_screen() == SCREEN_FLIGHT && game_flight_view() != VIEW_EXTERNAL && !camera_in_batch())
 	{
 		double dp[3] = {v[0], v[1], v[2]};
 		exact_view(dp, n->axes, obj);
@@ -597,7 +617,8 @@ static void record_native(const PlanetDesc *p)
 						-(int16_t)STMemory_ReadWord(m + 4) / 32768.0f};
 		cockpit_pass_to_view(col, n->obj_cols[c]);
 	}
-	remember_known(n);
+	if (!camera_in_batch()) /* (the cockpit's capture passes go by where the ship sees it) */
+		remember_known(n);
 }
 
 /* The game's matrix words are rounded, so its columns are neither unit nor square to each other (about 1 in 120
@@ -1237,6 +1258,23 @@ static void draw_list(const PlanetDesc *p)
 static bool ground_ship_ok;
 static double ground_ship[3];
 static double ground_ship_shrink = 1;
+static bool saved_ground_ok;
+static double saved_ground[3], saved_ground_shrink = 1;
+
+void planet_ground_ship_push(void)
+{
+	saved_ground_ok = ground_ship_ok;
+	memcpy(saved_ground, ground_ship, sizeof saved_ground);
+	saved_ground_shrink = ground_ship_shrink;
+}
+
+void planet_ground_ship_pop(void)
+{
+	ground_ship_ok = saved_ground_ok;
+	memcpy(ground_ship, saved_ground, sizeof ground_ship);
+	ground_ship_shrink = saved_ground_shrink;
+}
+
 void planet_set_ground_ship(bool ok, const float pos[3], float shrink)
 {
 	ground_ship_ok = ok;

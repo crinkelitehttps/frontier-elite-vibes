@@ -38,6 +38,8 @@
 #include "gl_planet.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
+#include "gl_shadow.h"
+#include "gl_text.h"
 
 #include "frame_prof.h"
 #include "game_state.h"
@@ -326,6 +328,7 @@ typedef struct
 	unsigned int page_main_rgb[256];
 	unsigned int page_ctrl_rgb[16];
 	int page_bgcol;
+	TextGlyphs page_text; /* ... and its text in high resolution (gl_text.h) */
 	uint32_t clock; /* GLF_MOTION_LOG: the game's clock (A6_time_of_day) at the flip */
 	Uint64 flip_t;	/* ... and when it flipped (performance counter) */
 	float rot[9];	/* ... and the player's ship's rotation matrix (object +0) */
@@ -726,6 +729,7 @@ void Screen_UnInit(void)
 	vr_shutdown();
 	ui_shutdown();
 	cockpit_shutdown();
+	gl_text_shutdown();
 	clipboard_shutdown();
 	glDeleteTextures(1, &screen_tex);
 	if (label_tex)
@@ -848,6 +852,7 @@ static void update_cursor(void)
 }
 
 static bool drawing_sub; /* draw_sub: the cockpit's screen's picture */
+static bool drawing_page_text; /* ... a MAP or SHIP page's, with its text noted (gl_text.h) */
 static unsigned int world_bg; /* the last cockpit frame's sky, kept under the cockpit's screen */
 
 /* Draws the frame into the bound framebuffer, w x h pixels: the window's,
@@ -935,6 +940,25 @@ static void draw_frame(int w, int h, bool cockpit, bool window)
 		{
 			blit->transparent = (scr_show.renderer != R_OLD);
 			blit->scissor[2] = 0;
+		}
+		/* the MAP or SHIP page's text, in high resolution, but under the MAP's buttons */
+		if (drawing_page_text)
+		{
+			int skip[MAPSCREEN_BUTTONS + MAPSCREEN_PANS][4], ns = 0;
+			MapButton b[MAPSCREEN_BUTTONS];
+			int nb = page_buttons ? mapscreen_buttons(b) : 0;
+			for (int i = 0; i < nb; i++, ns++)
+			{
+				skip[ns][0] = b[i].dx;
+				skip[ns][1] = b[i].dy;
+				skip[ns][2] = b[i].w;
+				skip[ns][3] = b[i].h;
+			}
+			int pans[MAPSCREEN_PANS][4];
+			int np = page_buttons ? mapscreen_pans(pans) : 0;
+			for (int i = 0; i < np; i++, ns++)
+				memcpy(skip[ns], pans[i], sizeof skip[ns]);
+			gl_text_queue(&scr_show.page_text, scr_show.main_rgb, (const int(*)[4])skip, ns);
 		}
 
 		/* the clipboard over the picture while it is out */
@@ -1281,6 +1305,8 @@ static void publish_frame(void)
 			build_rgb_palette(scr_pub.page_main_rgb, map_page.main_pal, map_page.len_main);
 			build_rgb_palette(scr_pub.page_ctrl_rgb, map_page.ctrl_pal, 16);
 			scr_pub.page_bgcol = map_page.bgcol;
+			scr_pub.page_text.n = map_page.text.n;
+			memcpy(scr_pub.page_text.g, map_page.text.g, (size_t)map_page.text.n * sizeof map_page.text.g[0]);
 		}
 		frame_new = true;
 		SDL_UnlockMutex(frame_lock);
@@ -1318,6 +1344,61 @@ static void publish_frame(void)
 	SDL_AtomicIncRef(&published);
 }
 
+/* The camera screen's high-res frame (gl_camera.h): published (game
+ * thread, under frame_lock), taken by the drawing to draw once */
+static bool cam_pub_new, cam_take;
+static unsigned int cam_pub_bg, cam_bg;
+
+void gl_screen_publish_camera(unsigned int bg)
+{
+	SDL_LockMutex(frame_lock);
+	scene_publish_camera();
+	cam_pub_bg = bg;
+	cam_pub_new = true;
+	SDL_UnlockMutex(frame_lock);
+}
+
+/* Draws it as the classic view draws a frame (its projection: the game's
+ * 320x168 view), without shadows */
+static void draw_camera(void)
+{
+	GLuint fbo = camera_hires_target();
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, CAMERA_HIRES_W, CAMERA_HIRES_H);
+	glClearColor((cam_bg & 0xff) / 255.0f, ((cam_bg >> 8) & 0xff) / 255.0f, ((cam_bg >> 16) & 0xff) / 255.0f, 1.0f);
+	glStencilMask(0xff);
+	glClearStencil(0);
+	glDepthMask(GL_TRUE);
+	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	int rects[GD_VP_COUNT][4];
+	for (int i = 0; i < GD_VP_COUNT; i++)
+	{
+		rects[i][0] = rects[i][1] = 0;
+		rects[i][2] = CAMERA_HIRES_W;
+		rects[i][3] = CAMERA_HIRES_H;
+	}
+	cockpit_draw_flat(true);
+	scene_use_camera(true);
+	gl_shadow_off = true;
+	drawing_sub = true;
+	gd_begin_frame(rects);
+	mat4 persp = mat4_perspective(CLASSIC_FOV, CLASSIC_ASPECT, 1.0f, 10000000000.0f);
+	gd_set_viewport(GD_VP_VIEW3D);
+	gd_set_projection(&persp);
+	gd_set_wireframe(false);
+	native_draw_sky();
+	scene_draw();
+	gl_prims_finish();
+	native_draw();
+	gd_flush();
+	drawing_sub = false;
+	gl_shadow_off = false;
+	scene_use_camera(false);
+	cockpit_draw_flat(false);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	camera_compose_hires();
+}
+
 /* Whoever draws: takes the latest frame, if there is a new one */
 static bool acquire_frame(void)
 {
@@ -1341,6 +1422,13 @@ static bool acquire_frame(void)
 		lab_show = lab_pub;
 		lab_new = false;
 		lab_uploaded = false;
+	}
+	if (cam_pub_new)
+	{
+		scene_acquire_camera();
+		cam_bg = cam_pub_bg;
+		cam_pub_new = false;
+		cam_take = true;
 	}
 	SDL_UnlockMutex(frame_lock);
 	if (prof_on)
@@ -1560,7 +1648,9 @@ static void draw_page(void)
 	scr_show.sub = true;
 	sub_page = flight.page_beside;
 	page_buttons = flight.page_group == COCKPIT_SCREEN_MAP;
+	drawing_page_text = true;
 	draw_sub(flight.page_group);
+	drawing_page_text = false;
 	page_buttons = false;
 	sub_page = false;
 	memcpy(&scr_show, &flight, sizeof scr_show);
@@ -1749,6 +1839,11 @@ static void draw_picture(bool with_menu)
 	}
 	if (scr_show.page_new && new_frame)
 		draw_page();
+	if (cam_take)
+	{
+		cam_take = false;
+		draw_camera();
+	}
 	draw_coms_flight(new_frame);
 	stage_ms[1] += stage_lap(&lap);
 	bool cockpit = draw_vr(with_menu);

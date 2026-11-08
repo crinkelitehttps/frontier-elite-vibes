@@ -29,6 +29,7 @@ extern "C"
 #include "freecam.h"
 #include "gl/gl_shadow.h"
 #include "gamepad.h"
+#include "gl/gl_camera.h"
 #include "gl/gl_cockpit.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
@@ -273,6 +274,7 @@ void page_settings()
 	wrapped_checkbox("Maps, station and ship screens on a screen in the cockpit", &cockpit_screen);
 	wrapped_checkbox("Map screen live in flight", &cockpit_map_live);
 	wrapped_checkbox("Ship screen live in flight", &cockpit_ship_live);
+	wrapped_checkbox("Camera screen in high resolution (native scene, no shadows; off: the original game's own picture)", &camera_hires);
 	ImGui::TextWrapped("Move the cockpit's screens with the mouse: pick one by pointing at it; W move, E turn, R size, Delete puts it back, Esc leaves");
 	if (ui_button(screen_edit_on() ? "Stop editing screens (Ctrl-G)" : "Edit the cockpit screens (Ctrl-G)"))
 		screen_edit_toggle();

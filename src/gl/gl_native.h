@@ -80,6 +80,10 @@ void native_use_screen(bool screen);
 void native_publish_page(void);
 void native_acquire_page(void);
 void native_use_page(bool page);
+/* ... and for the camera screen's high-res picture (scene_publish_camera) */
+void native_publish_camera(void);
+void native_acquire_camera(void);
+void native_use_camera(bool on);
 
 /* Render thread, after the scene, with the 3D view's viewport and its
  * un-turned projection set */

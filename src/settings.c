@@ -90,6 +90,7 @@ typedef struct
 	int building_shadows;
 	int low_sun_shadows;
 	int camera_zoom_max;
+	int camera_hires;
 	int volume;
 	ScreenPlace screen_place[PLACE_COUNT];
 } Settings;
@@ -147,6 +148,7 @@ static const struct
 	{"building_shadows", offsetof(Settings, building_shadows)},
 	{"low_sun_shadows", offsetof(Settings, low_sun_shadows)},
 	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
+	{"camera_hires", offsetof(Settings, camera_hires)},
 	{"volume", offsetof(Settings, volume)},
 	{"screen_place_screen_on", offsetof(Settings, screen_place[0].on)},
 	{"screen_place_screen_x", offsetof(Settings, screen_place[0].x)},
@@ -274,6 +276,7 @@ static Settings current(void)
 	s.building_shadows = building_shadows;
 	s.low_sun_shadows = low_sun_shadows;
 	s.camera_zoom_max = camera_zoom_max;
+	s.camera_hires = camera_hires;
 	s.volume = audio_volume;
 	memcpy(s.screen_place, screen_place, sizeof s.screen_place);
 	return s;
@@ -354,6 +357,7 @@ static void apply(const Settings *s)
 		native_detail_boost = s->native_detail_boost;
 	if (s->camera_zoom_max >= 2 && s->camera_zoom_max <= 1048576)
 		camera_zoom_max = s->camera_zoom_max;
+	camera_hires = s->camera_hires != 0;
 	if (s->volume >= 0 && s->volume <= 100)
 		audio_volume = s->volume;
 	manual_book = s->manual_book != 0; /* (takes effect at manual_init: the next start) */

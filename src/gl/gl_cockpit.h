@@ -91,6 +91,9 @@ GLuint gl_screen_coms_menu(void);
 bool gl_screen_coms_clear(void);
 /* A saved game or a new one was loaded: no station's services are on the COMS screen */
 void gl_screen_coms_forget(void);
+/* Game thread, in the camera's high-res batch (gl_camera.h): its frame is
+ * done, published apart with its background (ABGR) */
+void gl_screen_publish_camera(unsigned int bg);
 /* With the cockpit's screen: the labels on things in the world round it,
  * the flight view's text layer, laid out as the emulated screen's
  * texture (transparent where there is none); 0 when there are none */

@@ -12,6 +12,8 @@
 #include "galaxy/fe2vm.h"
 #include "game_state.h"
 #include "gl_cockpit.h"
+#include "gl_draw.h" /* gd_build_program */
+#include "gl_native.h"
 #include "host.h" /* rdword, wrword, hcalls_count */
 #include "hostcall.h"
 #include "m68000.h"
@@ -20,6 +22,14 @@
 
 bool cockpit_camera = true;
 int camera_zoom_max = 1024;
+bool camera_hires = true;
+
+static bool in_batch;
+
+bool camera_in_batch(void)
+{
+	return in_batch;
+}
 
 #define CAMERA_FPS 20 /* each picture is a run of the game's flight view (2 to 12 ms) */
 
@@ -104,6 +114,9 @@ static SDL_mutex *lock;
 static uint32_t pixels[CAMERA_W * CAMERA_H], pub[CAMERA_W * CAMERA_H];
 static unsigned pub_seq, tex_seq;
 static GLuint tex;
+/* The picture is high-res (camera_hires when it was made): `pub` is then
+ * what is laid over the view, clear (alpha 0) where the view shows */
+static bool pub_hires;
 
 void camera_init(void)
 {
@@ -111,12 +124,31 @@ void camera_init(void)
 		lock = SDL_CreateMutex();
 }
 
+/* The high-res picture (render thread): the view's framebuffer (`view_tex`,
+ * depth and stencil), the overlay's texture and the shown one (`hi_tex`,
+ * top row first as `tex` is, mipmapped) */
+static GLuint view_fbo, view_tex, view_depth, over_tex, hi_fbo, hi_tex;
+static GLuint hi_prog, hi_vao;
+static GLint u_view, u_over;
+static bool hi_drawn;
+
 void camera_shutdown(void)
 {
 	if (tex)
 		glDeleteTextures(1, &tex);
 	tex = 0;
 	tex_seq = 0;
+	GLuint texs[3] = {view_tex, over_tex, hi_tex}, fbos[2] = {view_fbo, hi_fbo};
+	glDeleteTextures(3, texs);
+	glDeleteFramebuffers(2, fbos);
+	if (view_depth)
+		glDeleteRenderbuffers(1, &view_depth);
+	if (hi_prog)
+		glDeleteProgram(hi_prog);
+	if (hi_vao)
+		glDeleteVertexArrays(1, &hi_vao);
+	view_fbo = view_tex = view_depth = over_tex = hi_fbo = hi_tex = hi_prog = hi_vao = 0;
+	hi_drawn = false;
 }
 
 static void camera_next(void)
@@ -424,6 +456,41 @@ static void batch_hcalls(void)
 	 * to cam_nothing it never ended */
 	hcalls[0x9e] = cam_no; /* Call_VirtNext */
 	hcalls[0x9f] = cam_no; /* Call_ScenDrive */
+}
+
+/* Nu_NativeFar in the high-res batch: the thing's place for a tap, then the
+ * native scene's own hook */
+static HOSTCALL game_far;
+
+static void cam_far_native(void)
+{
+	cam_far();
+	game_far();
+}
+
+/* The high-res batch's table: the game's own (recording the view for GL and
+ * the native scene), with the camera's turn, the tap places and nothing of
+ * the cockpit's HUD or screens */
+static void hires_hcalls(void)
+{
+	game_far = hcalls[0x83];
+	/* nothing into the screen: the picture is the recorded view's (and the
+	 * software drawing, haze and such, went past the end of RAM) */
+	static const int soft[] = {0x01, 0x02, 0x05, 0x06, 0x09, 0x0a, 0x0b, 0x16};
+	for (size_t i = 0; i < sizeof soft / sizeof soft[0]; i++)
+		hcalls[soft[i]] = cam_nothing;
+	hcalls[0x1b] = cam_draw_str_shadowed;
+	hcalls[0x1c] = cam_draw_str;
+	hcalls[0x7a] = cam_pass;
+	hcalls[0x83] = cam_far_native;
+	hcalls[0x85] = cam_no; /* Call_ScreenControls */
+	hcalls[0x86] = cam_no; /* Call_HudCross */
+	hcalls[0x87] = cam_no; /* Call_HudVelocity */
+	hcalls[0x88] = cam_no; /* Call_HudTarget */
+	hcalls[0x89] = cam_no; /* Call_HudLabels */
+	hcalls[0x8a] = cam_no; /* Call_ScreenLeave */
+	hcalls[0x8b] = cam_no; /* Call_StationResume */
+	hcalls[0x8c] = cam_no; /* Call_ScreenWorld */
 }
 
 /* =========================================================================
@@ -820,7 +887,7 @@ static bool aim_at(uint32_t target, uint32_t ship, bool keep_roll)
 	batch_dir = CAM_FRONT;
 	bool ok = run_view(true);
 	batch_dir = dir;
-	hcalls[0x83] = cam_far;
+	hcalls[0x83] = camera_hires ? cam_far_native : cam_far;
 	for (int i = 1; i < NUM_SLOTS; i++)
 		wrbyte(space + (uint32_t)i, flags[i]);
 	if (!ok || !probe_seen || !(probe_pos[0] || probe_pos[1] || probe_pos[2]))
@@ -853,10 +920,20 @@ void camera_capture(bool screen)
 	ext_len = 0;
 	nhits = 0;
 
+	const bool hires = camera_hires && native_mode() == 2;
+	HostScreenState host;
+	if (hires)
+		host_screen_save(&host);
 	fe2vm_game_hcalls(1);
 	fe2vm_begin();
-	batch_hcalls();
-	wrword(GL_RENDERER_ON, 0);
+	in_batch = true;
+	if (hires)
+		hires_hcalls();
+	else
+	{
+		batch_hcalls();
+		wrword(GL_RENDERER_ON, 0);
+	}
 	wrbyte(GAME_A6 + A6_3DVIEW_MODE, VIEW_FRONT);
 	if (screen)
 		use_flight_colours();
@@ -886,7 +963,23 @@ void camera_capture(bool screen)
 		nhits = 0;
 	}
 	bool ok = run_view(false);
-	if (ok)
+	if (ok && hires)
+	{
+		/* the view recorded, as the game's frame loop draws it; then the
+		 * labels and the target alone, by the software renderer, onto
+		 * nothing (colour 255) */
+		int bg = (rdbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS) & 1) ? 0xe : 0;
+		ok = run(FE2_Draw3DView, 0);
+		if (ok)
+			gl_screen_publish_camera(rgb((uint16_t)rdword(GAME_A6 + A6_MAIN_PALETTE1 + 2 * (uint32_t)bg)));
+		batch_hcalls();
+		wrword(GL_RENDERER_ON, 0);
+		memset(STRam + scr, 0xff, CAMERA_W * CAMERA_H);
+		if (moved)
+			ship_back(moved);
+		ok = ok && run(FE2_Lcam_hud, 0);
+	}
+	else if (ok)
 	{
 		/* the background as the game's frame loop has it, then the view */
 		memset(STRam + scr, (rdbyte(GAME_A6 + A6_DO_CLR_2_SPACE_COLS) & 1) ? 0xe : 0, CAMERA_W * CAMERA_H);
@@ -905,13 +998,18 @@ void camera_capture(bool screen)
 			pal[i] = i < 16 ? rgb((uint16_t)rdword(GAME_A6 + A6_MAIN_PALETTE1 + 2 * (uint32_t)i))
 				   : i < 16 + ext_len ? rgb(ext_pal[i - 16])
 									  : 0xff000000u;
+		if (hires)
+			pal[255] = 0; /* nothing drawn there: the view shows */
 		const uint8_t *src = (const uint8_t *)STRam + scr;
 		for (int i = 0; i < CAMERA_W * CAMERA_H; i++)
 			pixels[i] = pal[src[i]];
 	}
 	memcpy(hcalls, saved, (size_t)hcalls_count * sizeof(HOSTCALL));
+	in_batch = false;
 	fe2vm_end();
 	fe2vm_game_hcalls(0);
+	if (hires)
+		host_screen_restore(&host);
 
 	static bool failed;
 	if (!ok && !failed)
@@ -922,6 +1020,7 @@ void camera_capture(bool screen)
 	draw_buttons(shown);
 	SDL_LockMutex(lock);
 	memcpy(pub, pixels, sizeof pub);
+	pub_hires = hires;
 	memcpy(pub_hits, hits, (size_t)nhits * sizeof hits[0]);
 	pub_nhits = nhits;
 	pub_seq++;
@@ -931,11 +1030,120 @@ void camera_capture(bool screen)
 /* =========================================================================
  * Drawing
  * ========================================================================= */
+static GLuint new_texture(int w, int h, GLint filter)
+{
+	GLuint t;
+	glGenTextures(1, &t);
+	glBindTexture(GL_TEXTURE_2D, t);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter == GL_NEAREST ? GL_NEAREST : GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return t;
+}
+
+static GLuint new_fbo(GLuint t, GLuint depth)
+{
+	GLuint f;
+	glGenFramebuffers(1, &f);
+	glBindFramebuffer(GL_FRAMEBUFFER, f);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+	if (depth)
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depth);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		log_printf("The camera screen's framebuffer is incomplete\n");
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	return f;
+}
+
+GLuint camera_hires_target(void)
+{
+	if (!view_fbo)
+	{
+		view_tex = new_texture(CAMERA_HIRES_W, CAMERA_HIRES_H, GL_LINEAR);
+		glGenRenderbuffers(1, &view_depth);
+		glBindRenderbuffer(GL_RENDERBUFFER, view_depth);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, CAMERA_HIRES_W, CAMERA_HIRES_H);
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+		view_fbo = new_fbo(view_tex, view_depth);
+	}
+	return view_fbo;
+}
+
+/* The view (rows bottom up, as drawn) with the overlay (top row first) on
+ * it, into the shown texture top row first */
+static const char *VS_HI = "out vec2 vUV;\n"
+						   "void main(){\n"
+						   "  vec2 p = vec2(gl_VertexID & 1, gl_VertexID >> 1);\n"
+						   "  vUV = p;\n"
+						   "  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n"
+						   "}\n";
+static const char *FS_HI = "in vec2 vUV;\n"
+						   "uniform sampler2D uView;\n"
+						   "uniform sampler2D uOver;\n"
+						   "out vec4 fragColor;\n"
+						   "void main(){\n"
+						   "  vec3 v = texture(uView, vec2(vUV.x, 1.0 - vUV.y)).rgb;\n"
+						   "  vec4 o = texture(uOver, vUV);\n"
+						   "  fragColor = vec4(mix(v, o.rgb, o.a), 1.0);\n"
+						   "}\n";
+
+void camera_compose_hires(void)
+{
+	if (!view_fbo || !lock)
+		return;
+	if (!hi_prog)
+	{
+		hi_prog = gd_build_program(VS_HI, FS_HI, NULL, 0);
+		u_view = glGetUniformLocation(hi_prog, "uView");
+		u_over = glGetUniformLocation(hi_prog, "uOver");
+		glGenVertexArrays(1, &hi_vao);
+		over_tex = new_texture(CAMERA_W, CAMERA_H, GL_NEAREST);
+		hi_tex = new_texture(CAMERA_HIRES_W, CAMERA_HIRES_H, GL_LINEAR_MIPMAP_LINEAR);
+		hi_fbo = new_fbo(hi_tex, 0);
+	}
+	SDL_LockMutex(lock);
+	glBindTexture(GL_TEXTURE_2D, over_tex);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, CAMERA_W, CAMERA_H, GL_RGBA, GL_UNSIGNED_BYTE, pub);
+	SDL_UnlockMutex(lock);
+	glBindFramebuffer(GL_FRAMEBUFFER, hi_fbo);
+	glViewport(0, 0, CAMERA_HIRES_W, CAMERA_HIRES_H);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_STENCIL_TEST);
+	glDisable(GL_SCISSOR_TEST);
+	glDisable(GL_BLEND);
+	glUseProgram(hi_prog);
+	glUniform1i(u_view, 0);
+	glUniform1i(u_over, 1);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, view_tex);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, over_tex);
+	glBindVertexArray(hi_vao);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	glBindVertexArray(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, hi_tex);
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	hi_drawn = true;
+}
+
 GLuint camera_texture(void)
 {
 	if (!lock)
 		return 0;
 	SDL_LockMutex(lock);
+	if (pub_hires)
+	{
+		SDL_UnlockMutex(lock);
+		return hi_drawn ? hi_tex : 0;
+	}
 	unsigned seq = pub_seq;
 	if (seq != tex_seq && seq)
 	{

@@ -151,6 +151,8 @@ void planet_screen_publish(void);    /* the same for a cockpit screen's frame */
 void planet_screen_acquire(void);
 void planet_page_publish(void);     /* ... and for the page beside it */
 void planet_page_acquire(void);
+void planet_camera_publish(void);   /* ... and for the camera screen's picture */
+void planet_camera_acquire(void);
 void planet_dists_acquire(void);     /* gl_planet.c, with scene_acquire */
 
 /* ---- hand over --------------------------------------------------------- *
@@ -168,6 +170,12 @@ void scene_publish_page(void);
 void scene_acquire_page(void);
 void scene_drop_shown(void);
 void scene_use_page(bool on);
+/* The same for the camera screen's high-res picture (gl_camera.h): its
+ * batch's frame, published apart (game thread, under gl_screen.c's lock),
+ * taken (render thread) and drawn while scene_use_camera(true) */
+void scene_publish_camera(void);
+void scene_acquire_camera(void);
+void scene_use_camera(bool on);
 void scene_acquire(bool screen);
 /* Game thread, after scene_publish(true): the world as the cockpit sees it
  * has been recorded for that screen frame (cockpit_capture_world); it is

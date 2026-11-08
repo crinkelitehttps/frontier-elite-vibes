@@ -419,8 +419,9 @@ struct Frame
 };
 uint32_t publishes = 0;
 /* shows[0]: the world, shows[1]: the last frame of the game's other
- * screens, which leaves the world as it was (native_acquire) */
-Frame rec, pub, pub_world, pub_page, shows[3];
+ * screens, which leaves the world as it was (native_acquire), shows[2]: a
+ * page beside it, shows[3]: the camera screen's picture */
+Frame rec, pub, pub_world, pub_page, pub_cam, shows[4];
 Frame *shown = &shows[0];
 bool screen_only = false; /* drawing shows[1]: its own planets, no haze */
 
@@ -1221,6 +1222,40 @@ extern "C" void native_use_page(bool page)
 	shown = &shows[page ? 2 : 0];
 	screen_only = page;
 	planet_use_page(page);
+}
+
+extern "C" void native_publish_camera(void)
+{
+	pub_cam = rec;
+	pub_cam.texts = texts_seen;
+	pub_cam.serial = ++publishes;
+}
+
+extern "C" void native_acquire_camera(void)
+{
+	shows[3] = pub_cam;
+}
+
+/* The camera screen's picture is drawn between the world's: what the drawing
+ * keeps from one picture to the next is swapped for the camera's own
+ * (camera_state_swap), and its models' runs are cached apart, so the world's
+ * are as they were (else they ran again, or lagged, at each camera picture,
+ * and the ship's shadow flickered) */
+bool camera_drawing = false;
+namespace
+{
+void camera_state_swap();
+}
+
+extern "C" void native_use_camera(bool on)
+{
+	if (on == camera_drawing)
+		return;
+	shown = &shows[on ? 3 : 0];
+	screen_only = on;
+	planet_use_camera(on);
+	camera_drawing = on;
+	camera_state_swap();
 }
 
 extern "C" void native_use_screen(bool screen)
@@ -3542,7 +3577,7 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 	}
 	CacheKey k;
 	key_of(o, casting, k);
-	uint64_t id = (uint64_t)o.addr << 1 | (casting ? 1u : 0u);
+	uint64_t id = (uint64_t)o.addr << 2 | (camera_drawing ? 2u : 0u) | (casting ? 1u : 0u);
 	Cached &e = cache[id];
 	e.seen = cache_tick;
 	Place pl = place_of(o);
@@ -4379,12 +4414,20 @@ void prepare(bool wire)
 			}
 	}
 	uint64_t tp3 = PROF_BEGIN();
-	/* the casters only change with the game's frame */
-	if (keep && shadow_kept)
+	/* the casters only change with the game's frame; none for the camera
+	 * screen's picture, and the world's maps are left as they are */
+	if (camera_drawing)
+	{
+		shadow_on = false;
+		shadow_caster.assign(drawn.size(), 0);
+		shadow_layer.assign(drawn.size(), ShadowLayers{{-1, -1, -1}});
+		planet_set_ground_ship(false, nullptr, 1);
+	}
+	else if (keep && shadow_kept)
 		gl_shadow_again();
 	else
 		setup_shadows(wire);
-	shadow_kept = cache_on();
+	shadow_kept = cache_on() && !camera_drawing;
 	if (prof_on)
 	{
 		prof_native_add(prof_t0, prof_ran, prof_reused);
@@ -4421,6 +4464,45 @@ void prepare(bool wire)
 			pics = frames = 0;
 			tris = 0;
 		}
+	}
+}
+
+/* What prepare keeps from one picture to the next: the world's, put aside
+ * while the camera screen's picture is drawn */
+struct KeptState
+{
+	std::vector<Drawn> drawn;
+	std::vector<uint8_t> face_rgba;
+	std::vector<Bend> bends;
+	std::vector<char> shadow_caster;
+	std::vector<ShadowLayers> shadow_layer;
+	bool shadow_on = false;
+	uint32_t prepared_serial = 0;
+	bool prepared_wire = false;
+	bool shadow_kept = false;
+};
+KeptState other_state;
+
+void camera_state_swap()
+{
+	KeptState &s = other_state;
+	std::swap(s.drawn, drawn);
+	std::swap(s.face_rgba, face_rgba);
+	std::swap(s.bends, bends);
+	std::swap(s.shadow_caster, shadow_caster);
+	std::swap(s.shadow_layer, shadow_layer);
+	std::swap(s.shadow_on, shadow_on);
+	std::swap(s.prepared_serial, prepared_serial);
+	std::swap(s.prepared_wire, prepared_wire);
+	std::swap(s.shadow_kept, shadow_kept);
+	if (camera_drawing)
+		planet_ground_ship_push();
+	else
+	{
+		planet_ground_ship_pop();
+		/* the GPU meshes' colours are the world's again */
+		if (gpu_on() && !face_rgba.empty())
+			gd_face_colours(face_rgba.data(), (int)(face_rgba.size() / 4));
 	}
 }
 
