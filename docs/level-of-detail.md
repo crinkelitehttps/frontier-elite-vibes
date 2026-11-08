@@ -244,6 +244,8 @@ matching the game:
   (glfrontier.cfg, cog menu Detail slider, default 2 = parts kept 4x farther, 0 = the game's distances), but measures the **straight
   distance** to the sub-model origin (`len(r.org)`) rather than the camera depth. That removes the
   turn-your-head popping but means our choice can differ from the classic view at the edge of the screen.
+  The high-res CAMERA screen caps the boost at 1 (x2; `GLF_CAMERA_BOOST=N` to try others) and redraws at
+  10 Hz: at x16 over London each camera picture cost the render thread ~16 ms, about a second world picture.
 - **circle/blob**: the same small (pixel) / large (true size) switch.
 - **ifdist**: implemented (`apart()`, assuming the game's 168-pixel-high 36.5° view), though no model uses it.
 - **Planets**: drawn with the sky (`draw_fars`), see section 7.

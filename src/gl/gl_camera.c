@@ -32,6 +32,8 @@ bool camera_in_batch(void)
 }
 
 #define CAMERA_FPS 20 /* each picture is a run of the game's flight view (2 to 12 ms) */
+/* high-res: each picture is also a native scene draw on the render thread */
+#define CAMERA_HIRES_FPS 10
 
 /* The flight view, as cockpit_capture_world runs it (gl_cockpit.c) */
 #ifdef FE2_SetupPlayerCamera
@@ -910,7 +912,8 @@ void camera_capture(bool screen)
 		return;
 	static Uint64 last;
 	Uint64 now = SDL_GetPerformanceCounter();
-	if (last && now - last < SDL_GetPerformanceFrequency() / CAMERA_FPS)
+	const int fps = camera_hires && native_mode() == 2 ? CAMERA_HIRES_FPS : CAMERA_FPS;
+	if (last && now - last < SDL_GetPerformanceFrequency() / fps)
 		return;
 	last = now;
 

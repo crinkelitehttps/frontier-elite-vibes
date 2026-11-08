@@ -492,6 +492,20 @@ static bool wanted(uint32_t a6, uint32_t &addr, uint32_t &table, int &model)
 static uint32_t far_a6, far_addr;
 
 int native_detail_boost = 2;
+/* The camera screen's picture is small (960x504): its models keep at most
+ * x2 farther detail (GLF_CAMERA_BOOST=N to try others), else a city at x16
+ * cost the render thread nearly a second world picture each time */
+static int camera_detail_boost(void)
+{
+	static int env = -2;
+	if (env == -2)
+	{
+		const char *e = getenv("GLF_CAMERA_BOOST");
+		env = e ? atoi(e) : -1;
+	}
+	int cap = env >= 0 ? env : 1;
+	return native_detail_boost < cap ? native_detail_boost : cap;
+}
 bool native_cloud_shadows = true;
 /* Every far body's radius, by object (game thread): a planet's size before
  * its planet has been seen close up (native_capture_dirs) */
@@ -1245,6 +1259,15 @@ extern "C" void native_acquire_camera(void)
  * are as they were (else they ran again, or lagged, at each camera picture,
  * and the ship's shadow flickered) */
 bool camera_drawing = false;
+/* The worker thread's job sets its own (AsyncJob.boost); -1 = this thread's draw */
+static thread_local int run_boost = -1;
+/* The detail boost models run with now: the camera's or the world's */
+static int detail_boost(void)
+{
+	if (run_boost >= 0)
+		return run_boost;
+	return camera_drawing ? camera_detail_boost() : native_detail_boost;
+}
 namespace
 {
 void camera_state_swap();
@@ -2078,7 +2101,7 @@ struct Runner
 	 * shift overflows */
 	std::optional<bool> beyond(const Run &r, int k) const
 	{
-		int sh = o.detail[k & 1] + r.s + native_detail_boost;
+		int sh = o.detail[k & 1] + r.s + detail_boost();
 		if (sh < 0 || sh > 31 || ((int64_t)k << sh) > 0x7fffffff)
 			return std::nullopt;
 		float lim = (float)((int64_t)k << sh);
@@ -3168,7 +3191,7 @@ void key_of(const Object &o, bool casting, CacheKey &k)
 	k.subtable = o.subtable;
 	k.model = o.model;
 	k.scale = o.scale;
-	k.boost = native_detail_boost;
+	k.boost = detail_boost();
 	static const char *env = getenv("GLF_CLOUD_SHADOWS");
 	k.clouds = env ? atoi(env) : native_cloud_shadows;
 	k.detail[0] = o.detail[0];
@@ -3469,6 +3492,7 @@ struct AsyncJob
 	Object o;
 	Place pl;
 	bool casting, gpu;
+	int boost; /* detail_boost() when asked */
 	uint32_t seed;
 	std::unordered_map<uint64_t, std::string> texts;
 	Cached r;             /* the run, its GPU nodes */
@@ -3485,7 +3509,9 @@ void async_run(AsyncJob &j)
 	r.light = light_in(j.o);
 	std::memcpy(r.vars, j.o.vars, sizeof r.vars);
 	std::memcpy(r.t, j.o.t, sizeof r.t);
+	run_boost = j.boost;
 	r.vol = !run_object(j.o, r.d, false, false, j.casting, &j.pl, &r.rec, &j.texts, j.seed);
+	run_boost = -1;
 	if (!r.vol && j.gpu)
 		mesh_prep(r, j.v);
 }
@@ -3666,6 +3692,7 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 			j->pl = pl;
 			j->casting = casting;
 			j->gpu = gpu;
+			j->boost = k.boost;
 			j->seed = frame_seed;
 			j->texts = shown->texts;
 			j->r.key = k;
