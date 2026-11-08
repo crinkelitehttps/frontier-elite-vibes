@@ -798,7 +798,10 @@ static bool finish_frame(void)
 			return false;
 		if (clr & 1)
 			fill_blue();
-		return call(FE2_Draw3DView) && call(FE2_CallHUDModfuncs) && call(FE2_FlipScreen);
+		/* the software renderer's drawing, as the game's own Fn_Draw3DView does: none with GL on (the
+		 * scene has it all, in high resolution), or its lines and circles cover the scene's in pixels */
+		bool soft = rdword(FE2_FlipScreen - 2) == 0; /* fe2.s gl_renderer_on */
+		return (!soft || call(FE2_Draw3DView)) && call(FE2_CallHUDModfuncs) && call(FE2_FlipScreen);
 	}
 	if (!call(FE2_CallHUDModfuncs))
 		return false;

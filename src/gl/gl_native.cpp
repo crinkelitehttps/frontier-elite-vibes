@@ -777,6 +777,10 @@ extern "C" void Nu_NativeObject(void)
 	}
 	if (sky_hook(a6))
 		return;
+	/* the system map is the game's own drawing: the native scene would take its model (the orbits'),
+	 * and leave out the orbits */
+	if (game_screen() == SCREEN_SYSTEM_MAP)
+		return;
 	uint32_t addr, table;
 	int model;
 	if (!wanted(a6, addr, table, model))
