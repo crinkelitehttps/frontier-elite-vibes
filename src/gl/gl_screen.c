@@ -42,6 +42,8 @@
 #include "gl_text.h"
 
 #include "frame_prof.h"
+#include "gl_gputime.h"
+#include "perf_log.h"
 #include "game_state.h"
 #include "input.h"
 #include "main.h"
@@ -1031,52 +1033,6 @@ static GLuint draw_menu_vr(void)
 /* The frame for the headset, if it wants one: the cockpit per eye, or
  * the classic picture on the virtual screen. Before the window's: the
  * window's cockpit is turned by the same head pose. */
-/* GLF_FRAME_PROF: the GPU time of the headset's eyes, from timer queries read
- * a few pictures late so as never to wait for them */
-#define VR_GPU_QUERIES 6
-static GLuint vr_gpu_q[VR_GPU_QUERIES];
-static bool vr_gpu_issued[VR_GPU_QUERIES];
-static int vr_gpu_next;
-static bool vr_gpu_open;
-
-static void vr_gpu_begin(void)
-{
-#if !GL_IS_GLES
-	if (!prof_on)
-		return;
-	if (!vr_gpu_q[0])
-		glGenQueries(VR_GPU_QUERIES, vr_gpu_q);
-	/* (a query still unread when its turn comes round is dropped) */
-	glBeginQuery(GL_TIME_ELAPSED, vr_gpu_q[vr_gpu_next]);
-	vr_gpu_open = true;
-#endif
-}
-
-static void vr_gpu_end(void)
-{
-#if !GL_IS_GLES
-	if (!vr_gpu_open)
-		return;
-	glEndQuery(GL_TIME_ELAPSED);
-	vr_gpu_issued[vr_gpu_next] = true;
-	vr_gpu_next = (vr_gpu_next + 1) % VR_GPU_QUERIES;
-	vr_gpu_open = false;
-	for (int i = 0; i < VR_GPU_QUERIES; i++)
-	{
-		GLuint ready = 0;
-		if (!vr_gpu_issued[i])
-			continue;
-		glGetQueryObjectuiv(vr_gpu_q[i], GL_QUERY_RESULT_AVAILABLE, &ready);
-		if (!ready)
-			continue;
-		GLuint64 ns = 0;
-		glGetQueryObjectui64v(vr_gpu_q[i], GL_QUERY_RESULT, &ns);
-		prof_vr_gpu((unsigned)ns);
-		vr_gpu_issued[i] = false;
-	}
-#endif
-}
-
 static bool draw_vr(bool with_menu)
 {
 	vr_update();
@@ -1119,7 +1075,7 @@ static bool draw_vr(bool with_menu)
 	if (render)
 	{
 		vr_pointer = true;
-		vr_gpu_begin();
+		int gpu = gputime_begin(PERF_GPU_HEADSET);
 		if (cockpit && tracked)
 		{
 			for (int i = 0; i < 2; i++)
@@ -1148,7 +1104,7 @@ static bool draw_vr(bool with_menu)
 				vr_release_overlay_eye(i);
 			}
 		}
-		vr_gpu_end();
+		gputime_end(gpu);
 		vr_pointer = false;
 	}
 	uint64_t prof_t2 = PROF_BEGIN();
@@ -1831,6 +1787,7 @@ static void draw_picture(bool with_menu)
 	log_rates(new_frame);
 	log_motion(new_frame);
 	stage_ms[0] += stage_lap(&lap);
+	int gpu = gputime_begin(PERF_GPU_SCREENS);
 	if (scr_show.sub)
 	{
 		page_buttons = scr_show.group == COCKPIT_SCREEN_MAP && mapscreen_real_buttons();
@@ -1845,6 +1802,7 @@ static void draw_picture(bool with_menu)
 		draw_camera();
 	}
 	draw_coms_flight(new_frame);
+	gputime_end(gpu);
 	stage_ms[1] += stage_lap(&lap);
 	bool cockpit = draw_vr(with_menu);
 	stage_ms[2] += stage_lap(&lap);
@@ -1856,7 +1814,11 @@ static void draw_picture(bool with_menu)
 	bool window_seen = true;
 #endif
 	if (window_seen)
+	{
+		gpu = gputime_begin(PERF_GPU_WINDOW);
 		draw_frame(screen_w, screen_h, cockpit, true);
+		gputime_end(gpu);
+	}
 	if (show_fps)
 	{
 		count_fps();
@@ -1875,6 +1837,9 @@ static void draw_picture(bool with_menu)
 	stage_ms[5] += stage_lap(&lap);
 	if (prof_on)
 		prof_render_add(pic0, swap0, SDL_GetPerformanceCounter());
+	gputime_collect();
+	perf_picture(pic0, swap0); /* (the swap's wait for the display left out) */
+	perf_tick();
 }
 
 static int render_main(void *arg)
@@ -2013,6 +1978,7 @@ void Screen_WaitFrameTaken(int max_ms)
 
 void Nu_DrawScreen(void)
 {
+	perf_game_frame();
 	uint64_t t = PROF_BEGIN();
 	netplay_tick(); /* game thread: the other player's ghost ship */
 	PROF_END(PS_NETPLAY, t);

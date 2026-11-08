@@ -11,6 +11,7 @@
 #include "frame_prof.h"
 #include "game_state.h"
 #include "main.h"
+#include "perf_log.h"
 
 static SDL_atomic_t state; /* DIAG_* */
 static char message[256];
@@ -101,6 +102,7 @@ static int upload_thread(void *unused)
 	char info[512];
 	snprintf(info, sizeof info, "build tag %s\nprofile %s\nscreen %s\n", game_build_tag(), prof_on ? "on" : "off",
 			 game_screen_name(game_screen()));
+	perf_summary("diagnostics upload");
 	log_printf("diagnostics: sending\n");
 	prof_flush();
 

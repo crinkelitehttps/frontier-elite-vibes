@@ -2,6 +2,9 @@
  * vr.cpp - see vr.h. Adapted from the F-19 port's OpenXR output.
  */
 #include "vr.h"
+#include "perf_log.h"
+
+#include <SDL.h>
 
 #ifdef GLF_VR /* (CMake option: desktop builds) */
 
@@ -999,8 +1002,11 @@ bool Vr::begin_frame()
 	frame = {XR_TYPE_FRAME_STATE};
 	XrFrameWaitInfo wi{XR_TYPE_FRAME_WAIT_INFO};
 	set_stage("xrWaitFrame");
+	uint64_t wait0 = SDL_GetPerformanceCounter();
 	if (!check(instance, xrWaitFrame(session, &wi, &frame), "xrWaitFrame"))
 		return false;
+	perf_vr_frame(frame.predictedDisplayTime, frame.predictedDisplayPeriod, frame.shouldRender,
+				  SDL_GetPerformanceCounter() - wait0);
 	XrFrameBeginInfo bi{XR_TYPE_FRAME_BEGIN_INFO};
 	set_stage("xrBeginFrame");
 	if (!check(instance, xrBeginFrame(session, &bi), "xrBeginFrame"))

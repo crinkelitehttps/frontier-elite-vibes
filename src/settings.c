@@ -31,6 +31,7 @@
 #include "manual.h"
 #include "mods.h"
 #include "renderer.h"
+#include "perf_log.h"
 #include "settings.h"
 #include "scenery.h"
 #include "rt_clock.h"
@@ -89,6 +90,7 @@ typedef struct
 	int ship_shadows;
 	int building_shadows;
 	int low_sun_shadows;
+	int simple_shadows;
 	int camera_zoom_max;
 	int camera_hires;
 	int volume;
@@ -147,6 +149,7 @@ static const struct
 	{"ship_shadows", offsetof(Settings, ship_shadows)},
 	{"building_shadows", offsetof(Settings, building_shadows)},
 	{"low_sun_shadows", offsetof(Settings, low_sun_shadows)},
+	{"simple_shadows", offsetof(Settings, simple_shadows)},
 	{"camera_zoom_max", offsetof(Settings, camera_zoom_max)},
 	{"camera_hires", offsetof(Settings, camera_hires)},
 	{"volume", offsetof(Settings, volume)},
@@ -225,6 +228,34 @@ static int *field(Settings *s, int i)
 	return (int *)((char *)s + fields[i].offset);
 }
 
+/* the settings in the log (perf_log.h): all but the screen placements and the manual's page */
+static bool logged_key(int i)
+{
+	return strncmp(fields[i].key, "screen_place_", 13) && strncmp(fields[i].key, "manual_", 7);
+}
+
+static void log_settings(const Settings *s, const Settings *was)
+{
+	char line[2048];
+	int len = 0;
+	for (int i = 0; i < N_FIELDS && len < (int)sizeof line; i++)
+	{
+		int v = *(const int *)((const char *)s + fields[i].offset);
+		if (!logged_key(i))
+			continue;
+		if (!was)
+			len += snprintf(line + len, sizeof line - len, "%s%s=%d", len ? " " : "", fields[i].key, v);
+		else
+		{
+			int w = *(const int *)((const char *)was + fields[i].offset);
+			if (w != v)
+				len += snprintf(line + len, sizeof line - len, "%s%s %d->%d", len ? " " : "", fields[i].key, w, v);
+		}
+	}
+	if (len)
+		perf_setting(line);
+}
+
 static Settings current(void)
 {
 	Settings s;
@@ -275,6 +306,7 @@ static Settings current(void)
 	s.ship_shadows = ship_shadows;
 	s.building_shadows = building_shadows;
 	s.low_sun_shadows = low_sun_shadows;
+	s.simple_shadows = simple_shadows;
 	s.camera_zoom_max = camera_zoom_max;
 	s.camera_hires = camera_hires;
 	s.volume = audio_volume;
@@ -353,6 +385,7 @@ static void apply(const Settings *s)
 	ship_shadows = s->ship_shadows != 0;
 	building_shadows = s->building_shadows != 0;
 	low_sun_shadows = s->low_sun_shadows != 0;
+	simple_shadows = s->simple_shadows != 0;
 	if (s->native_detail_boost >= 0 && s->native_detail_boost <= 8)
 		native_detail_boost = s->native_detail_boost;
 	if (s->camera_zoom_max >= 2 && s->camera_zoom_max <= 1048576)
@@ -391,6 +424,7 @@ void settings_load(void)
 #endif
 	apply(&s);
 	saved = current();
+	log_settings(&saved, NULL);
 }
 
 void settings_poll(void)
@@ -400,6 +434,7 @@ void settings_poll(void)
 	Settings now = current();
 	if (!memcmp(&now, &saved, sizeof(now)))
 		return;
+	log_settings(&now, &saved);
 	saved = now;
 #ifndef __EMSCRIPTEN__
 	FILE *f = fopen(file_path(), "w");

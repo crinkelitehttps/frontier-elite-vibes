@@ -267,7 +267,10 @@ void page_settings()
 	wrapped_checkbox("Cloud shadows fall away from the sun (native scene)", &native_cloud_shadows);
 	wrapped_checkbox("Ship shadows on the ground and stations (native scene)", &ship_shadows);
 	if (ship_shadows)
+	{
 		wrapped_checkbox("Building shadows (buildings, rocks and base hangars cast shadows too)", &building_shadows);
+		wrapped_checkbox("Simple shadows (faster: ships no longer shadow each other; on by default on phones and Quest)", &simple_shadows);
+	}
 	wrapped_checkbox("Shadows at low sun (clouds down to 3.4 degrees, was 7; ship shadows reach farther along the light)", &low_sun_shadows);
 
 	ui_heading("HUD");

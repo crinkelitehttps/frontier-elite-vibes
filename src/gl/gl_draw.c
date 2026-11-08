@@ -100,12 +100,12 @@ static int vp_rects[GD_VP_COUNT][4];
 
 /* ---- GL objects ----------------------------------------------------- */
 static GLuint prog, vao, vbo;
-static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow;
+static GLint u_shadow_layer, u_shadow_on, u_shadow_dark, u_shadow_bias, u_shadow, u_shadow_eye;
 static size_t vbo_bytes;
 static GLuint mesh_prog, face_tex;
 static int face_rows;
 static GLint um_mvp, um_depth, um_log, um_sh, um_base, um_faces, um_bend;
-static GLint um_shadow_layer, um_shadow_on, um_shadow_dark, um_shadow_bias, um_shadow;
+static GLint um_shadow_layer, um_shadow_on, um_shadow_dark, um_shadow_bias, um_shadow, um_shadow_eye;
 
 /* A kept mesh's vertices: placed by the pose in uMvp, coloured by their
  * face's entry in the face table; the rest as put() and VS_FLAT */
@@ -189,12 +189,22 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "uniform float uShadowDark;\n"
 							 "uniform vec3 uShadowBias;\n"
 							 "uniform vec3 uShadowLayer;\n"
+							 "uniform vec3 uShadowEye;\n"
+							 "uniform float uShadowFacing;\n"
 							 "uniform sampler2DArrayShadow uShadow;\n"
 							 "out vec4 fragColor;\n"
 							 "void main(){\n"
 							 "  fragColor = vColor;\n"
+							 /* the face's normal in the map's axes (z along the light) from how its map position
+							  * changes across the screen, turned toward the eye (uShadowEye: the eye in the same
+							  * map): z > 0 is a face turned away from the sun, which the game's colours already
+							  * have dark, so no lookups (outside the if: derivatives need every pixel) */
+							 "  vec3 sF = uShadowLayer.x >= 0.0 ? vShadow : uShadowLayer.y >= 0.0 ? vShadow2 : vShadow3;\n"
+							 "  vec3 nF = cross(dFdx(sF), dFdy(sF));\n"
+							 "  if (dot(nF, sF - uShadowEye) > 0.0) nF = -nF;\n"
+							 "  bool away = uShadowFacing > 0.5 && nF.z > 0.0;\n"
 							 /* in the ships' shadow maps (outside one: lit by it) */
-							 "  if (uShadowOn > 0.5) {\n"
+							 "  if (uShadowOn > 0.5 && !away) {\n"
 							 "    float lit = 1.0;\n"
 							 "    if (uShadowLayer.x >= 0.0 && vShadow.x >= 0.0 && vShadow.x <= 1.0 && vShadow.y >= 0.0 && vShadow.y <= 1.0)\n"
 							 "      lit = shadowLit(uShadow, vShadow.xy, uShadowLayer.x, min(vShadow.z, 1.0) - uShadowBias.x);\n"
@@ -204,6 +214,8 @@ static const char *FS_FLAT = GL_SHADOW_GLSL "in vec4 vColor;\n"
 							 "      lit = min(lit, shadowLit(uShadow, vShadow3.xy, uShadowLayer.z, min(vShadow3.z, 1.0) - uShadowBias.z));\n"
 							 "    fragColor.rgb *= mix(uShadowDark, 1.0, lit);\n"
 							 "  }\n"
+							 /* GLF_SHADOW_FACING=2: the faces taken as turned from the sun tinted magenta */
+							 "  if (uShadowFacing > 1.5 && uShadowOn > 0.5 && nF.z > 0.0) fragColor.rgb = mix(fragColor.rgb, vec3(1.0, 0.0, 1.0), 0.5);\n"
 							 "  gl_FragDepth = vDepth.y != 0.0 ? clamp(vDepth.x + vDepth.y * log(max(vW, 1e-6)), 0.0, 1.0)\n"
 							 "                                 : gl_FragCoord.z;\n"
 							 "}\n";
@@ -287,8 +299,13 @@ void gd_init(void)
 	u_shadow_dark = glGetUniformLocation(prog, "uShadowDark");
 	u_shadow_bias = glGetUniformLocation(prog, "uShadowBias");
 	u_shadow = glGetUniformLocation(prog, "uShadow");
+	u_shadow_eye = glGetUniformLocation(prog, "uShadowEye");
+	/* GLF_SHADOW_FACING=0: faces turned from the sun look the maps up too (as before 2026-11-08); 2: tints them */
+	const char *fe = getenv("GLF_SHADOW_FACING");
+	const float facing = fe ? (float)atoi(fe) : 1.0f;
 	glUseProgram(prog);
 	glUniform1i(u_shadow, SHADOW_UNIT);
+	glUniform1f(glGetUniformLocation(prog, "uShadowFacing"), facing);
 	glUseProgram(0);
 
 	static const char *const mesh_attribs[] = {"aPos", "aFace"};
@@ -305,8 +322,10 @@ void gd_init(void)
 	um_shadow_dark = glGetUniformLocation(mesh_prog, "uShadowDark");
 	um_shadow_bias = glGetUniformLocation(mesh_prog, "uShadowBias");
 	um_shadow = glGetUniformLocation(mesh_prog, "uShadow");
+	um_shadow_eye = glGetUniformLocation(mesh_prog, "uShadowEye");
 	glUseProgram(mesh_prog);
 	glUniform1i(um_shadow, SHADOW_UNIT);
+	glUniform1f(glGetUniformLocation(mesh_prog, "uShadowFacing"), facing);
 	glUniform1i(um_faces, FACE_UNIT);
 	glUseProgram(0);
 
@@ -992,6 +1011,16 @@ void gd_mesh_draw(GdMesh *m, const float pose[16], int face_base, int first, int
 	memcpy(custom_data + c->first, &md, sizeof md);
 }
 
+/* uShadowEye: the eye (the view space origin) in the map the shader takes its face test from, the first
+ * cascade looked up */
+static void set_shadow_eye(GLint loc, uint32_t shadow)
+{
+	int c = (shadow & 0xff) ? 0 : ((shadow >> 8) & 0xff) ? 1 : 2;
+	const float *m = gl_shadow_matrix(c);
+	if (m)
+		glUniform3f(loc, m[3], m[7], m[11]);
+}
+
 static void draw_mesh(const MeshDraw *md, uint32_t shadow)
 {
 	if (!md->nranges)
@@ -1013,6 +1042,7 @@ static void draw_mesh(const MeshDraw *md, uint32_t shadow)
 		glBindTexture(GL_TEXTURE_2D_ARRAY, st);
 		glUniform1f(um_shadow_dark, gl_shadow_dark());
 		glUniform3f(um_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1), gl_shadow_bias(2));
+		set_shadow_eye(um_shadow_eye, shadow);
 	}
 	glActiveTexture(GL_TEXTURE0 + FACE_UNIT);
 	glBindTexture(GL_TEXTURE_2D, face_tex);
@@ -1109,6 +1139,7 @@ void gd_flush(void)
 					glActiveTexture(GL_TEXTURE0);
 					glUniform1f(u_shadow_dark, gl_shadow_dark());
 					glUniform3f(u_shadow_bias, gl_shadow_bias(0), gl_shadow_bias(1), gl_shadow_bias(2));
+					set_shadow_eye(u_shadow_eye, shadow);
 				}
 			}
 			if (c->blend != blend)

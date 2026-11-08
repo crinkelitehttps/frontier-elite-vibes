@@ -20,6 +20,9 @@
 extern "C"
 {
 #include "frame_prof.h"
+#if defined(__linux__) || defined(ANDROID)
+#include <pthread.h>
+#endif
 #include <SDL.h>
 }
 
@@ -3499,6 +3502,9 @@ struct AsyncWorker
 	}
 	void loop()
 	{
+#if defined(__linux__) || defined(ANDROID)
+		pthread_setname_np(pthread_self(), "native_worker"); /* named in perf_log's thread list */
+#endif
 		for (;;)
 		{
 			std::shared_ptr<AsyncJob> j;
@@ -4340,8 +4346,15 @@ void setup_shadows(bool wire)
 					l = made[cc] ? own_layer[i] : -1;
 			}
 		for (size_t i = 0; i < drawn.size(); i++)
-			if (cascade_of[i] >= 0 && (own_layer[i] < 0 || (cascade_of[i] == 2 && shown->obj[i].model >= 101)))
-				shadow_layer[i] = ShadowLayers{{-1, -1, -1}}; /* scenery receives nothing */
+			if (cascade_of[i] == 2)
+			{
+				/* buildings, rocks and ground bases: every map, their own hull included, so hangars shadow each
+				 * other and themselves (a slope offset in the map's pass keeps their sunlit walls clean) */
+				for (int cc = 0; cc < GL_SHADOW_CASCADES; cc++)
+					shadow_layer[i].l[cc] = gl_shadow_all_layer(cc);
+			}
+			else if (cascade_of[i] >= 0 && own_layer[i] < 0)
+				shadow_layer[i] = ShadowLayers{{-1, -1, -1}}; /* a caster without a map of its own receives nothing */
 	}
 	static const bool dbg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
 	static int frames;

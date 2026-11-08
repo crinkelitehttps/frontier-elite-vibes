@@ -8,10 +8,17 @@
 #include "gl_draw.h"
 #include "gl_shadow.h"
 #include "main.h"
+#include "perf_log.h"
+#include "gl_gputime.h"
 
 bool ship_shadows = true;
 bool building_shadows = true;
 bool low_sun_shadows = true;
+#ifdef ANDROID
+bool simple_shadows = true; /* phones and the Quest: a tile GPU pays for every map */
+#else
+bool simple_shadows = false;
+#endif
 
 #define MAP_SIZE   1024
 #define N_LAYERS   (1 + GL_SHADOW_CASTER_LAYERS) /* per cascade */
@@ -195,6 +202,7 @@ static void shadow_pass(const void *payload)
 	GLboolean cmask[4];
 	glGetBooleanv(GL_COLOR_WRITEMASK, cmask);
 
+	int gpu = gputime_begin(PERF_GPU_SHADOW);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0, 0, MAP_SIZE, MAP_SIZE);
 	glDisable(GL_SCISSOR_TEST);
@@ -215,6 +223,22 @@ static void shadow_pass(const void *payload)
 	glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vbo_bytes, NULL, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, (GLsizeiptr)bytes, cs->clip);
 	const size_t nverts = cs->clip_n / 3;
+	/* the scenery's map is looked up by its own casters: pushed back from the light by the faces' slope, or a
+	 * sunlit wall would shadow itself in speckles (GLF_SHADOW_SLOPE=factor, default 2) */
+	static float slope = -1;
+	if (slope < 0)
+	{
+		const char *e = getenv("GLF_SHADOW_SLOPE");
+		slope = e ? (float)atof(e) : 2.0f;
+		if (slope < 0)
+			slope = 0;
+	}
+	const bool offset = ((const PassData *)payload)->cascade == 2 && slope > 0;
+	if (offset)
+	{
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glPolygonOffset(slope, slope);
+	}
 	for (int layer = 0; layer <= cs->n_casters; layer++)
 	{
 		glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, tex, 0, base + layer);
@@ -237,6 +261,12 @@ static void shadow_pass(const void *payload)
 		}
 	}
 	glBindVertexArray(0);
+	if (offset)
+	{
+		glPolygonOffset(0, 0);
+		glDisable(GL_POLYGON_OFFSET_FILL);
+	}
+	gputime_end(gpu);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
 	glViewport(vp[0], vp[1], vp[2], vp[3]);
@@ -365,7 +395,9 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 					   extent[1] / 1000, extent[0] / MAP_SIZE / 1000, extent[1] / MAP_SIZE / 1000, R / 1000, ncasters);
 	}
 
-	cs->n_casters = ncasters < GL_SHADOW_CASTER_LAYERS ? ncasters : GL_SHADOW_CASTER_LAYERS;
+	/* simple: only the map with every caster; the casters then receive nothing (not shadowed by their own hull) */
+	/* (the scenery's cascade has none either: its casters look up the map with themselves in it) */
+	cs->n_casters = simple_shadows || cascade == 2 ? 0 : ncasters < GL_SHADOW_CASTER_LAYERS ? ncasters : GL_SHADOW_CASTER_LAYERS;
 	for (int i = 0; i < cs->n_casters; i++)
 		cs->caster_end[i] = caster_tris_end[i] * 3;
 
@@ -399,13 +431,8 @@ bool gl_shadow_set(int cascade, const float light[3], const float *tris, size_t 
 
 void gl_shadow_again(void)
 {
-	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
-		if (cas[c].have)
-		{
-			PassData *pd = gd_custom(shadow_pass, sizeof(PassData));
-			if (pd)
-				pd->cascade = c;
-		}
+	/* nothing to draw: the maps are in the texture since the game frame's first picture drew them, and
+	 * nothing else draws into it (they were drawn again for every eye and picture until 2026-11-08) */
 }
 
 void gl_shadow_clear(void)
@@ -421,6 +448,8 @@ void gl_shadow_clear(void)
 
 int gl_shadow_layer(int cascade, int caster)
 {
+	if (simple_shadows || cascade == 2)
+		return -1;
 	return caster >= 0 && caster < GL_SHADOW_CASTER_LAYERS ? cascade * N_LAYERS + caster + 1 : -1;
 }
 

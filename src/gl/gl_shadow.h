@@ -32,6 +32,8 @@ extern bool ship_shadows; /* the setting */
 extern bool building_shadows;
 /* Shadows down to a lower sun: clouds to 3.4 degrees (off: 7), ship map depth 1000 radii (off: 200) */
 extern bool low_sun_shadows;
+/* One map per cascade instead of one more per ship (ships then get no shadows from each other); default on Android */
+extern bool simple_shadows;
 
 /* Whether the experiment is on (setting or GLF_SHIP_SHADOWS) */
 bool gl_shadow_wanted(void);
@@ -41,6 +43,15 @@ extern bool gl_shadow_off;
 /* GLSL for the shaders that look the map up: shadowLit(map, u, v, layer, depth) = how much of the light
  * reaches the point, 0..1: a 3x3 grid of the hardware's 2x2 comparisons, a texel apart, so the stairs of
  * a coarse map become a soft edge */
+#if GL_IS_GLES
+/* phones and the Quest: four comparisons half a texel apart (each the hardware's 2x2), not nine */
+#define GL_SHADOW_GLSL \
+	"float shadowLit(highp sampler2DArrayShadow smp, vec2 uv, float layer, float ref) {\n" \
+	"  vec2 t = 0.5 / vec2(textureSize(smp, 0).xy);\n" \
+	"  return 0.25 * (texture(smp, vec4(uv + vec2(-t.x, -t.y), layer, ref)) + texture(smp, vec4(uv + vec2(t.x, -t.y), layer, ref))\n" \
+	"              + texture(smp, vec4(uv + vec2(-t.x, t.y), layer, ref)) + texture(smp, vec4(uv + t, layer, ref)));\n" \
+	"}\n"
+#else
 #define GL_SHADOW_GLSL \
 	"float shadowLit(highp sampler2DArrayShadow smp, vec2 uv, float layer, float ref) {\n" \
 	"  vec2 t = 1.0 / vec2(textureSize(smp, 0).xy);\n" \
@@ -50,6 +61,7 @@ extern bool gl_shadow_off;
 	"      sum += texture(smp, vec4(uv + vec2(float(i), float(j)) * t, layer, ref));\n" \
 	"  return sum * (1.0 / 9.0);\n" \
 	"}\n"
+#endif
 
 /* How many casters have a map of their own (what lights them: all the casters but themselves), so can
  * receive shadows from the others */
@@ -80,7 +92,7 @@ int gl_shadow_layer(int cascade, int caster);
 int gl_shadow_all_layer(int cascade);
 /* No map this frame (the draw list has no pass) */
 void gl_shadow_clear(void);
-/* the maps made for this game frame drawn again for another picture of it (same casters, same light) */
+/* another picture of the same game frame (same casters, same light): the maps already drawn are used again */
 void gl_shadow_again(void);
 
 /* The map of this frame, if any: the 3x4 matrix (rows u, v, d), its texture,

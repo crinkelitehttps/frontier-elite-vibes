@@ -7,6 +7,7 @@
 #include <SDL.h>
 
 #include "main.h"
+#include "perf_log.h"
 #include "settings.h"
 #include "audio.h"
 #include "freecam.h"
@@ -354,6 +355,7 @@ void Main_EventHandler(void)
 			bQuitProgram = TRUE;
 			Screen_StopRenderThread();
 			vr_shutdown(); /* ends the OpenXR session; else the headset runtime keeps it */
+			perf_summary("quit");
 			log_printf("quit\n");
 			SDL_Quit();
 			exit(0);

@@ -56,6 +56,32 @@ public class GLFrontierActivity extends SDLActivity {
 
     /* false when the build had no upload address or token
        (build_android.py writes UploadConfig) */
+    /* Called from the game's drawing thread every few seconds (src/perf_log.c):
+       thermal status (0 none .. 6 shutdown), headroom (1.0 = throttling starts;
+       NaN when asked too often or unknown), battery temperature. */
+    public String perfState() {
+        StringBuilder s = new StringBuilder();
+        if (Build.VERSION.SDK_INT >= 29) {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                s.append("thermal ").append(pm.getCurrentThermalStatus());
+                if (Build.VERSION.SDK_INT >= 30)
+                    s.append(" headroom ").append(String.format(java.util.Locale.ROOT, "%.2f", pm.getThermalHeadroom(10)));
+                if (pm.isPowerSaveMode())
+                    s.append(" power-save");
+            } catch (Exception e) {
+            }
+        }
+        try {
+            Intent b = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+            if (b != null)
+                s.append(s.length() > 0 ? ", " : "").append("battery ").append(b.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) / 10.0)
+                 .append(" C ").append(b.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)).append('%');
+        } catch (Exception e) {
+        }
+        return s.toString();
+    }
+
     public boolean diagnosticsAvailable() {
         return !UploadConfig.ENDPOINT.isEmpty() && !UploadConfig.TOKEN.isEmpty();
     }
