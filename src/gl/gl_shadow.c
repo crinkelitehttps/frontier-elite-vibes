@@ -83,8 +83,8 @@ bool gl_shadow_off = false;
 
 bool gl_shadow_wanted(void)
 {
-	if (gl_shadow_off)
-		return false;
+	/* (not gl_shadow_off: the game thread asks too, Call_CockpitBackground adding the player's ship as a caster,
+	 * and the camera screen's picture on the render thread must not take it out of that game frame) */
 	static int env = -2;
 	if (env == -2)
 	{
@@ -465,6 +465,9 @@ const float *gl_shadow_matrix(int cascade)
 
 GLuint gl_shadow_texture(void)
 {
+	/* the camera screen's picture: the maps are fitted to the world's view, not its */
+	if (gl_shadow_off)
+		return 0;
 	for (int c = 0; c < GL_SHADOW_CASCADES; c++)
 		if (cas[c].have)
 			return inited && !failed ? tex : 0;

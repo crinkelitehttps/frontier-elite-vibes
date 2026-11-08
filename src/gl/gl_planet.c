@@ -271,6 +271,8 @@ typedef struct
 	uint16_t palette[16];
 	PlanetSurface surface;
 	bool surface_ok;
+	int32_t alt;   /* PlanetDesc.alt */
+	bool external; /* PlanetDesc.external */
 	/* the object as gl_native.cpp captures it: its view position and axes */
 	float obj_pos[3], obj_cols[3][3];
 	uint32_t seen;  /* render frame it was last captured in (remembered ones) */
@@ -574,6 +576,8 @@ static void record_native(const PlanetDesc *p)
 	n->obj = obj;
 	n->ahead = ahead;
 	n->stand_in = false;
+	n->alt = p->alt;
+	n->external = p->external;
 	float pos[3], v[3];
 	vec3i_to_f(p->pos, pos);
 	cockpit_pass_to_view(pos, v);
@@ -845,6 +849,8 @@ void Nu_PutPlanet(void)
 	p->radius = (float)GetReg(REG_D0);
 	gl_read_light_dir(GetReg(REG_A1), p->light);
 	p->pos = m68k_vertex(GetReg(REG_A0) + 4);
+	p->alt = (int32_t)STMemory_ReadLong(GAME_A6 + 692);
+	p->external = STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL;
 	ground_planet(p);
 
 	/* 3x3 rotation matrix of signed 1.15 fixed point words, stored at A6-36 */
@@ -1312,6 +1318,8 @@ typedef struct
 	const uint16_t *palette; /* 16 rgb444 */
 	const float *axes;       /* PlanetDesc.axes */
 	const PlanetSurface *surface; /* null: plain */
+	int32_t alt;   /* the ship's altitude when it was recorded (PlanetDesc.alt) */
+	bool external; /* ... and the external view (PlanetDesc.external) */
 } SphereIn;
 
 /* The game lays out a planet's surface (cities, mountains, starports) on
@@ -1406,9 +1414,9 @@ static void draw_sphere(const SphereIn *in)
 	 * 258 m down had the sphere 16 m down), and a shadow cast on it would be
 	 * that much too big. Cast it on the ground at the game's altitude. */
 	pass->shadow_k = 1.0f;
-	if (flat > 1 && h > 0 && STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) != VIEW_EXTERNAL)
+	if (flat > 1 && h > 0 && !in->external)
 	{
-		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692);
+		double alt = (double)in->alt;
 		if (alt > h)
 			pass->shadow_k = (float)(alt / h < 200 ? alt / h : 200);
 	}
@@ -1429,9 +1437,9 @@ static void draw_sphere(const SphereIn *in)
 		}
 		pass->ground_on = true;
 	}
-	else if (flat > 1 && ground_ship_ok && (STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL || freecam_active()))
+	else if (flat > 1 && ground_ship_ok && (in->external || freecam_active()))
 	{
-		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692) / ground_ship_shrink;
+		double alt = (double)in->alt / ground_ship_shrink;
 		double rel[3] = {ground_ship[0] - in->pos[0], ground_ship[1] - in->pos[1], ground_ship[2] - in->pos[2]};
 		double d = sqrt(rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]);
 		static int gn;
@@ -1490,7 +1498,7 @@ void draw_planet(const void *payload)
 	}
 
 	SphereIn in = {{p->pos.x, p->pos.y, p->pos.z}, p->radius, {p->light[0], p->light[1], p->light[2]},
-				   p->light_col, p->obj_col, p->palette, p->axes, p->surface_ok ? &p->surface : NULL};
+				   p->light_col, p->obj_col, p->palette, p->axes, p->surface_ok ? &p->surface : NULL, p->alt, p->external};
 	if (cockpit_active())
 	{
 		int i = find_dist(&dists_show, p->radius);
@@ -1518,7 +1526,9 @@ void planet_native_draw(int i)
 				   n->obj_col,
 				   n->palette,
 				   n->axes,
-				   n->surface_ok ? &n->surface : NULL};
+				   n->surface_ok ? &n->surface : NULL,
+				   n->alt,
+				   n->external};
 	draw_sphere(&in);
 }
 

@@ -55,6 +55,11 @@ typedef struct
 	 * half in; else the unlit colours) */
 	uint16_t palette[16];
 
+	/* The ship's altitude (A6+692) and whether the view is the external one, as the game had them when it drew
+	 * the planet: the render thread must not read them live (the camera screen's run changes them meanwhile) */
+	int32_t alt;
+	bool external;
+
 	/* Raw emulator context at capture time, for decoding extra features */
 	struct
 	{
