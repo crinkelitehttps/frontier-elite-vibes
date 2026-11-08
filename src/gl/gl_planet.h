@@ -100,6 +100,9 @@ float planet_native_shrink(int i); /* true distance = dist * shrink */
 void planet_native_draw(int i);
 /* The player's ship this frame (GL view space, view units; shrink as native_frame_shrink), for the ground the shadows fall on in the external view */
 void planet_set_ground_ship(bool ok, const float pos[3], float shrink);
+/* The ground of a city under the eye (GL view space, not turned by the head): up there, unit, and the eye's height
+ * over it, view units. The planet's shadows fall on it, in every view. */
+void planet_set_city_ground(bool ok, const double up[3], double height);
 /* The ground ship as it is, put aside and back (the camera screen's picture is drawn without it) */
 void planet_ground_ship_push(void);
 void planet_ground_ship_pop(void);

@@ -1260,9 +1260,15 @@ static double ground_ship[3];
 static double ground_ship_shrink = 1;
 static bool saved_ground_ok;
 static double saved_ground[3], saved_ground_shrink = 1;
+/* The ground of a city (a ground base) under the eye, set by gl_native.cpp: the shadows on the planet fall on it */
+static bool city_ground_ok, saved_city_ok;
+static double city_up[3], city_height, saved_city_up[3], saved_city_height;
 
 void planet_ground_ship_push(void)
 {
+	saved_city_ok = city_ground_ok;
+	memcpy(saved_city_up, city_up, sizeof city_up);
+	saved_city_height = city_height;
 	saved_ground_ok = ground_ship_ok;
 	memcpy(saved_ground, ground_ship, sizeof saved_ground);
 	saved_ground_shrink = ground_ship_shrink;
@@ -1270,6 +1276,9 @@ void planet_ground_ship_push(void)
 
 void planet_ground_ship_pop(void)
 {
+	city_ground_ok = saved_city_ok;
+	memcpy(city_up, saved_city_up, sizeof city_up);
+	city_height = saved_city_height;
 	ground_ship_ok = saved_ground_ok;
 	memcpy(ground_ship, saved_ground, sizeof ground_ship);
 	ground_ship_shrink = saved_ground_shrink;
@@ -1282,6 +1291,15 @@ void planet_set_ground_ship(bool ok, const float pos[3], float shrink)
 		for (int k = 0; k < 3; k++)
 			ground_ship[k] = pos[k];
 	ground_ship_shrink = shrink > 0 ? shrink : 1;
+}
+
+void planet_set_city_ground(bool ok, const double up[3], double height)
+{
+	city_ground_ok = ok && height > 0;
+	if (city_ground_ok)
+		for (int k = 0; k < 3; k++)
+			city_up[k] = up[k];
+	city_height = height;
 }
 
 /* A planet as the sphere pass draws it */
@@ -1399,7 +1417,19 @@ static void draw_sphere(const SphereIn *in)
 	 * (radial up at the ship, its altitude down), the shadows are cast on that. The game's planet position is
 	 * only good to 1/1024, so the plane is trusted only where the ship's distance agrees with radius + altitude. */
 	pass->ground_on = false;
-	if (flat > 1 && ground_ship_ok && (STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL || freecam_active()))
+	/* Over a city its own ground is the one to cast on: the game's altitude is measured to other ground (London's
+	 * streets are 25 m over it at 2.1 km up), and shadows cast below the streets slide off their buildings and
+	 * show the roads' and rivers' too. Both views: the plane under the eye, the city's (bent) ground. */
+	if (flat > 1 && city_ground_ok)
+	{
+		for (int k = 0; k < 3; k++)
+		{
+			pass->ground_up[k] = (float)city_up[k];
+			pass->ground_p0[k] = (float)(-city_height * city_up[k]);
+		}
+		pass->ground_on = true;
+	}
+	else if (flat > 1 && ground_ship_ok && (STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL || freecam_active()))
 	{
 		double alt = (double)(int32_t)STMemory_ReadLong(GAME_A6 + 692) / ground_ship_shrink;
 		double rel[3] = {ground_ship[0] - in->pos[0], ground_ship[1] - in->pos[1], ground_ship[2] - in->pos[2]};

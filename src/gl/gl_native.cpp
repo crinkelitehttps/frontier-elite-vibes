@@ -4021,6 +4021,7 @@ void setup_shadows(bool wire)
 	gl_shadow_clear();
 	shadow_on = false;
 	planet_set_ground_ship(false, nullptr, 1);
+	planet_set_city_ground(false, nullptr, 0);
 	for (size_t i = 0; i < (size_t)shown->n; i++)
 		if (shown->obj[i].addr == game_player_ship() && shown->obj[i].table == shown->obj[i].subtable)
 			planet_set_ground_ship(true, shown->obj[i].pos, shown->obj[i].shrink);
@@ -4153,6 +4154,48 @@ void setup_shadows(bool wire)
 				for (const Cand *c : cls)
 					if ((c->base || dist0(*c) - c->r <= 1.0e7f) && chosen[2].size() < 12)
 						chosen[2].push_back(c);
+				/* the nearest city's ground is what the planet's shadows fall on: bent, a sphere round the planet's
+				 * centre through the city's origin; flat, its y = 0 plane */
+				for (const Cand *c : chosen[2])
+					if (c->base)
+					{
+						const Object &o = shown->obj[c->i];
+						double up[3], height;
+						if (c->i < bends.size() && bends[c->i].on)
+						{
+							const Bend &bd = bends[c->i];
+							double cen[3], len = 0;
+							for (int k = 0; k < 3; k++)
+							{
+								cen[k] = (double)bd.b[k] - bd.R * bd.u[k];
+								len += cen[k] * cen[k];
+							}
+							len = std::sqrt(len);
+							for (int k = 0; k < 3; k++)
+								up[k] = -cen[k] / len;
+							height = len - bd.R;
+						}
+						else
+						{
+							double n = 0;
+							for (int k = 0; k < 3; k++)
+								n += (double)o.cols[1][k] * o.cols[1][k];
+							n = std::sqrt(n);
+							height = 0;
+							for (int k = 0; k < 3; k++)
+							{
+								up[k] = o.cols[1][k] / n;
+								height -= o.pos[k] * up[k];
+							}
+						}
+						planet_set_city_ground(true, up, height);
+						static const bool lg = getenv("GLF_SHIP_SHADOWS") && atoi(getenv("GLF_SHIP_SHADOWS")) == 2;
+						static int gn;
+						if (lg && gn++ % 100 == 0)
+							log_printf("city ground: model %d, eye %.0f over it, alt %d\n", o.model, height,
+									   (int)(int32_t)STMemory_ReadLong(GAME_A6 + 692));
+						break;
+					}
 				continue;
 			}
 			/* the map is fitted round the casters, so a ship far off would stretch it and make every texel
