@@ -203,7 +203,8 @@ is only in the small wiggles.)
 `capture_surface()` copies the command's data out of emulated RAM: the bytes (up to `PLANET_DATA_MAX` = 2048),
 the radius word, the seed (object `+118`) and the 16 colours from the routine's frame (A3). `capture_palette()`
 then picks the colours actually used: the game's own 2D shape's colour table if it has one, else the
-frame's colours, with a darker copy (`(c >> 2) & 0x333`) for the dark side when the planet has no lit table.
+frame's colours. Only stars (models 76-86) have no lit table; they shine, so both sides use the same colours
+(before 2026-11-09 a darker copy `(c >> 2) & 0x333` was used for the dark side, which dimmed the Sun up close).
 
 When no coastline crosses the game's view, the game fills its whole table with the one colour under the view;
 we ignore such a one-colour table because the sphere shows every feature.

@@ -170,9 +170,10 @@ int planet_is_sea(uint32_t obj, const double rel[3])
 }
 
 /* The colours the game fills this planet with (its 2D shape's first colour
- * table, rgb444 by now), else its colour tables from the frame (without a
- * lit table, a darker copy for the dark side). When no coastline crosses
- * the game's view it fills the whole table with the colour under the view
+ * table, rgb444 by now), else its colour tables from the frame. Only the
+ * stars (models 76-86) have no lit table: they shine, so both sides get the
+ * same colours (a darker dark side made the Sun look dimmed up close).
+ * When no coastline crosses the game's view it fills the whole table with the colour under the view
  * (L3d5dc_PushPlanetCol, 210(a3) set): right for its flat shape, but the
  * sphere shows every feature, so a table of one colour is left out. */
 static void capture_palette(PlanetDesc *p)
@@ -180,7 +181,7 @@ static void capture_palette(PlanetDesc *p)
 	const PlanetSurface *s = &p->surface;
 	for (int i = 0; i < 8; i++)
 	{
-		p->palette[i] = s->lit_colours ? s->colours[i] : (uint16_t)((s->colours[i] >> 2) & 0x333);
+		p->palette[i] = s->colours[i];
 		p->palette[i + 8] = s->colours[i + 8];
 	}
 	if (!p->list_ok)
