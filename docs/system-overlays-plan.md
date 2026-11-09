@@ -177,7 +177,7 @@ candidates; a "quiet" pick near Sol: single G star, independent, few ports.
 1. Vendor cJSON; JSON parser producing the same `System`/`Body`; convert `kerbol.sys` to `systems/kerbol.json`; both builds.
 2. Schema + validation messages; stock model names; `replaces` by id / sector+number / name.
 3. Dump command: generated system -> JSON. DONE: `FE2GalaxyViewer --dump-system ID|SX,SY,N [OUT]` (docs/system-overlays.md); round trip checked on Alpha Centauri and a generated system; `binary` type and `level` field added. No in-game script command (the viewer is enough).
-4. Appearance overrides (4.3 level 2): colours/tint, atmosphere colour DONE (`look`, documented in system-overlays.md; Eve purple in kerbol.json; entering the system verified by log, visuals untested by the user); surface image and rings still to do.
+4. Appearance overrides (4.3 level 2): colours/tint, atmosphere colour DONE (`look`, documented in system-overlays.md; Eve purple in kerbol.json; entering the system verified by log, visuals untested by the user); surface image DONE (`look.surface`, stb_image in vendor/stb, shader mode uTextured 2; checked with a grid image on Eve: loads and draws, orientation to be judged by the user); rings still to do.
 5. Galaxy-map data overlay (4.4) after tracing.
 6. Fix the surface push (section 2) if the user hits it in a normal landing.
 7. Research 4.3 level 3 (new planet models) and 4.5 (new systems); decide with the user.

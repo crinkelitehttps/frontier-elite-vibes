@@ -134,8 +134,14 @@ static void capture_surface(PlanetDesc *p)
 	s->lit_colours = (s->data[0] & 0xc0) != 0;
 	for (int i = 0; i < 16; i++)
 		s->colours[i] = (uint16_t)(STMemory_ReadWord(a3 + 2 * (uint32_t)(s->lit_colours ? i : i & 7)) & 0xfff);
-	p->surface_ok = planet_surface_valid(s);
-	if (p->surface_ok)
+	/* a surface image from the body's look (custom_system.h) replaces the outlines' texture */
+	const CustomLook *look = custom_look(s->seed);
+	s->image[0] = 0;
+	s->image_night = 0.25f;
+	if (look)
+		custom_look_surface(look, s->image, sizeof(s->image), &s->image_night);
+	p->surface_ok = planet_surface_valid(s) || s->image[0];
+	if (p->surface_ok && planet_surface_valid(s))
 	{
 		/* kept for planet_is_sea, by planet object */
 		static int next;
@@ -905,7 +911,7 @@ void Nu_PutPlanet(void)
 static GLuint sphere_prog, shell_prog, quad_vao, quad_vbo;
 static struct
 {
-	GLint rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
+	GLint image_night, rect, proj, centre, c, light_dir, diffuse, ambient, surface, textured, to_local, palette, flat;
 	GLint shadow_k, ground_on, ground_up, ground_p0, shadow_on, shadow_u, shadow_v, shadow_d, shadow_u2, shadow_v2, shadow_d2, shadow_u3, shadow_v3, shadow_d3, shadow_layer, shadow_dark, shadow_bias,
 		shadow, to_view, view_r;
 } us;
@@ -934,7 +940,8 @@ static const char *FS_SPHERE =
 	"uniform vec3 uDiffuse;\n"
 	"uniform vec3 uAmbient;\n"
 	"uniform sampler2D uSurface;\n" /* the surface, equirectangular in the planet's axes */
-	"uniform int uTextured;\n"
+	"uniform int uTextured;\n" /* 1: the code texture, 2: an image */
+	"uniform float uImageNight;\n"
 	"uniform mat3 uToLocal;\n" /* eye space -> the planet's axes */
 	"uniform vec3 uPalette[16];\n" /* by code / 4: dark 0-7, lit 8-15 */
 	"uniform float uFlat;\n" /* the sphere drawn is this many times the planet (draw_sphere) */
@@ -1028,6 +1035,13 @@ static const char *FS_SPHERE =
 	/* three signed distances (0.5 on the edge), one per colour bit: each bit's
 	 * coverage is about one pixel wide, whatever the zoom; the colour mixes
 	 * the eight palette entries by the coverages */
+		"    if (uTextured == 2) {\n"
+		/* the longitude wraps at the seam: undo the jump in its derivatives so the mip level stays right */
+		"      vec2 gx = dFdx(uv), gy = dFdy(uv);\n"
+		"      gx.x -= floor(gx.x + 0.5); gy.x -= floor(gy.x + 0.5);\n"
+		"      fragColor = vec4(textureGrad(uSurface, uv, gx, gy).rgb * mix(uImageNight, 1.0, lit) * sh, 1.0);\n"
+		"      return;\n"
+		"    }\n"
 		"    vec3 sd = texture(uSurface, uv).rgb;\n"
 		"    vec3 w = max(fwidth(sd), vec3(1e-5));\n"
 		"    vec3 c = clamp((sd - 0.5) / w + 0.5, 0.0, 1.0);\n"
@@ -1075,6 +1089,7 @@ void gl_planet_init(void)
 	us.textured = glGetUniformLocation(sphere_prog, "uTextured");
 	us.to_local = glGetUniformLocation(sphere_prog, "uToLocal");
 	us.palette = glGetUniformLocation(sphere_prog, "uPalette");
+	us.image_night = glGetUniformLocation(sphere_prog, "uImageNight");
 	us.flat = glGetUniformLocation(sphere_prog, "uFlat");
 	us.shadow_on = glGetUniformLocation(sphere_prog, "uShadowOn");
 	us.shadow_u = glGetUniformLocation(sphere_prog, "uShadowU");
@@ -1134,6 +1149,7 @@ typedef struct
 	bool ground_on;
 	float shadow_k;   /* the ground the ships' shadows fall on is this many times as far below the eye as the sphere's */
 	GLuint surface;   /* 0: plain */
+	float image_night; /* > 0: `surface` is an image, drawn as it is, the night side at this much of it */
 	float to_local[9];
 	float palette[16][3];
 } SpherePass;
@@ -1150,7 +1166,8 @@ static void planet_sphere_pass(const void *data)
 	glUniform3fv(us.light_dir, 1, p->light);
 	glUniform3fv(us.diffuse, 1, p->diffuse);
 	glUniform3fv(us.ambient, 1, p->ambient);
-	glUniform1i(us.textured, p->surface != 0);
+	glUniform1i(us.textured, p->image_night > 0 ? 2 : p->surface != 0);
+	glUniform1f(us.image_night, p->image_night);
 	/* the ships' shadows, near the ground */
 	static const float no_map[12];
 	const float *sm = gl_shadow_matrix(0), *sm2 = gl_shadow_matrix(1), *sm3 = gl_shadow_matrix(2);
@@ -1490,6 +1507,7 @@ static void draw_sphere(const SphereIn *in)
 	/* The surface: eye space -> view space (H^T) -> the game's view (z
 	 * flipped, S) -> the planet's axes (A^T) */
 	pass->surface = in->surface ? planet_surface_texture(in->surface) : 0;
+	pass->image_night = pass->surface && planet_surface_is_image(in->surface) ? fmaxf(in->surface->image_night, 0.001f) : 0.0f;
 	for (int i = 0; i < 16; i++)
 		gl_rgb444_to_f(in->palette[i], pass->palette[i]);
 	static const float s[3] = {1, 1, -1};

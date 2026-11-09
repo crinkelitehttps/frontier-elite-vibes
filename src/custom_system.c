@@ -118,6 +118,8 @@ struct CustomLook
 	uint8_t colour[8][3];
 	bool tint, atmos;
 	uint8_t tint_rgb[3], atmos_rgb[3];
+	char surface[48]; /* image file in systems/ */
+	float night;
 };
 
 typedef struct
@@ -321,6 +323,22 @@ static bool parse_look(const char *file, const char *body, const cJSON *looks, c
 		log_printf("custom systems: %s: [%s] look.tint: expected \"#rrggbb\"\n", file, body);
 		return false;
 	}
+	out->night = 0.25f;
+	const cJSON *img = cJSON_GetObjectItemCaseSensitive(v, "surface");
+	if (img)
+	{
+		if (!cJSON_IsString(img) || strlen(img->valuestring) >= sizeof(out->surface) || strchr(img->valuestring, '/') ||
+			strchr(img->valuestring, '\\') || strstr(img->valuestring, ".."))
+		{
+			log_printf("custom systems: %s: [%s] look.surface: a file name in systems/ (under %d characters)\n", file,
+					   body, (int)sizeof(out->surface));
+			return false;
+		}
+		snprintf(out->surface, sizeof(out->surface), "%s", img->valuestring);
+	}
+	double night;
+	if (jnum(v, "night", &night))
+		out->night = (float)fmin(fmax(night, 0.0), 1.0);
 	const cJSON *a = cJSON_GetObjectItemCaseSensitive(v, "atmosphere");
 	if (a && !(out->atmos = parse_colour(a, out->atmos_rgb)))
 	{
@@ -764,6 +782,12 @@ const CustomLook *custom_look(uint32_t seed)
 static int nib(int c8)
 {
 	return (c8 * 15 + 127) / 255;
+}
+
+void custom_look_surface(const CustomLook *look, char *out, int size, float *night)
+{
+	snprintf(out, (size_t)size, "%s", look->surface);
+	*night = look->night;
 }
 
 void custom_look_palette(const CustomLook *look, uint16_t palette[16])

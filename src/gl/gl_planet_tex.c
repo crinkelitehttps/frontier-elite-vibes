@@ -10,6 +10,13 @@
 
 #include <SDL.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_BMP
+#define STBI_ONLY_TGA
+#define STBI_NO_STDIO_FILE_SIZE_UNUSED
+#include "stb_image.h"
 #include "gl_planet_tex.h"
 #include "main.h"
 #include "gl_earth_outlines.h"
@@ -573,11 +580,73 @@ static uint32_t surface_key(const PlanetSurface *s)
 		h = (h ^ s->data[i]) * 16777619u;
 	h = (h ^ s->seed) * 16777619u;
 	h = (h ^ s->radius_word) * 16777619u;
-	return h ? h : 1;
+	return h ? h : 1; /* (an image has its own texture, planet_surface_texture) */
+}
+
+/* ---- surface images (the "surface" of a body's look) ---------------------- */
+
+#define IMAGE_SLOTS 8
+
+static struct
+{
+	char name[48];
+	GLuint tex; /* 0: not loaded (failed) */
+} images[IMAGE_SLOTS];
+static int image_count;
+
+/* systems/NAME in the play folder, loaded once (a failure is remembered and logged once) */
+static GLuint image_texture(const char *name)
+{
+	for (int i = 0; i < image_count; i++)
+		if (!strcmp(images[i].name, name))
+			return images[i].tex;
+	if (image_count >= IMAGE_SLOTS)
+		return 0;
+	char path[128];
+	snprintf(path, sizeof(path), "systems/%s", name);
+	int w = 0, h = 0, n = 0;
+	Uint64 t0 = SDL_GetPerformanceCounter();
+	uint8_t *px = stbi_load(path, &w, &h, &n, 4);
+	GLint max = 4096;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max);
+	GLuint tex = 0;
+	if (!px)
+		log_printf("Planet surface image %s: %s\n", path, stbi_failure_reason());
+	else if (w > max || h > max)
+		log_printf("Planet surface image %s: %dx%d is over this GPU's limit (%d)\n", path, w, h, (int)max);
+	else
+	{
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		log_printf("Planet surface image %s: %dx%d loaded in %.0f ms\n", path, w, h,
+				   (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency());
+	}
+	stbi_image_free(px);
+	snprintf(images[image_count].name, sizeof(images[0].name), "%s", name);
+	images[image_count++].tex = tex;
+	return tex;
+}
+
+bool planet_surface_is_image(const PlanetSurface *s)
+{
+	return s->image[0] && image_texture(s->image) != 0;
 }
 
 GLuint planet_surface_texture(const PlanetSurface *s)
 {
+	if (s->image[0])
+	{
+		GLuint img = image_texture(s->image);
+		if (img)
+			return img;
+	}
 	uint32_t key = surface_key(s);
 	int oldest = 0;
 	for (int i = 0; i < CACHE_SLOTS; i++)
@@ -603,6 +672,10 @@ GLuint planet_surface_texture(const PlanetSurface *s)
 
 void planet_tex_shutdown(void)
 {
+	for (int i = 0; i < image_count; i++)
+		if (images[i].tex)
+			glDeleteTextures(1, &images[i].tex);
+	image_count = 0;
 	for (int i = 0; i < CACHE_SLOTS; i++)
 	{
 		if (cache[i].tex)

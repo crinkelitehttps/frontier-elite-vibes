@@ -301,6 +301,7 @@ include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/fe2/audio
     ${CMAKE_CURRENT_LIST_DIR}/vendor/glutess
     ${CMAKE_CURRENT_LIST_DIR}/vendor/cjson
+    ${CMAKE_CURRENT_LIST_DIR}/vendor/stb
     ${CMAKE_CURRENT_LIST_DIR}/vendor/minivorbis
 )
 

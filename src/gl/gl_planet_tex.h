@@ -50,6 +50,10 @@ typedef struct
 	uint16_t radius_word;          /* the command's radius word */
 	uint16_t colours[16];          /* rgb444, by code / 4: unlit 0-7, lit 8-15 */
 	bool lit_colours;              /* 8-15 are the game's (else copies of 0-7) */
+	/* a surface image from the body's system file (custom_system.h): "" = none. Equirectangular, north up, in the
+	 * planet's own axes like the code texture; drawn as it is, the night side at `image_night` of it. */
+	char image[48];
+	float image_night;
 } PlanetSurface;
 
 /* Earth (model 72) is drawn from traced coastlines (gl_earth_outlines.h) instead of the game's 92 points;
@@ -65,6 +69,8 @@ bool planet_surface_valid(const PlanetSurface *s);
  * longitude from atan2(x, z), v = acos(y) / pi, in the planet's own axes.
  * Made on first use and kept; 0 if it can't be made. Needs the GL context. */
 GLuint planet_surface_texture(const PlanetSurface *s);
+/* 1: `s` has an image and it is loaded (the texture planet_surface_texture gave is the image, drawn as it is) */
+bool planet_surface_is_image(const PlanetSurface *s);
 void planet_tex_shutdown(void);
 /* 1: the direction `v` (planet axes) is sea, 0: not, -1: the planet has no outlines or can't be read. CPU only. */
 int planet_surface_is_sea(const PlanetSurface *s, const float v[3]);

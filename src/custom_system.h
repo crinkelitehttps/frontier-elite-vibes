@@ -61,6 +61,9 @@ typedef struct CustomLook CustomLook;
 const CustomLook *custom_look(uint32_t seed);
 /* palette: the planet's 16 rgb444 colours, 0-7 dark and 8-15 lit, by feature code / 4 */
 void custom_look_palette(const CustomLook *look, uint16_t palette[16]);
+/* the look's surface image file name (in systems/), copied into out; out[0] = 0 if it has none. night: how much of the
+ * image the night side shows (0..1) */
+void custom_look_surface(const CustomLook *look, char *out, int size, float *night);
 /* a haze band's (or the sky's) rgb444 colour recoloured to the look's atmosphere, its lightness kept;
  * returned unchanged when the look has none */
 uint16_t custom_look_atmosphere(const CustomLook *look, uint16_t rgb444);

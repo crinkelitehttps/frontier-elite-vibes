@@ -37,10 +37,17 @@ A body may have a `look`, an object or the name of one in the file's top-level `
   1 land, 2-3 ice). The value is the sunlit colour; the night side keeps the stock model's dark/lit ratio.
 - `tint`: multiplies every colour of the planet by this (scaled so its brightest channel is 1, so it recolours without darkening).
 - `atmosphere`: the haze bands and the sky seen from the planet take this colour, each band keeping its own lightness.
+- `surface`: an image file name (PNG, JPEG, BMP or TGA, up to the GPU's texture size, e.g. 4096 x 2048) in the play folder's
+  `systems/`, drawn on the sphere instead of the model's outlines (no colour table: `colours` and `tint` do not apply to it).
+  Equirectangular like a world map: north at the top, the image's middle column facing +z of the planet's own axes (the axes are
+  the game's, turned by the planet's tilt and spin like any planet's: a planet with tilt 0 still has its poles wherever the
+  model puts them, so check the first picture and shift the image if needed). `night` (0 to 1, default 0.25) is how much of the
+  image shows on the night side; the terminator stays the game's hard one. A missing or bad file is logged once and the planet
+  keeps its stock look. Images are loaded when first drawn and kept (8 at most).
 - All of it applies to the native renderer (the default) only; the classic software renderer keeps the stock colours. The game's
   palette is 4 bits per channel, so colours are rounded to 16 levels. The body is found by its object seed, so a **saved game**
   made before the file had a look (or with other seeds) keeps its old planets: enter the system fresh (new game, `enter`).
-- Not done yet: a surface image instead of the model's outlines, rings, named looks in `models` that define new models.
+- Not done yet: rings, an image embedded in the exe (the built-in Kerbol has none), named looks in `models` that define new models.
 
 ## Starting from a real system: `--dump-system`
 
