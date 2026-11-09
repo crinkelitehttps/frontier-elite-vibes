@@ -15,6 +15,7 @@
 #include <SDL.h>
 
 #include "audio.h"
+#include "custom_system.h"
 #include "freecam.h"
 #include "scenery.h"
 #include "gl/gl_cockpit.h"
@@ -79,6 +80,7 @@ typedef struct
 	int smoke_cap;
 	int mine_prox;
 	int mine_radius;
+	int custom_systems;
 	int time_guard;
 	int target_range_au;
 	int scenery_rear_limit;
@@ -138,6 +140,7 @@ static const struct
 	{"smoke_cap", offsetof(Settings, smoke_cap)},
 	{"mine_prox", offsetof(Settings, mine_prox)},
 	{"mine_radius", offsetof(Settings, mine_radius)},
+	{"custom_systems", offsetof(Settings, custom_systems)},
 	{"time_guard_seconds", offsetof(Settings, time_guard)},
 	{"target_range_au", offsetof(Settings, target_range_au)},
 	{"scenery_rear_limit", offsetof(Settings, scenery_rear_limit)},
@@ -295,6 +298,7 @@ static Settings current(void)
 	s.smoke_cap = smoke_cap_ms;
 	s.mine_prox = mine_prox;
 	s.mine_radius = mine_radius_m;
+	s.custom_systems = custom_systems_on;
 	s.time_guard = time_guard_seconds;
 	s.target_range_au = target_range_au;
 	s.scenery_rear_limit = scenery_rear_limit;
@@ -367,6 +371,7 @@ static void apply(const Settings *s)
 	if (s->smoke_cap >= 10 && s->smoke_cap <= 2000)
 		smoke_cap_ms = s->smoke_cap;
 	mine_prox = s->mine_prox != 0;
+	custom_systems_on = s->custom_systems != 0;
 	if (s->mine_radius >= 10 && s->mine_radius <= 2000)
 		mine_radius_m = s->mine_radius;
 	if (s->time_guard >= 0 && s->time_guard <= 120)

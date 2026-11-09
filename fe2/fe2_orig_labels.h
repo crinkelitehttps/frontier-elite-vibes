@@ -426,6 +426,14 @@
 #define FE2_Lrt_take_real                            0x84338 /* Lrt_take_real */
 #define FE2_Lrt_limit                                0x84346 /* Lrt_limit */
 #define FE2_Lcam_stamp                               0x84362 /* Lcam_stamp */
+#define FE2_Lcsys_hook                               0x84372 /* Lcsys_hook */
+#define FE2_Lcsys_recs                               0x843a4 /* Lcsys_recs */
+#define FE2_Lcsys_body                               0x853a4 /* Lcsys_body */
+#define FE2_Lcsys_prad                               0x853b0 /* Lcsys_prad */
+#define FE2_Lcsys_cull                               0x853bc /* Lcsys_cull */
+#define FE2_Lcsys_base                               0x853ce /* Lcsys_base */
+#define FE2_Lcsys_hull                               0x853da /* Lcsys_hull */
+#define FE2_Lcsys_name                               0x853f8 /* Lcsys_name */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

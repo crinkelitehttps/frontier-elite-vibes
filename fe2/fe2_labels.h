@@ -468,5 +468,13 @@
 #define FE2_Lrt_take_game                            0xaa224 /* Lrt_take_game */
 #define FE2_Lrt_take_real                            0xaa232 /* Lrt_take_real */
 #define FE2_Lrt_limit                                0xaa240 /* Lrt_limit */
+#define FE2_Lcsys_hook                               0xaa25c /* Lcsys_hook */
+#define FE2_Lcsys_recs                               0xaa28e /* Lcsys_recs */
+#define FE2_Lcsys_body                               0xab28e /* Lcsys_body */
+#define FE2_Lcsys_prad                               0xab29a /* Lcsys_prad */
+#define FE2_Lcsys_cull                               0xab2a6 /* Lcsys_cull */
+#define FE2_Lcsys_base                               0xab2b8 /* Lcsys_base */
+#define FE2_Lcsys_hull                               0xab2c4 /* Lcsys_hull */
+#define FE2_Lcsys_name                               0xab2e2 /* Lcsys_name */
 
 #endif /* FE2_LABELS_H */

@@ -12,6 +12,9 @@
 
 #include "host.h"
 #include "galaxy_labels.h"
+#ifndef FE2GALAXY_TOOL
+#include "../custom_system.h"
+#endif
 
 /* Every jump counts as a tick. The biggest call the atlas makes (a system
  * with 60 bodies) runs well under 100000; this catches a routine that never
@@ -200,6 +203,17 @@ static void atlas_hcalls(HOSTCALL *table)
 	table[0x16] = hcall_hline;
 	table[0x1b] = hcall_draw_str; /* Call_DrawStrShadowed */
 	table[0x1c] = hcall_draw_str; /* Call_DrawStr */
+#ifndef FE2GALAXY_TOOL
+	/* the game's hand-made systems from systems/*.sys, so the system map,
+	 * the cheat menu's enter and the atlas see them (Call_CustomSystem in fe2*.s) */
+	table[0xa3] = Call_CustomSystem;
+	table[0xa4] = Call_CustomBody;
+	table[0xa5] = Call_CustomPlanet;
+	table[0xa6] = Call_CustomCull;
+	table[0xa7] = Call_CustomBase;
+	table[0xa8] = Call_CustomHull;
+	table[0xa9] = Call_CustomName;
+#endif
 }
 
 /* -- the machine: the tool's own, or the running game's --------------------- */

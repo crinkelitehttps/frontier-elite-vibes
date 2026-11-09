@@ -24,6 +24,7 @@
 #include "cheats.h"
 #include "game_state.h"
 #include "hostcall.h"
+#include "custom_system.h"
 #include "input.h"
 #include "keymap.h"
 #include "main.h"
@@ -578,6 +579,13 @@ HOSTCALL hcalls[] = {
 	[0xa0] = Call_RtVbl, /* real-time clock, rt_clock.h */
 	[0xa1] = Call_RtCredit,
 	[0xa2] = Call_RtPace,
+	[0xa3] = Call_CustomSystem, /* custom_system.h */
+	[0xa4] = Call_CustomBody,
+	[0xa5] = Call_CustomPlanet,
+	[0xa6] = Call_CustomCull,
+	[0xa7] = Call_CustomBase,
+	[0xa8] = Call_CustomHull,
+	[0xa9] = Call_CustomName,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

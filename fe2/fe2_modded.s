@@ -196,6 +196,16 @@ Call_ScenDrive	equ	$9f
 Call_RtVbl	equ	$a0
 Call_RtCredit	equ	$a1
 Call_RtPace	equ	$a2
+* Custom star systems (src/custom_system.c): a1 = records for system key d6, or 0.
+Call_CustomSystem	equ	$a3
+* Custom systems: a body's radius (a1 = object, a2 = its record), a planet's drawn radius (d6/d7), the cull size (d3).
+Call_CustomBody	equ	$a4
+Call_CustomPlanet	equ	$a5
+Call_CustomCull	equ	$a6
+Call_CustomBase	equ	$a7
+Call_CustomHull	equ	$a8
+* Custom systems: the system's name (d3/d4 sector words, d5 number, a0 = out); d1 = 0 when given.
+Call_CustomName	equ	$a9
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -11386,10 +11396,10 @@ L39546_CalcRotViewNLight:
 		rts
 
 L39646_3DObjClipOffscreen:
-		move.w	14(a5),d3
-		move.w	-208(a6),d0
-		ext.l	d3
-		asl.l	d0,d3
+		jsr	Lcsys_cull
+		nop
+		nop
+		nop
 		* viewing coords x,y,z
 		movem.l	-16(a6),d0-2
 
@@ -16641,7 +16651,7 @@ L3cd9c_ProjectPlanet:
 	* d6.w is planet radius (shifted by some unknown value...)
 	* itsybitsyfy x,y,z
 	l3cdf0:	
-		movem.l	4(a0),d1-3
+		jsr	Lcsys_prad
 		moveq	#0,d4
 		movea.l	#$4000,a2
 		move.l	d3,d5
@@ -20024,8 +20034,8 @@ Lnet_collide_end:
 		rts
 
 L3fa8e:
-		move.w	90(a1),d6
-		movem.l	a4-5,-(a7)
+		jsr	Lcsys_hull
+		nop
 		movea.l	A6_game_data(a6),a5
 * MOD Custom ship models: hook, same size as the code it replaced (move.w 0(a5,d6.w),d6 / andi.l #$ffff,d6 / adda.l d6,a5).
 * See Lmdlmod_ at the end of the file.
@@ -29161,8 +29171,7 @@ L4655a:
 		move.l	d4,632(a6)
 		move.w	d4,642(a6)
 		move.l	d4,636(a6)
-		tst.l	d0
-		beq.w	l473ec
+		jsr	Lcsys_hook
 		move.l	d0,620(a6)
 		move.l	d1,624(a6)
 		move.l	d1,d4
@@ -29387,7 +29396,7 @@ L467e8:
 		jsr	A5_AddObject(a5)
 		beq.w	l469c6
 		move.l	a1,24(a2)
-		move.l	4(a2),118(a1)
+		jsr	Lcsys_body
 		move.b	58(a2),158(a1)
 		move.b	59(a2),161(a1)
 		move.w	32(a2),182(a1)
@@ -29584,7 +29593,7 @@ L469b2:
 		asr.l	#1,d5
 		roxr.l	#1,d2
 		dbra	d7,l46a84
-		movem.l	d0-5,44(a1)
+		jsr	Lcsys_base
 		bra.w	L469b2
 	l46a9e:	move.l	d0,-(a7)
 		bsr.w	L46bd0
@@ -59226,7 +59235,7 @@ L7f1fe:
 		asr.l	#1,d5
 		roxr.l	#1,d2
 		dbra	d7,l7f2dc
-		movem.l	d0-5,44(a1)
+		jsr	Lcsys_base
 		movea.l	a1,a0
 		movem.l	(a7)+,d0/d7/a1
 		move.b	93(a0),14(a1)
@@ -63171,9 +63180,7 @@ L84700:
 		bne.s	l8472c
 
 L84706:
-		swap	d3
-		move.w	d4,d3
-		moveq	#46,d1
+		jsr	Lcsys_name
 		lea	L8460c_core_systems_sector(pc),a1
 	l84710:	cmp.l	-(a1),d3
 		dbeq	d1,l84710
@@ -69569,4 +69576,120 @@ lrt_limit_test:
 		tst.w	L5eb2_vblank_waits
 		bgt.s	lrt_limit_idle
 		move.w	#$1,L5eb2_vblank_waits
+		rts
+
+******************************************************************************
+* Custom star systems (src/custom_system.c, files in the play folder's
+* systems/ directory).
+*
+* The system generator L4655a builds a seeded system's body list from its
+* seed d0; a seed of 0 sends it to l473ec, which copies one of the ten
+* hand-made systems (Sol, Alpha Centauri ...) from the table L47390. Lcsys_hook
+* replaces that "tst.l d0; beq.w l473ec" (jsr, same size): the host is asked
+* first whether it has records for the system key d6 (Call_CustomSystem
+* returns them in a1, in the hand-made table's format); if so, the game's own
+* copy loop at l4740c takes them instead of the seed. Else the old test.
+******************************************************************************
+Lcsys_hook:
+		move.l	a1,-(a7)
+		suba.l	a1,a1
+		hcall	#Call_CustomSystem
+		cmpa.l	#0,a1
+		bne.s	lcsys_take
+		movea.l	(a7)+,a1
+		tst.l	d0
+		beq.s	lcsys_authored
+		rts
+lcsys_authored:
+		addq.l	#4,a7
+		jmp	l473ec
+* (as l473ec: a4 saved, a2 = the records, a1 = the output, d0 = first mass)
+lcsys_take:
+		addq.l	#8,a7
+		move.l	a4,-(a7)
+		movea.l	a1,a2
+		movea.l	a0,a1
+		move.l	0(a2),d0
+		jmp	l4740c
+
+* the records the host fills: up to 63 bodies of 64 bytes and the end record
+Lcsys_recs:
+		ds.b	4096
+
+******************************************************************************
+* Custom systems: a body's radius other than its model's (radius_km in a .sys
+* file). The object's radius (266/270, 272/276) comes from its model when
+* L448b6 makes it; three hooks let the host change it and keep the picture
+* and the culling in step:
+* - Lcsys_body, in the body instantiator L467e8 in place of
+*   "move.l 4(a2),118(a1)": the host sets the new object's radius.
+* - Lcsys_prad, in L3cd9c_ProjectPlanet at l3cdf0 in place of
+*   "movem.l 4(a0),d1-3": the radius of the planet op (d6 mantissa, d7
+*   exponent) is scaled by the object's radius over its model's, so both
+*   renderers draw the true size.
+* - Lcsys_cull, at the start of L39646_3DObjClipOffscreen in place of the
+*   four instructions that make the size d3 (jsr + 3 nops): a planet larger
+*   than its model is not culled while its edge is still in view.
+******************************************************************************
+Lcsys_body:
+		move.l	4(a2),118(a1)
+		hcall	#Call_CustomBody
+		rts
+
+Lcsys_prad:
+		hcall	#Call_CustomPlanet
+		movem.l	4(a0),d1-3
+		rts
+
+Lcsys_cull:
+		move.w	14(a5),d3
+		move.w	-208(a6),d0
+		ext.l	d3
+		asl.l	d0,d3
+		hcall	#Call_CustomCull
+		rts
+
+* - Lcsys_base, in the surface starport placement (L467e8, after l46a84) in
+*   place of "movem.l d0-5,44(a1)": the port is put on the parent's model
+*   radius; the host moves it to the parent's own (a0 = parent, a1 = port).
+*   Also after l7f2dc, which puts mission objects on a planet the same way.
+Lcsys_base:
+		movem.l	d0-5,44(a1)
+		hcall	#Call_CustomBase
+		rts
+
+* - Lcsys_hull, at the start of the hull hit test L3fa8e in place of
+*   "move.w 90(a1),d6; movem.l a4-5,-(a7)" (jsr + nop): the hull is the
+*   model's, so for a planet of another size the host scales the test point
+*   (d0-d2) and the margin (d7) into the model's units (a1 = the planet). The
+*   movem is done here under the return address.
+Lcsys_hull:
+		hcall	#Call_CustomHull
+		move.w	90(a1),d6
+		move.l	(a7)+,lcsys_ret
+		movem.l	a4-5,-(a7)
+		move.l	lcsys_ret,-(a7)
+		rts
+lcsys_ret:
+		dc.l	0
+
+******************************************************************************
+* Custom systems: a system's own name (name = ... in a .sys file). L84706
+* makes the name of system d5 of the sector d3, d4 (string code $3fe, every
+* place that shows one): from the core-sector table, else from syllables.
+* Lcsys_name replaces its first three instructions (jsr, same size): the
+* host writes the name at a0 (leaving a0 past the NUL, as the syllable path
+* does) and clears d1, and L84706 returns at once; else they run as before.
+******************************************************************************
+Lcsys_name:
+		moveq	#-1,d1
+		hcall	#Call_CustomName
+		tst.l	d1
+		beq.s	lcsys_name_mine
+		swap	d3
+		move.w	d4,d3
+		moveq	#46,d1
+		rts
+lcsys_name_mine:
+		addq.l	#4,a7
 		rts

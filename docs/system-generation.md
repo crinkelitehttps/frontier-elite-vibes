@@ -28,24 +28,33 @@ A key not in the table falls back to offset `$24c0`.
 
 ## 2. The body record (64 bytes)
 
-[inferred] from how the generator and the instantiator (`L467e8`) use the fields:
+[measured] against Sol's hand-made records (decoded from `L47390`; Earth, the Moon, Mercury, London ... give the units) and
+[inferred] from how the generator and the instantiator (`L467e8`) use the fields. The hand-made table holds a *source* form
+that the copy loop (`l4740c`) turns into this one: mass and orbit are plain longs there (mass in units of 1e22 kg, Earth = 599;
+orbit in units of 2^25 mm = 33.554 km, Earth = 4458427), and the period is worked out from the parent's mass.
 
 | Offset | What |
 |---|---|
 | 0, 2 | mass as a word mantissa and a word exponent (exponent bias `$3f`) |
-| 4 | long, the body's own seed; becomes `118(obj)` (the name seed for `randnames`) |
+| 4 | long, the body's own seed; becomes `118(obj)` (the name seed for `randnames`, surface detail) |
 | 8 | word, parent record number (0 = none; 1-based, the parent is `64 * n` bytes back) |
-| 10 | word, kind: 0 star, `$0c..$18` planet classes, `$32` an extra, `>= $40` a starport; `$44` and `$46` special starports (`$46` = ground base) |
-| 12 | word, model / object type (`$20` star, `$84..$8e` planets, `$5a..$6c` bases, `$ae` ...) |
-| 14, 16 | radius as mantissa and exponent |
-| 18 | word, orbit phase / eccentricity (`622(a6)`; `$7fff` marks the second component of a binary) |
-| 20, 22 | orbit radius as mantissa and exponent |
-| 24 | long, mass value; replaced by the new object's pointer once instantiated |
-| 28, 30 | words derived from the seed (`620(a6)`) |
-| 32 | word, a 'temperature / size class' value; the planet generator compares it with `$d7`, `$139` and so on to choose the model |
-| 34 | name string, up to about 24 characters |
-| 58, 59 | bytes; `59` bit 7 says the body was given a `randnames` name |
-| 62 | word |
+| 10 | word, kind: 0 binary (container), 2..34 planet classes, 36..60 stars, 64 trading post, 66 orbital station, 68 orbital city, 70 (`$46`) surface starport |
+| 12 | word, model (byte offset: index = /2); the radius comes from the model, not from the record |
+| 14, 16 | orbit radius (semi-major axis) as mantissa and exponent |
+| 18 | word, orbit phase, 65536 = 360 degrees (`$8000` puts a binary's second star opposite); surface port: west longitude |
+| 20, 22 | orbital period, mantissa and exponent (from orbit^3 / parent mass) |
+| 24 | long, replaced by the new object's pointer once instantiated |
+| 28 | word, eccentricity x 1000 (Mercury 206, Earth 17, Nereid 749) |
+| 30 | word, inclination, 65536 = 360 degrees (Mercury 7.0, Moon 5.1); surface port: latitude (London 52, Sydney -35) |
+| 32 | word, temperature in K (Earth 295, Sol 6073); the generator compares it with `$d7`, `$139` and so on to choose the model |
+| 34 | name string, up to 21 characters and the NUL (56 follows) |
+| 58 | byte, spin: rotation rate = `126(obj) << (spin - 1)`, 0 = none (Moon 0, Earth and Mars 1, Jupiter 2; becomes `158(obj)`) |
+| 59 | byte, level: 0 star, 1 planet, 2 moon or orbital starport, 3 surface starport; bit 7 = given a `randnames` name |
+| 62 | word, axial tilt, 65536 = 360 degrees (Earth 23.0, Uranus 98) |
+
+A surface starport's record is copied as it is (London's mass long is `$fff60000`). The list ends with a record of mass 0
+whose byte 4 is the body count (`634(a6)`: under 12 lets asteroids appear, `L8145e`) and bytes 8, 9 the starport and orbital
+starport counts (`664/665(a6)`). The body list is built in 3908 bytes of stack, so 60 bodies at most.
 
 ## 3. Building the list
 
@@ -90,4 +99,43 @@ This confirms the guess in `starport-economy.md`: bit 5 of `280` marks a surface
 
 - The exact meaning of every record word and the mass thresholds in `L46418` (the table is partly data tables laid over each other).
 - The rest of `L46ea4` onward (the tail around `$4707x` to `$4712x`), which assigns the special-case models and the `$32`/`$ae` extras.
-- The ten authored systems in `L47390`: only the first keys were read, and none was checked against the galaxy catalog.
+- Ten of the eleven `L47390` entries were decoded (Sol, Alpha Centauri, Wolf 630, 61 Cygni, Sirius, Eta Cassiopeia, ...);
+  Ross 154 (`$a925c5c1`) is among them.
+
+## 6. Custom systems
+
+`Lcsys_hook` (fe2.s and fe2_modded.s) replaces the `tst.l d0; beq.w l473ec` at the start of `L4655a` with a `jsr`. It asks the
+host (`Call_CustomSystem`, `src/custom_system.c`) whether it has records for the system key `d6`; if so they are written to
+`Lcsys_recs` in the hand-made source form and the game's own copy loop `l4740c` takes them, so the system gets real orbits,
+working starports and ground bases. The bodies come from `systems/*.sys` (compiled in; a file of the same name in the play
+folder's `systems/` replaces it, read again when it changes); the format is described at the top of `systems/kerbol.sys`, which
+puts Kerbal Space Program's system, scaled up x10, in place of 82 Eridani. `glfrontier.cfg custom_systems=0` turns them off;
+`GLF_CSYS_LOG=1` logs every key asked for. The second VM (`src/galaxy/fe2vm.c`) answers the call too, so the system map, the
+cheat menu's enter and the atlas see the same bodies; the standalone FE2GalaxyViewer does not.
+
+**Radius other than the model's** (`radius_km`): an object's radius (`266/270`, and `272/276` from model word 24) comes from its model when
+`L448b6` makes it, and the model's own words are used in four more places, each hooked:
+
+| Hook | Where | What the host does |
+|---|---|---|
+| `Lcsys_body` | body instantiator `L467e8` (`move.l 4(a2),118(a1)`) | sets the new object's radius (272/276 scaled with it) |
+| `Lcsys_prad` | `L3cd9c_ProjectPlanet` at `l3cdf0` | scales the planet op's radius (d6/d7) by object radius / model radius: both renderers draw the true size, atmosphere and surface detail with it |
+| `Lcsys_cull` | start of `L39646_3DObjClipOffscreen` | makes the cull size `d3` larger for a planet larger than its model (never smaller: sub-models are culled there too) |
+| `Lcsys_base` | surface port placement after `l46a84`, mission objects after `l7f2dc` | moves the object from the parent's model radius to its own |
+| `Lcsys_hull` | start of the hull hit test `L3fa8e` | scales the test point and margin into the model's units |
+
+The ratio is worked out from the object each time (`model_radius` = word 22 << (words 10 + 12 - 8) mm, which matches `L448b6`
+exactly), so it is 1 for every body the game makes, survives saves and object copies, and only planet and star models (61-86, 193,
+194) are touched. The altitude (`L3f566`) and laser hits on planets (`L41766`) already use the object's radius.
+
+Open: the game puts a ship that arrives below a planet's surface back on it (a stock behaviour: on Earth to 6379.8 km); for
+Kerbin (6000 km, model 6100) it put the ship at 6099.8, so that code uses the model's radius and is not found yet. It was seen
+only with the cheat goto into the planet; a normal descent was not tried.
+
+**Name** (`name =`): `L84706` makes every system name (string code `$3fe`: the core-sector table near Sol, else syllables from
+a hash of the sector and number). `Lcsys_name` replaces its first three instructions; `Call_CustomName` writes the file's name
+at `a0` (past the NUL, as the syllable path leaves it) for the key's sector words and number (`l8479a`: number = key & 63, then
+key >> 3 gives d4 = high word, d3 = low word >> 3). The atlas's name search (src/galaxy) hashes names itself and will not find it.
+
+Not changed by it: what the galaxy map and the system's info page say before arrival (star type, population, government,
+allegiance): those come from the galaxy generator.
