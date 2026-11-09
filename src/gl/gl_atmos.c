@@ -151,6 +151,29 @@ static void copy_atmos(AtmosBuf *dst, const AtmosBuf *src)
 	memcpy(dst->arena, src->arena, sizeof(int16_t) * (size_t)src->arena_used);
 }
 
+/* What is kept between frames. The sky's colour and its "in air" flag (stars hidden) are kept apart from the
+ * bands: every published frame, fresh or held, takes them from here, so a held frame cannot publish another sky
+ * than the fresh frame next to it (the atmosphere strobing while climbing out of it), and they age with every
+ * publish, whatever else the frame did. */
+static int held_age = HELD_FRAMES, bare = 0;
+static int kept_sky = -1, kept_sky_age = HELD_FRAMES;
+static bool kept_sky_air;
+
+/* The game was replaced (a saved game loaded, a new one, another system): nothing seen before is true. Screens
+ * (the load menu) publish no world frames, so nothing here would age out in time. */
+void atmos_reset_hold(void)
+{
+	held_age = HELD_FRAMES;
+	bare = 0;
+	kept_sky = -1;
+	kept_sky_age = HELD_FRAMES;
+	kept_sky_air = false;
+	held.n_bands = held.n_planets = held.arena_used = 0;
+	held.sky = -1;
+	held.sky_ahead = held.sky_air = false;
+	/* pub is the drawing thread's too: the next publish replaces it */
+}
+
 void atmos_publish(void)
 {
 	/* The game makes the haze only in a frame whose planet routine runs
@@ -169,39 +192,45 @@ void atmos_publish(void)
 	 * others (save "Snap02", 10000 km over Earth: the capture pass aimed at
 	 * it made them, the game camera's with Earth just below the middle did
 	 * not), so the bands blinked off two frames in three. */
-	static int held_age = HELD_FRAMES, bare = 0;
+	/* The sky's colour stays between the frames that make bands, whatever
+	 * the others' planet routine did (all ground, or a planet put without
+	 * its horizon): only those know it */
+	if (rec.sky >= 0)
+	{
+		kept_sky = rec.sky;
+		kept_sky_air = rec.sky_air;
+		kept_sky_age = 0;
+	}
+	else if (kept_sky_age < HELD_FRAMES)
+		kept_sky_age++;
+
 	if (rec.n_bands > 0)
 	{
 		copy_atmos(&held, &rec);
 		held_age = 0;
 		bare = 0;
+		copy_atmos(&pub, &rec);
 	}
 	else if (held_age < HELD_FRAMES && (horizon_puts == 0 || ++bare < BARE_FRAMES))
 	{
 		held_age++;
 		copy_atmos(&pub, &held);
 		pub.held = true;
-		return;
 	}
 	else
+	{
 		held_age = HELD_FRAMES;
-	copy_atmos(&pub, &rec);
-	/* The sky's colour stays between the frames that make bands, whatever
-	 * the others' planet routine did (all ground, or a planet put without
-	 * its horizon): only those know it */
-	static int sky = -1, sky_age = HELD_FRAMES;
-	static bool sky_air;
-	if (rec.sky >= 0)
-	{
-		sky = rec.sky;
-		sky_air = rec.sky_air;
-		sky_age = 0;
+		copy_atmos(&pub, &rec);
 	}
-	else if (sky_age < HELD_FRAMES)
+	if (kept_sky_age < HELD_FRAMES)
 	{
-		sky_age++;
-		pub.sky = sky;
-		pub.sky_air = sky_air;
+		pub.sky = kept_sky;
+		pub.sky_air = kept_sky_air;
+	}
+	else
+	{
+		pub.sky = -1;
+		pub.sky_air = false;
 	}
 }
 

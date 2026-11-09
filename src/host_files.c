@@ -15,6 +15,7 @@
 #include "main.h"
 #include "station_resume.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_scene.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -133,6 +134,7 @@ void Call_GameStart(void)
 {
 	extern volatile unsigned long dbg_game_starts;
 	dbg_game_starts++;
+	atmos_reset_hold();
 	char name[GAME_NAME_MAX];
 	read_game_string(GAME_A6 + 14400, name, sizeof(name)); /* A6_commander_name */
 	log_printf("==== Game start: commander '%s' ====\n", name);

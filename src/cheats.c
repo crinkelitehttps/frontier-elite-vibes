@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "gl/gl_scene.h"
 #include "cheats.h"
 #include "game_state.h"
 #include "host.h" /* rdbyte, wrbyte, ... */
@@ -1009,6 +1010,7 @@ const char *cheat_enter_system(unsigned id)
 		return "The game's system generator failed; nothing changed.";
 	}
 	fe2vm_end_keep();
+	atmos_reset_hold();
 	return NULL;
 }
 

@@ -140,6 +140,7 @@ void scene_capture_soft_nodes(void);
 void soft_node_capture(SoftNode *s); /* gl_atmos.c */
 void soft_nodes_reset(void);         /* gl_atmos.c, with scene_reset */
 void atmos_publish(void);            /* gl_atmos.c, with scene_publish */
+void atmos_reset_hold(void);         /* gl_atmos.c: the game was replaced (load, new game, system change) */
 void atmos_acquire(void);            /* gl_atmos.c, with scene_acquire */
 /* Drops what the object L390f2 is drawing (frame a6) records from here on,
  * but its planet, until it is done (the native scene draws the rest of a
