@@ -9,3 +9,5 @@ temp
 build-smoke
 # the diagnostics upload secret (build_android.py)
 tools/androidBuild/upload_token.txt
+# planet images made from the user's own KSP install by tools/ksp_textures.py: not ours to distribute
+systems/ksp_*.png

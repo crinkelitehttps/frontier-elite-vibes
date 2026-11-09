@@ -48,6 +48,9 @@ A body may have a `look`, an object or the name of one in the file's top-level `
 - All of it applies to the native renderer (the default) only; the classic software renderer keeps the stock colours. The game's
   palette is 4 bits per channel, so colours are rounded to 16 levels. The body is found by its object seed, so a **saved game**
   made before the file had a look (or with other seeds) keeps its old planets: enter the system fresh (new game, `enter`).
+- `tools/ksp_textures.py` makes such images for the built-in Kerbol system from the user's own Kerbal Space Program install
+  (reads the planet maps out of `KSP_Data`, shrinks them, writes `ksp_<body>.png`; `pip install UnityPy Pillow`). Nothing from KSP is
+  shipped or committed (`systems/ksp_*.png` is git-ignored); without the files the planets keep their stock look.
 - Not done yet: rings, an image embedded in the exe (the built-in Kerbol has none), named looks in `models` that define new models.
 
 ## Starting from a real system: `--dump-system`
