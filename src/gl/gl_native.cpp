@@ -1178,8 +1178,9 @@ static void map_orbit_draw(const Frame &f)
 		return;
 	gd_set_depth(nullptr);
 	gd_color3f(0.0f, 1.0f, 0.0f);
+	/* not where it passes behind the planet */
 	for (int i = 0; i + 1 < f.orbit.n; i++)
-		if (!(f.orbit.hid[i] || f.orbit.hid[i + 1]) || i % 2 == 0)
+		if (!(f.orbit.hid[i] || f.orbit.hid[i + 1]))
 			gd_line(f.orbit.pt[i], f.orbit.pt[i + 1]);
 }
 
@@ -1268,6 +1269,11 @@ extern "C" void native_publish_page(void)
 extern "C" void native_acquire_page(void)
 {
 	shows[2] = pub_page;
+}
+
+extern "C" bool native_screen_only(void)
+{
+	return screen_only;
 }
 
 extern "C" void native_use_page(bool page)

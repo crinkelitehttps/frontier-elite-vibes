@@ -402,6 +402,10 @@ void draw_soft_node(const void *payload)
 	const SoftNode *s = payload;
 	if (s->band < 0)
 		return;
+	/* a screen's, page's or camera's frame: its bands index the world's haze record (show), not its own, and drew
+	 * a stray band of the world's over the system map's Earth */
+	if (native_screen_only())
+		return;
 	/* drawn in 3D instead (draw_atmos) */
 	if (s->shell >= 0 && s->shell < show.n_bands && show.bands[s->shell].planet >= 0 &&
 		(cockpit_active() || native_mode() == 2))

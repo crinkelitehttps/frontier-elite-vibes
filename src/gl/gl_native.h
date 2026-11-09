@@ -80,6 +80,8 @@ void native_use_screen(bool screen);
 void native_publish_page(void);
 void native_acquire_page(void);
 void native_use_page(bool page);
+/* Drawing a screen's, page's or camera's frame, not the world's (its haze isn't recorded) */
+bool native_screen_only(void);
 /* ... and for the camera screen's high-res picture (scene_publish_camera) */
 void native_publish_camera(void);
 void native_acquire_camera(void);
