@@ -39,6 +39,7 @@
 #endif
 
 #include "custom_system.h"
+#include "cJSON.h"
 #include "game_state.h" /* labels */
 #include "host.h"       /* wrlong, SetReg */
 #include "main.h"       /* log_printf, REG_* */
@@ -148,16 +149,6 @@ static uint32_t name_hash(const char *s)
 	return h ? h : 1;
 }
 
-static char *trim(char *s)
-{
-	while (*s == ' ' || *s == '\t')
-		s++;
-	char *e = s + strlen(s);
-	while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r' || e[-1] == '\n'))
-		*--e = 0;
-	return s;
-}
-
 static int find_type(const char *name)
 {
 	for (int i = 0; i < TYPES_COUNT; i++)
@@ -183,59 +174,135 @@ static void new_body(Body *b, const char *name)
 	b->seed = name_hash(name);
 }
 
-static void set_field(System *sys, Body *b, const char *file, int line, const char *k, const char *v)
+/* stock models by name, for "model": "mars" (approximate: the catalog's pick for each) */
+static const struct
 {
-	double d = atof(v);
-	if (!b)
+	const char *name;
+	int model;
+} model_names[] = {
+	{"asteroid", 122}, {"mercury", 126}, {"moon", 126},    {"io", 130},     {"venus", 132},
+	{"titan", 134},    {"mars", 136},    {"earth", 144},   {"jupiter", 146}, {"saturn", 146},
+	{"uranus", 148},   {"neptune", 148},
+};
+
+static const char *jstr(const cJSON *o, const char *k)
+{
+	const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, k);
+	return cJSON_IsString(v) ? v->valuestring : NULL;
+}
+
+static bool jnum(const cJSON *o, const char *k, double *out)
+{
+	const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, k);
+	if (!cJSON_IsNumber(v))
+		return false;
+	*out = v->valuedouble;
+	return true;
+}
+
+/* a sector's system key (docs/system-generation.md: key & 63 = number, sector from bits 6 and 19) */
+static uint32_t sector_key(int x, int y, int number)
+{
+	return ((uint32_t)(y + 0x1524) << 19) | ((uint32_t)(x + 0x1718) << 6) | (uint32_t)(number & 63);
+}
+
+/* "replaces": "a91dc641" (the catalog's id), or {"sector": [1, -1], "number": 1} */
+static bool parse_replaces(const char *file, const cJSON *r, uint32_t *key)
+{
+	if (cJSON_IsString(r))
 	{
-		if (strcmp(k, "key") == 0)
-			sys->key = (uint32_t)strtoul(v, NULL, 16);
-		else if (strcmp(k, "name") == 0)
-			snprintf(sys->name, sizeof(sys->name), "%s", v);
-		else
-			log_printf("custom systems: %s:%d: '%s' before the first [body]\n", file, line, k);
-		return;
+		char *end;
+		*key = (uint32_t)strtoul(r->valuestring, &end, 16);
+		if (*end || !*key)
+		{
+			log_printf("custom systems: %s: replaces: '%s' is not a hex id (names are not supported yet)\n",
+					   file, r->valuestring);
+			return false;
+		}
+		return true;
 	}
-	if (strcmp(k, "type") == 0)
+	const cJSON *sec = cJSON_GetObjectItemCaseSensitive(r, "sector");
+	double num;
+	if (cJSON_IsArray(sec) && cJSON_GetArraySize(sec) == 2 && jnum(r, "number", &num))
 	{
-		b->type = find_type(v);
-		if (b->type < 0)
-			log_printf("custom systems: %s:%d: unknown type '%s'\n", file, line, v);
+		*key = sector_key((int)cJSON_GetArrayItem(sec, 0)->valuedouble,
+						  (int)cJSON_GetArrayItem(sec, 1)->valuedouble, (int)num);
+		return true;
 	}
-	else if (strcmp(k, "parent") == 0)
-		snprintf(b->parent_name, sizeof(b->parent_name), "%s", v);
-	else if (strcmp(k, "kind") == 0)
-		b->kind = atoi(v);
-	else if (strcmp(k, "model") == 0)
-		b->model = atoi(v);
-	else if (strcmp(k, "spin") == 0)
-		b->spin = atoi(v);
-	else if (strcmp(k, "temp_k") == 0)
-		b->temp = atoi(v);
-	else if (strcmp(k, "seed") == 0)
-		b->seed = (uint32_t)strtoul(v, NULL, 16);
-	else if (strcmp(k, "mass_kg") == 0)
+	log_printf("custom systems: %s: replaces: expected a hex id or {\"sector\": [x, y], \"number\": n}\n", file);
+	return false;
+}
+
+/* one body object; false (after logging) if it is unusable */
+static bool parse_body(System *sys, const cJSON *o)
+{
+	const char *file = sys->file;
+	const char *name = jstr(o, "name");
+	if (!name || !*name)
+	{
+		log_printf("custom systems: %s: body %d has no name\n", file, sys->count + 1);
+		return false;
+	}
+	if (strlen(name) > NAME_LEN)
+		log_printf("custom systems: %s: [%s] name cut to %d characters\n", file, name, NAME_LEN);
+	Body *b = &sys->bodies[sys->count];
+	new_body(b, name);
+	const char *type = jstr(o, "type");
+	b->type = type ? find_type(type) : -1;
+	if (b->type < 0)
+	{
+		log_printf("custom systems: %s: [%s] unknown or missing type '%s'\n", file, name, type ? type : "");
+		return false;
+	}
+	const char *parent = jstr(o, "parent");
+	if (parent)
+		snprintf(b->parent_name, sizeof(b->parent_name), "%s", parent);
+	double d;
+	if (jnum(o, "mass_kg", &d))
 		b->mass_kg = d;
-	else if (strcmp(k, "mass_earth") == 0)
+	if (jnum(o, "mass_earth", &d))
 		b->mass_kg = d * EARTH_KG;
-	else if (strcmp(k, "orbit_km") == 0)
+	if (jnum(o, "orbit_km", &d))
 		b->orbit_km = d;
-	else if (strcmp(k, "ecc") == 0)
+	if (jnum(o, "ecc", &d))
 		b->ecc = d;
-	else if (strcmp(k, "incl_deg") == 0)
+	if (jnum(o, "incl_deg", &d))
 		b->incl = d;
-	else if (strcmp(k, "phase_deg") == 0)
+	if (jnum(o, "phase_deg", &d))
 		b->phase = d;
-	else if (strcmp(k, "tilt_deg") == 0)
+	if (jnum(o, "tilt_deg", &d))
 		b->tilt = d;
-	else if (strcmp(k, "lat_deg") == 0)
+	if (jnum(o, "lat_deg", &d))
 		b->lat = d;
-	else if (strcmp(k, "lon_deg") == 0)
+	if (jnum(o, "lon_deg", &d))
 		b->lon = d;
-	else if (strcmp(k, "radius_km") == 0)
+	if (jnum(o, "radius_km", &d))
 		b->radius_km = d;
-	else
-		log_printf("custom systems: %s:%d: unknown field '%s'\n", file, line, k);
+	if (jnum(o, "temp_k", &d))
+		b->temp = (int)d;
+	if (jnum(o, "spin", &d))
+		b->spin = (int)d;
+	if (jnum(o, "kind", &d))
+		b->kind = (int)d;
+	if (jnum(o, "seed", &d))
+		b->seed = (uint32_t)(int64_t)d;
+	const cJSON *m = cJSON_GetObjectItemCaseSensitive(o, "model");
+	if (cJSON_IsNumber(m))
+		b->model = (int)m->valuedouble;
+	else if (cJSON_IsString(m))
+	{
+		b->model = -1;
+		for (size_t i = 0; i < sizeof(model_names) / sizeof(model_names[0]); i++)
+			if (strcmp(model_names[i].name, m->valuestring) == 0)
+				b->model = model_names[i].model;
+		if (b->model < 0)
+		{
+			log_printf("custom systems: %s: [%s] unknown model name '%s'\n", file, name, m->valuestring);
+			return false;
+		}
+	}
+	sys->count++;
+	return true;
 }
 
 /* the parent, defaults and level of each body; false if the file is unusable */
@@ -297,54 +364,53 @@ static void parse(const char *file, const char *text)
 {
 	if (system_count >= SYSTEMS_MAX)
 		return;
+	char *copy = strdup(text);
+	if (!copy)
+		return;
+	cJSON_Minify(copy); /* allows // and slash-star comments */
+	cJSON *root = cJSON_Parse(copy);
+	free(copy);
+	if (!root)
+	{
+		const char *e = cJSON_GetErrorPtr();
+		log_printf("custom systems: %s: not valid JSON (near '%.20s')\n", file, e ? e : "?");
+		return;
+	}
 	System *sys = &systems[system_count];
 	memset(sys, 0, sizeof(*sys));
 	snprintf(sys->file, sizeof(sys->file), "%s", file);
-	Body *b = NULL;
-	int line = 0;
-	const char *p = text;
-	while (*p)
+	const cJSON *info = cJSON_GetObjectItemCaseSensitive(root, "system");
+	const cJSON *bodies = cJSON_GetObjectItemCaseSensitive(root, "bodies");
+	bool ok = cJSON_IsObject(info) && cJSON_IsArray(bodies);
+	if (!ok)
+		log_printf("custom systems: %s: needs a \"system\" object and a \"bodies\" array\n", file);
+	if (ok)
+		ok = parse_replaces(file, cJSON_GetObjectItemCaseSensitive(info, "replaces"), &sys->key);
+	if (ok)
 	{
-		char buf[256];
-		size_t n = strcspn(p, "\n");
-		size_t c = n < sizeof(buf) - 1 ? n : sizeof(buf) - 1;
-		memcpy(buf, p, c);
-		buf[c] = 0;
-		p += n + (p[n] == '\n');
-		line++;
-		char *hash = strchr(buf, '#');
-		if (hash)
-			*hash = 0;
-		char *s = trim(buf);
-		if (!*s)
-			continue;
-		if (*s == '[')
+		const char *name = jstr(info, "name");
+		if (name)
+			snprintf(sys->name, sizeof(sys->name), "%s", name);
+		if (cJSON_GetObjectItemCaseSensitive(info, "galaxy"))
+			log_printf("custom systems: %s: \"galaxy\" is not used yet\n", file);
+		const cJSON *o;
+		cJSON_ArrayForEach(o, bodies)
 		{
-			char *e = strchr(s, ']');
-			if (e)
-				*e = 0;
 			if (sys->count >= BODIES_MAX)
 			{
-				log_printf("custom systems: %s:%d: more than %d bodies\n", file, line, BODIES_MAX);
-				return;
+				log_printf("custom systems: %s: more than %d bodies\n", file, BODIES_MAX);
+				ok = false;
+				break;
 			}
-			b = &sys->bodies[sys->count++];
-			char *name = trim(s + 1);
-			if (strlen(name) > NAME_LEN)
-				log_printf("custom systems: %s:%d: name cut to %d characters\n", file, line, NAME_LEN);
-			new_body(b, name);
-			continue;
+			if (!parse_body(sys, o))
+			{
+				ok = false;
+				break;
+			}
 		}
-		char *eq = strchr(s, '=');
-		if (!eq)
-		{
-			log_printf("custom systems: %s:%d: expected 'field = value'\n", file, line);
-			continue;
-		}
-		*eq = 0;
-		set_field(sys, b, file, line, trim(s), trim(eq + 1));
 	}
-	if (!resolve(sys))
+	cJSON_Delete(root);
+	if (!ok || !resolve(sys))
 		return;
 	/* a later file for the same system replaces the earlier one */
 	for (int i = 0; i < system_count; i++)
@@ -373,10 +439,10 @@ static char *read_file(const char *path)
 	return buf;
 }
 
-static bool is_sys_name(const char *name)
+static bool is_json_name(const char *name)
 {
 	size_t n = strlen(name);
-	return n > 4 && strcmp(name + n - 4, ".sys") == 0;
+	return n > 5 && strcmp(name + n - 5, ".json") == 0;
 }
 
 static bool on_disk(const char *name)
@@ -419,7 +485,7 @@ static void add_folder_file(Source *src, int *n, const char *name)
 }
 
 /* the built-in files (unless the folder has one of the same name), then
- * every .sys in the play folder's systems/; parsed again only when the text
+ * every .json in the play folder's systems/; parsed again only when the text
  * changed */
 static void load_all(void)
 {
@@ -436,7 +502,7 @@ static void load_all(void)
 		}
 #ifdef _WIN32
 	WIN32_FIND_DATAA fd;
-	HANDLE h = FindFirstFileA(SYSTEMS_DIR "\\*.sys", &fd);
+	HANDLE h = FindFirstFileA(SYSTEMS_DIR "\\*.json", &fd);
 	if (h != INVALID_HANDLE_VALUE)
 	{
 		do
@@ -450,7 +516,7 @@ static void load_all(void)
 	{
 		struct dirent *de;
 		while ((de = readdir(d)) != NULL)
-			if (is_sys_name(de->d_name))
+			if (is_json_name(de->d_name))
 				add_folder_file(src, &n, de->d_name);
 		closedir(d);
 	}

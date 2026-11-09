@@ -1,7 +1,7 @@
 # System overlays: plan
 
-Status 2026-11-09: plan only. Written at the end of the session that built the first version (custom star systems from
-`systems/*.sys`, Kerbol in place of 82 Eridani), so the next session can start from here with a clear context. Everything
+Status 2026-11-09: step 0 and most of step 1 done (committed 6a6ed98 as base; JSON parser with cJSON, `systems/kerbol.json`, format in `system-overlays.md`; `.sys` reader removed; both builds compile, Kerbol loads 24 bodies in a script run). Originally: plan only. Written at the end of the session that built the first version (custom star systems from
+`systems/*.json`, Kerbol in place of 82 Eridani), so the next session can start from here with a clear context. Everything
 under "What exists" is built into `build-modded` and `build-original` but **not committed** and not yet tried in game by the
 user.
 
@@ -19,13 +19,13 @@ A general way to *overlay* star systems on the procedural galaxy:
 
 ## 2. What exists (built, uncommitted)
 
-Files: `src/custom_system.c/.h`, `systems/kerbol.sys` (format notes in its header), hooks at the end of `fe2/fe2.s` and
+Files: `src/custom_system.c/.h`, `systems/kerbol.json` (format notes in its header), hooks at the end of `fe2/fe2.s` and
 `fe2/fe2_modded.s`, hcalls `$a3-$a9` in `src/hostcall.c` **and** in the second VM's table (`src/galaxy/fe2vm.c`
 `atlas_hcalls`; without it `enter`, the system map and the atlas see the generated system), setting `custom_systems` in
-`src/settings.c`, CMake step that compiles `systems/*.sys` into the exe (`custom_systems_embedded[]`), docs in
+`src/settings.c`, CMake step that compiles `systems/*.json` into the exe (`custom_systems_embedded[]`), docs in
 `docs/system-generation.md` sections 2 and 6, test save `../savs/Kerbol` (near Kerbin Station).
 
-Loading: built-in files, then the play folder's `systems/*.sys` (same file name replaces a built-in one); re-read at most once a
+Loading: built-in files, then the play folder's `systems/*.json` (same file name replaces a built-in one); re-read at most once a
 second, parsed again only when the text changed (hash), so edits show on the next system entry. `GLF_CSYS_LOG=1` logs keys
 asked for and radius changes.
 
@@ -173,7 +173,7 @@ candidates; a "quiet" pick near Sol: single G star, independent, few ports.
 ## 5. Implementation steps
 
 0. Ask the user whether to commit the current work first (it is the base for all of this): `git status` shows fe2*.s, generated
-   fe2*.s.c / bin / labels, src/custom_system.*, hostcall.c, settings.c, fe2vm.c, CMakeLists.txt, systems/kerbol.sys, docs.
+   fe2*.s.c / bin / labels, src/custom_system.*, hostcall.c, settings.c, fe2vm.c, CMakeLists.txt, systems/kerbol.json, docs.
 1. Vendor cJSON; JSON parser producing the same `System`/`Body`; convert `kerbol.sys` to `systems/kerbol.json`; both builds.
 2. Schema + validation messages; stock model names; `replaces` by id / sector+number / name.
 3. Dump command: generated system -> JSON (script command and/or galaxy viewer).

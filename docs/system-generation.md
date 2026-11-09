@@ -107,8 +107,8 @@ This confirms the guess in `starport-economy.md`: bit 5 of `280` marks a surface
 `Lcsys_hook` (fe2.s and fe2_modded.s) replaces the `tst.l d0; beq.w l473ec` at the start of `L4655a` with a `jsr`. It asks the
 host (`Call_CustomSystem`, `src/custom_system.c`) whether it has records for the system key `d6`; if so they are written to
 `Lcsys_recs` in the hand-made source form and the game's own copy loop `l4740c` takes them, so the system gets real orbits,
-working starports and ground bases. The bodies come from `systems/*.sys` (compiled in; a file of the same name in the play
-folder's `systems/` replaces it, read again when it changes); the format is described at the top of `systems/kerbol.sys`, which
+working starports and ground bases. The bodies come from `systems/*.json` (compiled in; a file of the same name in the play
+folder's `systems/` replaces it, read again when it changes); the format is described at the top of `systems/kerbol.json`, which
 puts Kerbal Space Program's system, scaled up x10, in place of 82 Eridani. `glfrontier.cfg custom_systems=0` turns them off;
 `GLF_CSYS_LOG=1` logs every key asked for. The second VM (`src/galaxy/fe2vm.c`) answers the call too, so the system map, the
 cheat menu's enter and the atlas see the same bodies; the standalone FE2GalaxyViewer does not.

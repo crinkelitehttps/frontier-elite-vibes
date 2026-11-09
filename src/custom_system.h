@@ -6,13 +6,13 @@
  * Alpha Centauri ...) are hand-made instead: their seed is 0 and their
  * bodies come from a table in the game (L47390, docs/system-generation.md).
  * Lcsys_hook in fe2*.s asks Call_CustomSystem first; a system described in a
- * .sys file is copied the same way as those ten, so it gets real orbits,
+ * .json file is copied the same way as those ten, so it gets real orbits,
  * working starports and ground bases.
  *
- * Files: every systems/NAME.sys in the repo is compiled into the game
+ * Files: every systems/NAME.json in the repo is compiled into the game
  * (CMakeLists.txt); a file of the same name in the play folder's systems/
  * replaces it, and other files there are added. The format is described at
- * the top of systems/kerbol.sys. glfrontier.cfg custom_systems=0 turns them
+ * the top of systems/kerbol.json. glfrontier.cfg custom_systems=0 turns them
  * all off (the generated systems come back).
  *
  * Not changed: what the galaxy map and the system info screen say about the

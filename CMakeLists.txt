@@ -275,6 +275,10 @@ add_library(glutess OBJECT
     ${GLUTESS_DIR}/tessellate.c ${GLUTESS_DIR}/tessmono.c)
 list(APPEND LIBRARIES glutess)
 
+# cJSON (MIT), for systems/*.json (src/custom_system.c)
+add_library(cjson OBJECT ${CMAKE_CURRENT_LIST_DIR}/vendor/cjson/cJSON.c)
+list(APPEND LIBRARIES cjson)
+
 ##########################################################################################
 # The emulated game (68k code translated to C)
 ##########################################################################################
@@ -296,6 +300,7 @@ include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/fe2
     ${CMAKE_CURRENT_LIST_DIR}/fe2/audio
     ${CMAKE_CURRENT_LIST_DIR}/vendor/glutess
+    ${CMAKE_CURRENT_LIST_DIR}/vendor/cjson
     ${CMAKE_CURRENT_LIST_DIR}/vendor/minivorbis
 )
 
@@ -410,11 +415,11 @@ ${FE2_SHIPS_TABLE}    {0, 0, 0},
     message(STATUS "Custom ship models compiled in: ${FE2_SHIP_I} file(s) from tools/fe2ShipBuilder/custom_ships")
 endif()
 
-# Custom star systems (src/custom_system.c): every systems/NAME.sys is
+# Custom star systems (src/custom_system.c): every systems/NAME.json is
 # compiled into the executable as text; a file of the same name in the play
 # folder's systems/ replaces it at run time.
 set(FE2_SYSTEM_FILES_DIR "${CMAKE_CURRENT_LIST_DIR}/systems")
-file(GLOB FE2_SYSTEM_FILES CONFIGURE_DEPENDS "${FE2_SYSTEM_FILES_DIR}/*.sys")
+file(GLOB FE2_SYSTEM_FILES CONFIGURE_DEPENDS "${FE2_SYSTEM_FILES_DIR}/*.json")
 list(SORT FE2_SYSTEM_FILES)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FE2_SYSTEM_FILES})
 set(FE2_SYSTEMS_C "${CMAKE_CURRENT_BINARY_DIR}/generated/custom_systems_data.c")
