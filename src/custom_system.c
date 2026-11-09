@@ -25,6 +25,7 @@
  * own number form and works out each orbital period from the parent's mass;
  * a surface port record is copied as it is.
  */
+#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -110,6 +111,15 @@ static const BodyType types[] = {
 };
 #define TYPES_COUNT ((int)(sizeof(types) / sizeof(types[0])))
 
+/* a body's appearance overrides ("look" in the file); colours 0-255 per channel */
+struct CustomLook
+{
+	unsigned colours_set; /* bit k: colour[k] replaces the planet's colour for feature code k * 4 */
+	uint8_t colour[8][3];
+	bool tint, atmos;
+	uint8_t tint_rgb[3], atmos_rgb[3];
+};
+
 typedef struct
 {
 	char name[NAME_LEN + 1];
@@ -120,6 +130,8 @@ typedef struct
 	uint32_t seed;
 	double mass_kg, orbit_km, ecc, incl, phase, tilt, lat, lon;
 	double radius_km; /* 0 = the model's */
+	bool has_look;
+	CustomLook look;
 } Body;
 
 typedef struct
@@ -234,8 +246,92 @@ static bool parse_replaces(const char *file, const cJSON *r, uint32_t *key)
 	return false;
 }
 
+/* "#rrggbb" or "#rgb" */
+static bool parse_colour(const cJSON *v, uint8_t rgb[3])
+{
+	if (!cJSON_IsString(v) || v->valuestring[0] != '#')
+		return false;
+	const char *h = v->valuestring + 1;
+	size_t n = strlen(h);
+	if (n != 3 && n != 6)
+		return false;
+	for (size_t i = 0; i < n; i++)
+		if (!isxdigit((unsigned char)h[i]))
+			return false;
+	char *end;
+	uint32_t x = (uint32_t)strtoul(h, &end, 16);
+	if (n == 3)
+		for (int c = 0; c < 3; c++)
+			rgb[c] = (uint8_t)(((x >> (8 - 4 * c)) & 15) * 17);
+	else
+		for (int c = 0; c < 3; c++)
+			rgb[c] = (uint8_t)(x >> (16 - 8 * c));
+	return true;
+}
+
+/* "look": {"colours": [...up to 8 "#rrggbb" or null], "tint": "#rrggbb", "atmosphere": "#rrggbb"}, or the name of
+ * an entry in the file's "looks" */
+static bool parse_look(const char *file, const char *body, const cJSON *looks, const cJSON *v, CustomLook *out)
+{
+	if (cJSON_IsString(v))
+	{
+		const cJSON *named = cJSON_GetObjectItemCaseSensitive(looks, v->valuestring);
+		if (!cJSON_IsObject(named))
+		{
+			log_printf("custom systems: %s: [%s] look '%s' is not in \"looks\"\n", file, body, v->valuestring);
+			return false;
+		}
+		v = named;
+	}
+	if (!cJSON_IsObject(v))
+	{
+		log_printf("custom systems: %s: [%s] look must be an object or the name of one in \"looks\"\n", file, body);
+		return false;
+	}
+	memset(out, 0, sizeof(*out));
+	const cJSON *cols = cJSON_GetObjectItemCaseSensitive(v, "colours");
+	if (cols && !cJSON_IsArray(cols))
+	{
+		log_printf("custom systems: %s: [%s] look.colours must be an array\n", file, body);
+		return false;
+	}
+	int k = 0;
+	const cJSON *c;
+	cJSON_ArrayForEach(c, cols)
+	{
+		if (k >= 8)
+		{
+			log_printf("custom systems: %s: [%s] look.colours: only 8 are used\n", file, body);
+			break;
+		}
+		if (!cJSON_IsNull(c))
+		{
+			if (!parse_colour(c, out->colour[k]))
+			{
+				log_printf("custom systems: %s: [%s] look.colours[%d]: expected \"#rrggbb\" or null\n", file, body, k);
+				return false;
+			}
+			out->colours_set |= 1u << k;
+		}
+		k++;
+	}
+	const cJSON *t = cJSON_GetObjectItemCaseSensitive(v, "tint");
+	if (t && !(out->tint = parse_colour(t, out->tint_rgb)))
+	{
+		log_printf("custom systems: %s: [%s] look.tint: expected \"#rrggbb\"\n", file, body);
+		return false;
+	}
+	const cJSON *a = cJSON_GetObjectItemCaseSensitive(v, "atmosphere");
+	if (a && !(out->atmos = parse_colour(a, out->atmos_rgb)))
+	{
+		log_printf("custom systems: %s: [%s] look.atmosphere: expected \"#rrggbb\"\n", file, body);
+		return false;
+	}
+	return true;
+}
+
 /* one body object; false (after logging) if it is unusable */
-static bool parse_body(System *sys, const cJSON *o)
+static bool parse_body(System *sys, const cJSON *o, const cJSON *looks)
 {
 	const char *file = sys->file;
 	const char *name = jstr(o, "name");
@@ -303,6 +399,13 @@ static bool parse_body(System *sys, const cJSON *o)
 			log_printf("custom systems: %s: [%s] unknown model name '%s'\n", file, name, m->valuestring);
 			return false;
 		}
+	}
+	const cJSON *look = cJSON_GetObjectItemCaseSensitive(o, "look");
+	if (look)
+	{
+		if (!parse_look(file, name, looks, look, &b->look))
+			return false;
+		b->has_look = true;
 	}
 	sys->count++;
 	return true;
@@ -406,7 +509,7 @@ static void parse(const char *file, const char *text)
 				ok = false;
 				break;
 			}
-			if (!parse_body(sys, o))
+			if (!parse_body(sys, o, cJSON_GetObjectItemCaseSensitive(root, "looks")))
 			{
 				ok = false;
 				break;
@@ -636,6 +739,97 @@ void Call_CustomSystem(void)
 			SetReg(REG_A1, (int)FE2_Lcsys_recs);
 			return;
 		}
+}
+
+
+/* -- appearance overrides ---------------------------------------------------- */
+
+const CustomLook *custom_look(uint32_t seed)
+{
+	if (!custom_systems_on || !loaded || !seed)
+		return NULL;
+	for (int i = 0; i < system_count; i++)
+		for (int k = 0; k < systems[i].count; k++)
+			if (systems[i].bodies[k].has_look && systems[i].bodies[k].seed == seed)
+			{
+				static uint32_t logged;
+				if (logged != seed && getenv("GLF_CSYS_LOG"))
+					log_printf("custom systems: look applied to %s\n", systems[i].bodies[k].name);
+				logged = seed;
+				return &systems[i].bodies[k].look;
+			}
+	return NULL;
+}
+
+static int nib(int c8)
+{
+	return (c8 * 15 + 127) / 255;
+}
+
+void custom_look_palette(const CustomLook *look, uint16_t palette[16])
+{
+	if (!look)
+		return;
+	for (int k = 0; k < 8; k++)
+	{
+		if (!(look->colours_set & (1u << k)))
+			continue;
+		int dark = palette[k], lit = palette[k + 8], nd = 0, nl = 0;
+		for (int c = 0; c < 3; c++)
+		{
+			int sh = 8 - 4 * c, want = nib(look->colour[k][c]);
+			int d0 = (dark >> sh) & 15, l0 = (lit >> sh) & 15, d;
+			if (dark == lit)
+				d = want; /* a planet the game doesn't shade (stars) */
+			else if (l0)
+				d = (d0 * want + l0 / 2) / l0; /* keep the stock dark side's ratio */
+			else
+				d = want * 2 / 5;
+			nl |= want << sh;
+			nd |= (d > 15 ? 15 : d) << sh;
+		}
+		palette[k] = (uint16_t)nd;
+		palette[k + 8] = (uint16_t)nl;
+	}
+	if (look->tint)
+	{
+		int top = look->tint_rgb[0] > look->tint_rgb[1] ? look->tint_rgb[0] : look->tint_rgb[1];
+		top = top > look->tint_rgb[2] ? top : look->tint_rgb[2];
+		if (top > 0)
+			for (int k = 0; k < 16; k++)
+			{
+				int out = 0;
+				for (int c = 0; c < 3; c++)
+				{
+					int sh = 8 - 4 * c, v = (palette[k] >> sh) & 15;
+					out |= ((v * look->tint_rgb[c] + top / 2) / top) << sh;
+				}
+				palette[k] = (uint16_t)out;
+			}
+	}
+}
+
+uint16_t custom_look_atmosphere(const CustomLook *look, uint16_t rgb444)
+{
+	if (!look || !look->atmos)
+		return rgb444;
+	double t[3], c[3];
+	for (int i = 0; i < 3; i++)
+	{
+		t[i] = look->atmos_rgb[i] / 255.0;
+		c[i] = ((rgb444 >> (8 - 4 * i)) & 15) / 15.0;
+	}
+	double yb = 0.30 * c[0] + 0.59 * c[1] + 0.11 * c[2], yt = 0.30 * t[0] + 0.59 * t[1] + 0.11 * t[2];
+	double top = fmax(t[0], fmax(t[1], t[2]));
+	if (yt <= 0 || top <= 0)
+		return rgb444;
+	double k = yb / yt;
+	if (k * top > 1)
+		k = 1 / top;
+	int out = 0;
+	for (int i = 0; i < 3; i++)
+		out |= (int)lround(t[i] * k * 15.0) << (8 - 4 * i);
+	return (uint16_t)out;
 }
 
 /* -- radius other than the model's ----------------------------------------- */

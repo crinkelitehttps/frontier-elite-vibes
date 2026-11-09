@@ -23,6 +23,7 @@
 #define CUSTOM_SYSTEM_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct
 {
@@ -48,5 +49,20 @@ void Call_CustomName(void);
 
 /* how many systems are loaded, after the first Call_CustomSystem */
 int custom_systems_count(void);
+
+
+/* -- appearance overrides (the "look" of a body in its file) ----------------
+ * Applied by the native renderer (src/gl/gl_planet.c, gl_atmos.c) to the planet
+ * whose object seed is the body's: the classic software renderer keeps the
+ * stock colours. */
+typedef struct CustomLook CustomLook;
+
+/* the look of the body with this object seed (offset 118), or NULL */
+const CustomLook *custom_look(uint32_t seed);
+/* palette: the planet's 16 rgb444 colours, 0-7 dark and 8-15 lit, by feature code / 4 */
+void custom_look_palette(const CustomLook *look, uint16_t palette[16]);
+/* a haze band's (or the sky's) rgb444 colour recoloured to the look's atmosphere, its lightness kept;
+ * returned unchanged when the look has none */
+uint16_t custom_look_atmosphere(const CustomLook *look, uint16_t rgb444);
 
 #endif

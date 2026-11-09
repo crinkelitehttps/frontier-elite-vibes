@@ -50,6 +50,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "custom_system.h"
 #include "gl_cockpit.h"
 #include "gl_fill2d.h"
 #include "gl_native.h"
@@ -209,6 +210,13 @@ void atmos_acquire(void)
 	copy_atmos(&show, &pub);
 }
 
+/* the look of the planet the game is making bands for (its object is at -212(a6), as in gl_planet.c) */
+static const CustomLook *planet_look(void)
+{
+	uint32_t obj = (uint32_t)STMemory_ReadLong((uint32_t)GetReg(REG_A6) - 212);
+	return obj ? custom_look((uint32_t)STMemory_ReadLong(obj + 118)) : NULL;
+}
+
 static int dyn_colour(int id)
 {
 	return STMemory_ReadWord(ADDR_DYN_COLS + id + 2) & 0xfff;
@@ -230,6 +238,7 @@ void Nu_AtmosBand(void)
 	 * before the jsr; the brightness the game adds to it is 204(a3). */
 	uint32_t a5 = (uint32_t)STMemory_ReadLong((uint32_t)GetReg(REG_A7) + 4);
 	b->rgb = (STMemory_ReadWord(a5 - 2) + STMemory_ReadWord((uint32_t)GetReg(REG_A3) + 204)) & 0xfff;
+	b->rgb = custom_look_atmosphere(planet_look(), (uint16_t)b->rgb);
 	b->planet = -1;
 	b->draw = false;
 	SoftNode *s = scene_current_soft_node();
@@ -273,7 +282,7 @@ void atmos_place_bands(const float centre[3], float radius)
 		bool ahead = !cockpit_turned_pass();
 		if (set && (ahead || !rec.sky_ahead))
 		{
-			rec.sky = col;
+			rec.sky = custom_look_atmosphere(planet_look(), (uint16_t)col);
 			rec.sky_ahead = ahead;
 			/* set with it (L3da2e); each pass clears it first (Lcockpit_world) */
 			rec.sky_air = (int16_t)STMemory_ReadWord(GAME_A6 + A6_IN_ATMOSPHERE) < 0;

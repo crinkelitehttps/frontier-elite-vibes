@@ -23,6 +23,25 @@ Edits show on the next system entry. `custom_systems=0` in glfrontier.cfg turns 
 
 Plan and status: `system-overlays-plan.md`.
 
+## Appearance: `look`
+
+A body may have a `look`, an object or the name of one in the file's top-level `"looks"` object (shared by several bodies):
+
+```json
+"looks": { "eve": { "colours": ["#6b3f8f", "#7d4fa3"], "tint": "#ffd0a0", "atmosphere": "#a070d0" } },
+"bodies": [ { "name": "Eve", "type": "thick_atmosphere", "look": "eve", ... } ]
+```
+
+- `colours`: up to 8 `"#rrggbb"` (or `null` to keep one), replacing the planet's colour for feature code 0..7 (the model's
+  surface colour table, `docs/planet-textures.md`: for a plain model code 0 is the base, 1 the next feature and so on; Earth: 0 sea,
+  1 land, 2-3 ice). The value is the sunlit colour; the night side keeps the stock model's dark/lit ratio.
+- `tint`: multiplies every colour of the planet by this (scaled so its brightest channel is 1, so it recolours without darkening).
+- `atmosphere`: the haze bands and the sky seen from the planet take this colour, each band keeping its own lightness.
+- All of it applies to the native renderer (the default) only; the classic software renderer keeps the stock colours. The game's
+  palette is 4 bits per channel, so colours are rounded to 16 levels. The body is found by its object seed, so a **saved game**
+  made before the file had a look (or with other seeds) keeps its old planets: enter the system fresh (new game, `enter`).
+- Not done yet: a surface image instead of the model's outlines, rings, named looks in `models` that define new models.
+
 ## Starting from a real system: `--dump-system`
 
 ```sh

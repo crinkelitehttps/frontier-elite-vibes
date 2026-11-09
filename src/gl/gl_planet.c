@@ -17,6 +17,7 @@
 #include "gl_fill2d.h"
 #include "gl_native.h"
 #include "gl_planet.h"
+#include "custom_system.h"
 #include "game_state.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
@@ -176,7 +177,17 @@ int planet_is_sea(uint32_t obj, const double rel[3])
  * When no coastline crosses the game's view it fills the whole table with the colour under the view
  * (L3d5dc_PushPlanetCol, 210(a3) set): right for its flat shape, but the
  * sphere shows every feature, so a table of one colour is left out. */
+static void capture_palette_game(PlanetDesc *p);
+
+/* the game's colours, then the body's look from its system file (custom_system.h) */
 static void capture_palette(PlanetDesc *p)
+{
+	capture_palette_game(p);
+	uint32_t obj = (uint32_t)STMemory_ReadLong((uint32_t)GetReg(REG_A6) - 212);
+	custom_look_palette(custom_look((uint32_t)STMemory_ReadLong(obj + 118)), p->palette);
+}
+
+static void capture_palette_game(PlanetDesc *p)
 {
 	const PlanetSurface *s = &p->surface;
 	for (int i = 0; i < 8; i++)
