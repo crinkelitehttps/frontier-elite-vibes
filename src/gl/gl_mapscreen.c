@@ -57,6 +57,14 @@ bool cockpit_ship_live = true;
 #define SCREEN_MODE 704 /* A6: 4 in flight */
 #define OBJS_FIRST  17348
 #define OBJS_LEN    0x8030
+#define MAP_TIME    1188 /* A6: the system map's time (2 longs), the flight's when it opens */
+#define TIME_OF_DAY 524	 /* A6_time_of_day */
+/* The ship in the map's copy: its position (44..67) and parent (68), what the
+ * map draws it by. Entering made a fresh copy of the objects (L4b35e) and the
+ * kept one is put back over it; while the map's time is the flight's the
+ * ship's place is taken from the fresh one, so it moves on the map. */
+#define SHIP_POS_FIRST 44
+#define SHIP_POS_LEN   25
 /* The key state the maps read: the arrows and right shift, and the game's
  * keyboard queue (the flight view's keys are not the map's) */
 #define A6_MOUSE_ABS_X     14494 /* words */
@@ -123,6 +131,7 @@ static struct
 	uint8_t ctrl[KEEP2_LEN];
 	uint8_t picked[2];
 	uint8_t objs[OBJS_LEN]; /* the objects as the last frame drew them: a click is tested against them */
+	bool now;				/* the system map's time (1188) was the flight's at the end of the last frame */
 } kept;
 
 #define SHIP_STATE_LEN (4 + SHIP_KEEP_A_LEN + 1)
@@ -1330,6 +1339,20 @@ bool mapscreen_page(int group, MapPage *out)
 			/* entering resets some of it: as it was, then */
 			for (int i = 0; i < KEEP_END - KEEP_FIRST; i++)
 				wrbyte(a6 + KEEP_FIRST + (uint32_t)i, state[i]);
+			uint8_t fresh[SHIP_POS_LEN];
+			uint32_t ship_obj = 0;
+			uint32_t own = game_player_ship();
+			/* (bit 4 of 1182: the map is of the flight's own objects, L4b2c4) */
+			if (kept.held && kept.owner == OWNER_SYSTEM && kept.now && own && (rdbyte(a6 + 1182) & 0x10) &&
+				(state[1182 - KEEP_FIRST] & 0x10))
+			{
+				int16_t off = (int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)(uint8_t)rdbyte(own + 93));
+				ship_obj = a6 + OBJS_FIRST + (uint32_t)(int)off;
+				if (ship_obj < a6 + OBJS_FIRST || ship_obj + SHIP_POS_FIRST + SHIP_POS_LEN > a6 + OBJS_FIRST + OBJS_LEN)
+					ship_obj = 0;
+				for (int i = 0; ship_obj && i < SHIP_POS_LEN; i++)
+					fresh[i] = (uint8_t)rdbyte(ship_obj + SHIP_POS_FIRST + (uint32_t)i);
+			}
 			if (kept.held)
 			{
 				for (int i = 0; i < KEEP2_LEN; i++)
@@ -1338,6 +1361,13 @@ bool mapscreen_page(int group, MapPage *out)
 					wrbyte(a6 + PICKED + (uint32_t)i, kept.picked[i]);
 				for (int i = 0; i < OBJS_LEN; i++)
 					wrbyte(a6 + OBJS_FIRST + (uint32_t)i, kept.objs[i]);
+			}
+			if (ship_obj)
+			{
+				for (int i = 0; i < SHIP_POS_LEN; i++)
+					wrbyte(ship_obj + SHIP_POS_FIRST + (uint32_t)i, fresh[i]);
+				for (int i = 0; i < 8; i++)
+					wrbyte(a6 + MAP_TIME + (uint32_t)i, (uint8_t)rdbyte(a6 + TIME_OF_DAY + (uint32_t)i));
 			}
 		}
 		else
@@ -1396,6 +1426,8 @@ bool mapscreen_page(int group, MapPage *out)
 				kept.picked[i] = (uint8_t)rdbyte(a6 + PICKED + (uint32_t)i);
 			for (int i = 0; i < OBJS_LEN; i++)
 				kept.objs[i] = (uint8_t)rdbyte(a6 + OBJS_FIRST + (uint32_t)i);
+			kept.now = rdlong(a6 + MAP_TIME) == rdlong(a6 + TIME_OF_DAY) &&
+					   rdlong(a6 + MAP_TIME + 4) == rdlong(a6 + TIME_OF_DAY + 4);
 			kept.held = true;
 			keep = true;
 			int rects[64][4];

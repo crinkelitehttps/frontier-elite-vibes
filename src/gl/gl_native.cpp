@@ -413,6 +413,14 @@ struct Frame
 	int map_par = 0;
 	double map_r[3];
 	MapOrbit orbit;
+	/* The system map's objects, where they are only (native_object_pos):
+	 * the map is the game's own drawing, they aren't drawn natively */
+	struct MapPos
+	{
+		uint32_t addr;
+		float pos[3], shrink;
+	} mpos[64];
+	int nmpos = 0;
 	/* Model text's strings by text_key (Nu_NativeText): the last the game
 	 * formatted for each, kept while it isn't run (off screen) */
 	std::unordered_map<uint64_t, std::string> texts;
@@ -777,12 +785,28 @@ extern "C" void Nu_NativeObject(void)
 	}
 	if (sky_hook(a6))
 		return;
-	/* the system map is the game's own drawing: the native scene would take its model (the orbits'),
-	 * and leave out the orbits */
-	if (game_screen() == SCREEN_SYSTEM_MAP)
-		return;
 	uint32_t addr, table;
 	int model;
+	/* the system map is the game's own drawing: the native scene would take its model (the orbits'),
+	 * and leave out the orbits. Only where its objects are is kept, for the ship's orbit (map_orbit_build). */
+	if (game_screen() == SCREEN_SYSTEM_MAP)
+	{
+		if (native_enabled() && scene_active() && rec.nmpos < 64)
+		{
+			static Object o;
+			addr = (uint32_t)rdlong(a6 - 212);
+			table = table_of(addr);
+			capture(o, a6, addr, table, (uint16_t)rdword(addr + 90) / 2);
+			if (o.table == o.subtable)
+			{
+				Frame::MapPos &m = rec.mpos[rec.nmpos++];
+				m.addr = o.addr;
+				memcpy(m.pos, o.pos, sizeof m.pos);
+				m.shrink = o.shrink;
+			}
+		}
+		return;
+	}
 	if (!wanted(a6, addr, table, model))
 		return;
 	capture(rec.obj[rec.n++], a6, addr, table, model);
@@ -951,6 +975,13 @@ extern "C" bool native_object_pos(uint32_t addr, float pos[3], float *shrink)
 			*shrink = rec.obj[i].shrink;
 			return true;
 		}
+	for (int i = 0; i < rec.nmpos; i++)
+		if (rec.mpos[i].addr == addr)
+		{
+			memcpy(pos, rec.mpos[i].pos, sizeof rec.mpos[i].pos);
+			*shrink = rec.mpos[i].shrink;
+			return true;
+		}
 	for (int i = 0; i < rec.nfar; i++)
 		if (rec.far[i].addr == addr)
 		{
@@ -968,6 +999,7 @@ extern "C" void native_reset(void)
 	rec.has_sky = false;
 	rec.cam_ok = false;
 	rec.map_ship = 0;
+	rec.nmpos = 0;
 	rec.orbit.n = 0;
 }
 
