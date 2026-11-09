@@ -176,7 +176,7 @@ candidates; a "quiet" pick near Sol: single G star, independent, few ports.
    fe2*.s.c / bin / labels, src/custom_system.*, hostcall.c, settings.c, fe2vm.c, CMakeLists.txt, systems/kerbol.json, docs.
 1. Vendor cJSON; JSON parser producing the same `System`/`Body`; convert `kerbol.sys` to `systems/kerbol.json`; both builds.
 2. Schema + validation messages; stock model names; `replaces` by id / sector+number / name.
-3. Dump command: generated system -> JSON (script command and/or galaxy viewer).
+3. Dump command: generated system -> JSON. DONE: `FE2GalaxyViewer --dump-system ID|SX,SY,N [OUT]` (docs/system-overlays.md); round trip checked on Alpha Centauri and a generated system; `binary` type and `level` field added. No in-game script command (the viewer is enough).
 4. Appearance overrides (4.3 level 2): colours/tint, atmosphere colour; then surface image.
 5. Galaxy-map data overlay (4.4) after tracing.
 6. Fix the surface push (section 2) if the user hits it in a normal landing.

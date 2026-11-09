@@ -22,3 +22,18 @@ Edits show on the next system entry. `custom_systems=0` in glfrontier.cfg turns 
   stock name (moon, mars, venus, earth, io, titan, jupiter, saturn, uranus, neptune, mercury, asteroid).
 
 Plan and status: `system-overlays-plan.md`.
+
+## Starting from a real system: `--dump-system`
+
+```sh
+cmake -S tools/fe2GalaxyViewer -B /tmp/gv -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build /tmp/gv
+/tmp/gv/FE2GalaxyViewer --dump-system a925c601 systems/mine.json      # the catalog id (hex) ...
+/tmp/gv/FE2GalaxyViewer --dump-system 0,1,3 systems/mine.json         # ... or sector x,y (Sol = 0,0) and number
+```
+
+Writes the system as the game's own generator makes it (the viewer runs the unmodified game code, so overlays never get in the
+way) in this file format: every body with type, parent, mass, orbit, eccentricity, inclination, phase, tilt, temperature, spin and
+seed; a `model` only where the body's model is not its type's usual one; `level` only where the game's differs from the
+rule (binary systems). Mass and orbit are decoded from the 15-bit mantissa / exponent words (checked on Sol: Earth 5.98e24 kg at
+149.59 million km). Checked by round trip: Alpha Centauri (a binary, 11 bodies) and a generated system load back to the same
+body list in the game. The `binary` type (kind 0, model 32) is the container of a double star.

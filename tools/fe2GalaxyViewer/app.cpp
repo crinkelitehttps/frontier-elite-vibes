@@ -6,6 +6,7 @@
  *   FE2GalaxyViewer --dump X Y [N]   sector X,Y (Sol = 0,0) and system N's screens
  *   FE2GalaxyViewer --selftest       speed and sanity checks over the whole galaxy
  *   FE2GalaxyViewer --smoke          a scripted tour of the window
+ *   FE2GalaxyViewer --dump-system ID|SX,SY,N [OUT.json]   a generated system as a system overlay file
  *   FE2GalaxyViewer --catalog OUT X0 Y0 X1 Y1 [STEP [SECONDS]]   every explored system as JSON lines
  */
 #include <glad/glad.h>
@@ -606,6 +607,149 @@ static int cmd_catalog(int argc, char **argv)
 	return 0;
 }
 
+
+/* -- --dump-system ------------------------------------------------------------------- */
+
+/* FE2GalaxyViewer --dump-system ID [OUT.json]: the system the game's generator makes for ID (hex, or
+ * SX,SY,N with Sol = 0,0), as a system overlay file (docs/system-overlays.md) */
+static int cmd_dump_system(int argc, char **argv)
+{
+	if (argc < 3)
+	{
+		fprintf(stderr, "usage: --dump-system ID|SX,SY,N [OUT.json]\n");
+		return 1;
+	}
+	uint32_t id = 0;
+	int sx, sy, n;
+	if (sscanf(argv[2], "%d,%d,%d", &sx, &sy, &n) == 3)
+		id = make_id(SOL_X + sx, SOL_Y + sy, n);
+	else
+		id = (uint32_t)strtoul(argv[2], NULL, 16);
+	Galaxy g;
+	std::string err;
+	if (!g.init(err))
+	{
+		fprintf(stderr, "%s\n", err.c_str());
+		return 1;
+	}
+	const Star *st = g.star(id);
+	if (!st)
+	{
+		fprintf(stderr, "no system %08x\n", id);
+		return 1;
+	}
+	const Details &d = g.details(id);
+	if (!d.ok || d.hangs || d.crashes || d.bodies.empty())
+	{
+		fprintf(stderr, "system %08x: %s\n", id, d.ok ? "the game's generator makes no bodies, hangs or crashes" : d.error.c_str());
+		return 1;
+	}
+	FILE *f = argc > 3 ? fopen(argv[3], "w") : stdout;
+	if (!f)
+		return 1;
+	/* the body types of src/custom_system.c (kind, model): keep in step */
+	static const struct
+	{
+		const char *name;
+		int kind, model;
+	} types[] = {
+		{"asteroid", 2, 122},		 {"small_barren", 4, 128},	  {"barren", 6, 126},		  {"thin_atmosphere", 8, 126},
+		{"volcanic", 10, 130},		 {"ammonia", 12, 132},		  {"methane", 14, 134},		  {"water", 16, 142},
+		{"small_terraformed", 18, 136}, {"life", 20, 138},		  {"life_small", 20, 140},	  {"earth", 20, 144},
+		{"terraformed", 22, 138},	 {"thick_atmosphere", 24, 132}, {"small_gas_giant", 26, 148}, {"medium_gas_giant", 28, 146},
+		{"large_gas_giant", 30, 146}, {"very_large_gas_giant", 32, 150}, {"brown_dwarf", 34, 152}, {"star_m_flare", 36, 154},
+		{"star_m", 40, 154},		 {"star_k", 42, 158},		  {"star_g", 44, 160},		  {"star_f", 46, 162},
+		{"star_a", 48, 164},		 {"white_dwarf", 50, 174},	  {"red_giant", 52, 156},	  {"trading_post", 64, 84},
+		{"orbital_station", 66, 86}, {"orbital_city", 68, 88},	  {"surface_port", 70, 96}, {"binary", 0, 32},
+	};
+	auto be16 = [](const Body &b, int at) { return (b.raw[at] << 8) | b.raw[at + 1]; };
+	/* mass and orbit: a 15 bit mantissa word and an exponent word (docs/system-generation.md section 2; checked
+	 * against Earth: 4ac0/49 = 599 x 1e22 kg, 4407/30 = 4458427 x 33.554 km) */
+	auto mass_kg = [&](const Body &b) { return be16(b, 0) * std::ldexp(1.0, be16(b, 2) - 0x4e) * 1e22; };
+	auto orbit_km = [&](const Body &b) { return be16(b, 14) * std::ldexp(1.0, be16(b, 16) - 40) * 33.554432; };
+	auto deg = [&](const Body &b, int at) { return (int16_t)be16(b, at) * 360.0 / 65536.0; };
+
+	fprintf(f, "// %s (%08x): the system as the game's generator makes it. %s\n", st->name.c_str(), id,
+			st->description.c_str());
+	fprintf(f, "// Edit it, save it as systems/NAME.json in the play folder (docs/system-overlays.md).\n{\n  \"format\": 1,\n");
+	fprintf(f, "  \"system\": { \"replaces\": \"%08x\", \"name\": ", id);
+	json_str(f, st->name);
+	fprintf(f, " },\n  \"bodies\": [\n");
+	std::vector<int> levels;
+	std::vector<std::string> names; /* as the game shows them: no trailing spaces */
+	for (auto &b : d.bodies)
+	{
+		std::string n = b.name;
+		while (!n.empty() && n.back() == ' ')
+			n.pop_back();
+		names.push_back(n);
+	}
+	for (size_t i = 0; i < d.bodies.size(); i++)
+	{
+		const Body &b = d.bodies[i];
+		int kind = be16(b, 10), model = be16(b, 12); /* the record's word: 2 x the model number */
+		const char *type = nullptr;
+		for (auto &t : types)
+			if (t.kind == kind && (t.model == model || !type))
+				type = t.name; /* the exact model wins, else the last of the kind */
+		for (auto &t : types)
+			if (t.kind == kind && t.model == model)
+				type = t.name;
+		bool surf = kind == 70, port = kind >= 64 && kind <= 70;
+		if (!type)
+		{
+			fprintf(stderr, "body %s: kind %d is not supported yet (binary containers); not dumped\n", b.name.c_str(), kind);
+			if (f != stdout)
+				fclose(f);
+			return 1;
+		}
+		fprintf(f, "    {\"name\": ");
+		json_str(f, names[i]);
+		fprintf(f, ", \"type\": \"%s\"", type);
+		if (b.parent >= 0)
+		{
+			fprintf(f, ", \"parent\": ");
+			json_str(f, names[b.parent]);
+		}
+		bool exact = false;
+		for (auto &t : types)
+			exact |= t.kind == kind && t.model == model && !strcmp(t.name, type);
+		if (!exact)
+			fprintf(f, ", \"model\": %d", model);
+		/* the level custom_system.c works out (parent's + 1; ports 2 and 3) when the game's differs */
+		int up = b.parent >= 0 ? levels[b.parent] : -1, want = surf ? 3 : port ? 2 : up + 1;
+		levels.push_back(b.raw[59] & 0x7f);
+		if (levels.back() != want)
+			fprintf(f, ", \"level\": %d", levels.back());
+		if (!port && b.radius_km > 0)
+			fprintf(f, ", \"radius_km\": %.0f", b.radius_km);
+		if (surf)
+			fprintf(f, ", \"lat_deg\": %.2f, \"lon_deg\": %.2f", deg(b, 30), deg(b, 18) == 0 ? 0.0 : -deg(b, 18));
+		else
+		{
+			if (mass_kg(b) > 0)
+				fprintf(f, ", \"mass_kg\": %.5g", mass_kg(b));
+			if (b.parent >= 0 && orbit_km(b) > 0) /* the primary star has no orbit: those words are leftovers */
+				fprintf(f, ", \"orbit_km\": %.0f", orbit_km(b));
+			if (b.parent >= 0 && be16(b, 28))
+				fprintf(f, ", \"ecc\": %.3f", be16(b, 28) / 1000.0);
+			if (b.parent >= 0 && be16(b, 30))
+				fprintf(f, ", \"incl_deg\": %.2f", deg(b, 30));
+			if (be16(b, 18) && b.parent >= 0)
+				fprintf(f, ", \"phase_deg\": %.2f", be16(b, 18) * 360.0 / 65536.0);
+			if (be16(b, 62))
+				fprintf(f, ", \"tilt_deg\": %.2f", deg(b, 62));
+		}
+		fprintf(f, ", \"temp_k\": %d, \"spin\": %d, \"seed\": %u}%s\n", be16(b, 32), b.raw[58],
+				(unsigned)((b.raw[4] << 24) | (b.raw[5] << 16) | (b.raw[6] << 8) | b.raw[7]),
+				i + 1 < d.bodies.size() ? "," : "");
+	}
+	fprintf(f, "  ]\n}\n");
+	if (f != stdout)
+		fclose(f);
+	return 0;
+}
+
 /* -- main -------------------------------------------------------------------------- */
 
 static int imgui_asserts;
@@ -665,7 +809,8 @@ int main(int argc, char **argv)
 	bool selftest = argc > 1 && std::string(argv[1]) == "--selftest";
 	bool smoke = argc > 1 && std::string(argv[1]) == "--smoke";
 	bool catalog = argc > 1 && std::string(argv[1]) == "--catalog";
-	if (dump || selftest || smoke || catalog)
+	bool dumpsys = argc > 1 && std::string(argv[1]) == "--dump-system";
+	if (dump || selftest || smoke || catalog || dumpsys)
 	{
 #ifdef _WIN32
 		/* a windows program has no console: print to the one it was started
@@ -678,7 +823,7 @@ int main(int argc, char **argv)
 		}
 #endif
 		if (!smoke)
-			return catalog ? cmd_catalog(argc, argv) : dump ? cmd_dump(argc, argv) : cmd_selftest();
+			return dumpsys ? cmd_dump_system(argc, argv) : catalog ? cmd_catalog(argc, argv) : dump ? cmd_dump(argc, argv) : cmd_selftest();
 	}
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0)
 		return 1;

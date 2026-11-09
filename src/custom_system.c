@@ -106,6 +106,7 @@ static const BodyType types[] = {
 	{"orbital_station", 66, 86, 11, 288, PORT_ORBITAL},  /* Galileo */
 	{"orbital_city", 68, 88, 10, 288, PORT_ORBITAL},     /* Abraham Lincoln */
 	{"surface_port", 70, 96, 0, 293, PORT_SURFACE},      /* London; models 90-108 */
+	{"binary", 0, 32, 0, 273, PORT_NONE},                /* the container of a double star: its two stars orbit it */
 };
 #define TYPES_COUNT ((int)(sizeof(types) / sizeof(types[0])))
 
@@ -284,6 +285,8 @@ static bool parse_body(System *sys, const cJSON *o)
 		b->spin = (int)d;
 	if (jnum(o, "kind", &d))
 		b->kind = (int)d;
+	if (jnum(o, "level", &d))
+		b->level = (int)d;
 	if (jnum(o, "seed", &d))
 		b->seed = (uint32_t)(int64_t)d;
 	const cJSON *m = cJSON_GetObjectItemCaseSensitive(o, "model");
@@ -345,7 +348,8 @@ static bool resolve(System *sys)
 			return false;
 		}
 		int up = b->parent ? sys->bodies[b->parent - 1].level : -1;
-		b->level = t->port == PORT_SURFACE ? 3 : t->port == PORT_ORBITAL ? 2 : up + 1;
+		if (t->port || b->level < 0)
+			b->level = t->port == PORT_SURFACE ? 3 : t->port == PORT_ORBITAL ? 2 : up + 1;
 		if (t->port && ++ports > PORTS_MAX)
 		{
 			log_printf("custom systems: %s: more than %d starports\n", sys->file, PORTS_MAX);
