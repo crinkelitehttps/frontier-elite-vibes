@@ -434,6 +434,7 @@
 #define FE2_Lcsys_base                               0x853ce /* Lcsys_base */
 #define FE2_Lcsys_hull                               0x853da /* Lcsys_hull */
 #define FE2_Lcsys_name                               0x853f8 /* Lcsys_name */
+#define FE2_Lcsys_push                               0x8540e /* Lcsys_push */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

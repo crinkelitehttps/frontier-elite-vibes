@@ -476,5 +476,6 @@
 #define FE2_Lcsys_base                               0xab2b8 /* Lcsys_base */
 #define FE2_Lcsys_hull                               0xab2c4 /* Lcsys_hull */
 #define FE2_Lcsys_name                               0xab2e2 /* Lcsys_name */
+#define FE2_Lcsys_push                               0xab2f8 /* Lcsys_push */
 
 #endif /* FE2_LABELS_H */

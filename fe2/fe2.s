@@ -133,6 +133,7 @@ Call_CustomBase	equ	$a7
 Call_CustomHull	equ	$a8
 * Custom systems: the system's name (d3/d4 sector words, d5 number, a0 = out); d1 = 0 when given.
 Call_CustomName	equ	$a9
+Call_CustomPush	equ	$aa
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -19636,9 +19637,7 @@ L3f566:
 		move.w	d7,-(a7)
 		sub.w	10(a2),d7
 		sub.w	12(a2),d7
-		lsr.l	d7,d1
-		add.l	d1,d6
-		bpl.s	l3f7e8
+		jsr	Lcsys_push
 		lsr.l	#1,d6
 		addq.w	#1,(a7)
 	l3f7e8:	jsr	L36792
@@ -68859,4 +68858,24 @@ Lcsys_name:
 		rts
 lcsys_name_mine:
 		addq.l	#4,a7
+		rts
+
+******************************************************************************
+* Custom systems: where a ship that has sunk below a planet's surface is put
+* back (L3f566). The distance is the model's radius (word 22) plus the
+* ship's; for a planet of another radius the host scales the model's part
+* (Call_CustomPush). Lcsys_push replaces "lsr.l d7,d1; add.l d1,d6; bpl.s
+* l3f7e8" (jsr, same size): it does those, with the host call between, then
+* the overflow step that follows ("lsr.l #1,d6; addq.w #1,(a7)": the exponent
+* word is at 4(a7) here) and returns past those two instructions.
+******************************************************************************
+Lcsys_push:
+		lsr.l	d7,d1
+		hcall	#Call_CustomPush
+		add.l	d1,d6
+		bpl.s	lcsys_push_ok
+		lsr.l	#1,d6
+		addq.w	#1,4(a7)
+lcsys_push_ok:
+		addq.l	#4,(a7)
 		rts

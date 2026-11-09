@@ -43,6 +43,7 @@ void Call_CustomPlanet(void);
 void Call_CustomCull(void);
 void Call_CustomBase(void);
 void Call_CustomHull(void);
+void Call_CustomPush(void);
 
 /* hcall: the system's name, if its file gives one (name = ...) */
 void Call_CustomName(void);

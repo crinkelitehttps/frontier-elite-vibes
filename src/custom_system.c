@@ -990,6 +990,15 @@ void Call_CustomBase(void)
 	if (!parent || !planet_model(parent))
 		return;
 	double r = radius_ratio(parent, obj_model(parent));
+	if (getenv("GLF_CSYS_LOG"))
+	{
+		double c[3];
+		for (int i = 0; i < 3; i++)
+			c[i] = ((double)(int32_t)rdlong(port + 56 + 4 * i) * TWO32 + (double)(uint32_t)rdlong(port + 44 + 4 * i)) / 1e6;
+		log_printf("custom systems: port at %.2f km from centre, ratio %.5f, model radius %.2f km, object %.2f km\n",
+				   sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]), r, model_radius(obj_model(parent)) / 1e6,
+				   obj_radius(parent, 266) / 1e6);
+	}
 	if (r == 1)
 		return;
 	for (int i = 0; i < 3; i++)
@@ -1000,6 +1009,38 @@ void Call_CustomBase(void)
 		wrlong(port + 56 + 4 * i, (int)(int32_t)hi);
 		wrlong(port + 44 + 4 * i, (int)(uint32_t)(v - hi * TWO32));
 	}
+}
+
+/* hcall Call_CustomPush (Lcsys_push in L3f566): a ship below planet a1's surface is put at d6 + d1 from its centre,
+ * both aligned to the exponent word at 4(a7): d6 the model's radius (mantissa << 16), d1 the ship's. d6 is scaled to the
+ * planet's own radius, renormalised with d1 and the exponent so the sum still fits. */
+void Call_CustomPush(void)
+{
+	uint32_t obj = (uint32_t)GetReg(REG_A1);
+	if (!obj || !planet_model(obj))
+		return;
+	double r = radius_ratio(obj, obj_model(obj));
+	if (r == 1)
+		return;
+	uint32_t ea = (uint32_t)GetReg(REG_A7) + 4;
+	int exp = (int16_t)rdword(ea);
+	double v = (double)(uint32_t)GetReg(REG_D6) * r;
+	uint32_t d1 = (uint32_t)GetReg(REG_D1);
+	while (v >= 1073741824.0) /* leave room for d1 to be added */
+	{
+		v *= 0.5;
+		d1 >>= 1;
+		exp++;
+	}
+	while (v > 0 && v < 536870912.0 && d1 < 0x40000000u)
+	{
+		v *= 2;
+		d1 <<= 1;
+		exp--;
+	}
+	SetReg(REG_D6, (int)(uint32_t)v);
+	SetReg(REG_D1, (int)d1);
+	wrword(ea, exp & 0xffff);
 }
 
 /* hcall Call_CustomHull (Lcsys_hull): the hull hit test of a1 against the
