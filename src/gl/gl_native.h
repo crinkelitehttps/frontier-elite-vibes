@@ -52,6 +52,9 @@ void Nu_NativeCulled(void);
  * model (a sun, a far planet) that the native scene draws instead of the
  * game's disc */
 void Nu_NativeFar(void);
+/* At start: planet models run their planet command at any distance, not a
+ * plain circle when far (see gl_native.cpp) */
+void native_planet_far_patch(void);
 /* Host call (Lnative_text): a model text's string, formatted */
 void Nu_NativeText(void);
 

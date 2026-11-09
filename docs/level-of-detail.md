@@ -192,6 +192,21 @@ The issue 3 work-in-progress (cap 40, try rate `$8000`, despawn `$12`, spawn dir
 
 **Far**: a disc via section 3, using the header colour. For Earth-like model 72 that is beyond ≈ 275,000 km.
 
+Some planet models also switch inside their code: an `if z` test before the planet command draws a plain
+circle when far and the planet only when near. Model 63 (cratered moons, Sol's Moon) has `if < z:1788`, which
+is about 120,000 km; gas giants 73-76 have 476-976. [native] The native sphere only exists when the game runs the
+planet command, so the Moon popped from a small grey disc to its full sphere at about 105,000 km.
+`native_planet_far_patch` (gl_native.cpp, at start) raises every `if z` before a model's planet command to
+`$7ffe`/`$7fff` (same odd/even, so the same detail word). `K << shift` then overflows, which the game (`bvs` in
+`L3ca9c`/`L3cafa`) and `beyond()` both take as near, so the planet command runs wherever the model is drawn.
+Tests after the planet command (models 64 and 72's extra parts) are left alone. `GLF_PLANET_FAR=0` turns it off.
+
+Those extra parts are settlement patches: sub-models 187 (on model 64) and 188-190 (on Earth-like 72), grey
+areas about 2,000 km across, each turned into place by `mrotate` and drawn only on the side facing the camera.
+From afar they covered much of the planet. [native] `shrink_settlements` (same place) shrinks them toward their
+centre to 0.4 of their size in the native scene's copy of the models (the game's own copy is untouched), keeping
+each vertex's height; `GLF_SETTLEMENT_SCALE=1` keeps the game's size, other values between 0 and 1 try others.
+
 **Nearer**: the model's planet command (op `$1f`, `L3cd9c_ProjectPlanet`) draws a 2D shape: the outline
 (`L3d6d0_PutPlanetCircle`), surface features (`L3d452_PlanetFeatureLoop`), rings (`L3d648_PutPlanetRings`),
 atmosphere bands (`L3da2e`), shading.
@@ -220,6 +235,9 @@ ground colour; buildings and starports are separate objects (section 6 and the b
 [native] `gl_planet.c` draws planets as ray-traced spheres, and `gl_planet_tex.c` decodes the features once
 into a 2048x1024 texture with a fixed 6 levels of splitting. No mesh, no view-dependent detail, so no
 popping; the cost is that close up the coastline is only as sharp as the texture.
+Near the ground the sphere is drawn flatter (`flatten` in `gl_planet.c`) so flat ground models stand on it; that
+test counts in the game's units, which are coarser for far planets (the Moon past 100,000 km: ~500 mm), so it
+is skipped above 1,000 km true altitude. Without that the Moon at 150,000-300,000 km was drawn up to twice too big.
 
 [native] Ground objects are bent onto the sphere (`make_bends` in `gl_native.cpp`, `uBend` in `gl_draw.c`'s mesh
 shader). A city is one flat model laid flat at its centre (Mars' model 48 is ~40 km wide); the sphere falls away

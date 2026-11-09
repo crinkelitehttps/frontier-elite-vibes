@@ -76,6 +76,7 @@ void cheat_ship_move_out(double km);
 /* Zero velocity relative to the frame parent */
 void cheat_ship_stop(void);
 void cheat_ship_yaw(double deg);
+void cheat_ship_face_parent(void);
 
 /* The system's named bodies: planets, moons, stars and stations. `radius_km` is the planet's
  * (0.0 for a station, whose field means something else) */

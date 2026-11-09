@@ -20,6 +20,7 @@
 #include "hostcall.h"
 #include "input.h"
 #include "gl/gl_mapscreen.h"
+#include "gl/gl_native.h"
 #include "gl/gl_screen_edit.h"
 #include "keymap.h"
 #include "manual.h"
@@ -534,6 +535,7 @@ static void main_init(void)
 #if FE2_USE_MODDED
 	custom_ships_install(); /* tools/fe2ShipBuilder/custom_ships/NNN.fe2m, see custom_ships.h */
 #endif
+	native_planet_far_patch();
 	Audio_Init();
 	Keymap_Init();
 

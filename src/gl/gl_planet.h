@@ -59,6 +59,7 @@ typedef struct
 	 * the planet: the render thread must not read them live (the camera screen's run changes them meanwhile) */
 	int32_t alt;
 	bool external;
+	float unit_mm; /* mm per unit of pos and radius here (the true radius / radius) */
 
 	/* Raw emulator context at capture time, for decoding extra features */
 	struct

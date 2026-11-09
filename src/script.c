@@ -20,6 +20,7 @@
  *     pos X Y Z          km from the centre of the body the ship is relative to
  *     stop               zero velocity
  *     yaw DEG            turn the ship about its up axis, to starboard when positive
+ *     face               turn the ship to look at the centre of the body it is relative to
  *   the ship
  *     refuel, repair, cash CREDITS
  *   input
@@ -426,6 +427,8 @@ static void run(char *line)
 		cheat_ship_stop();
 	else if (!strcmp(line, "yaw"))
 		cheat_ship_yaw(atof(args));
+	else if (!strcmp(line, "face"))
+		cheat_ship_face_parent();
 	else if (!strcmp(line, "refuel"))
 		cheat_refuel();
 	else if (!strcmp(line, "repair"))

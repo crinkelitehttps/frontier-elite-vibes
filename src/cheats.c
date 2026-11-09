@@ -491,6 +491,49 @@ void cheat_ship_yaw(double deg)
 	}
 }
 
+/* Turns the ship to look at the centre of the body it is relative to (keeps its up as near as it can) */
+void cheat_ship_face_parent(void)
+{
+	u32 me = ship();
+	if (!me)
+		return;
+	double col[3][3];
+	cheat_object_axes(me, col);
+	double f[3], u[3], r[3], l = 0;
+	for (int k = 0; k < 3; k++)
+		l += (f[k] = -(double)obj_pos(me, k)) * f[k];
+	l = sqrt(l);
+	if (l < 1)
+		return;
+	for (int k = 0; k < 3; k++)
+		f[k] /= l;
+	/* the old axes' handedness */
+	double det = col[0][0] * (col[1][1] * col[2][2] - col[1][2] * col[2][1]) -
+				 col[0][1] * (col[1][0] * col[2][2] - col[1][2] * col[2][0]) +
+				 col[0][2] * (col[1][0] * col[2][1] - col[1][1] * col[2][0]);
+	double d = col[1][0] * f[0] + col[1][1] * f[1] + col[1][2] * f[2];
+	l = 0;
+	for (int k = 0; k < 3; k++)
+		l += (u[k] = col[1][k] - d * f[k]) * u[k];
+	l = sqrt(l);
+	for (int k = 0; k < 3; k++)
+		u[k] /= l;
+	r[0] = u[1] * f[2] - u[2] * f[1];
+	r[1] = u[2] * f[0] - u[0] * f[2];
+	r[2] = u[0] * f[1] - u[1] * f[0];
+	double rr = r[0] * (u[1] * f[2] - u[2] * f[1]) + r[1] * (u[2] * f[0] - u[0] * f[2]) + r[2] * (u[0] * f[1] - u[1] * f[0]);
+	if ((rr > 0) != (det > 0))
+		for (int k = 0; k < 3; k++)
+			r[k] = -r[k];
+	const double *c[3] = {r, u, f};
+	for (int row = 0; row < 3; row++)
+		for (int cc = 0; cc < 3; cc++)
+		{
+			double v = c[cc][row] * 32768.0;
+			wrword(me + 6 * row + 2 * cc, (u16)(int16_t)lround(v > 32767 ? 32767 : v < -32768 ? -32768 : v));
+		}
+}
+
 void cheat_ship_stop(void)
 {
 	if (!ship())

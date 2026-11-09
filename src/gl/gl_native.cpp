@@ -73,6 +73,107 @@ const fe2::Image &fe2::Image::game()
 	return img;
 }
 
+/* Some planet models draw a plain circle instead of the planet when far: an
+ * `if z` test before the planet command (the Moon's model 63 from about
+ * 120,000 km, gas giants 73-76). The planet's sphere only exists when the
+ * game runs that command, so the Moon popped from a small disc to its sphere.
+ * Those tests get the largest threshold (same odd/even, so the same detail
+ * word): K << shift then overflows, which the game and beyond() both take as
+ * near, so the planet command runs at any distance the model is drawn at.
+ * Tests after the planet command (Earth's extra detail) are left alone.
+ * GLF_PLANET_FAR=0 turns it off. */
+/* The settlement patches a planet model lays on its surface (sub-models
+ * 187 for model 64, 188-190 for Earth-like 72; grey areas about 2,000 km
+ * across) hid much of a planet seen from afar. In the native scene's copy of
+ * the models only (the game's are left alone), each patch is shrunk toward
+ * its centre by SETTLEMENT_SCALE, every vertex kept at its height. A patch
+ * sits round its model's +y axis; the centre has x = 0 so a vertex and its
+ * mirror (odd vertex numbers) stay mirrors. GLF_SETTLEMENT_SCALE=1 keeps
+ * them as the game has them. */
+#define SETTLEMENT_SCALE 0.4
+static void shrink_settlements(fe2::Image &img)
+{
+	double k = SETTLEMENT_SCALE;
+	if (getenv("GLF_SETTLEMENT_SCALE"))
+		k = atof(getenv("GLF_SETTLEMENT_SCALE"));
+	if (k <= 0 || k >= 1)
+		return;
+	std::vector<uint32_t> done; /* vertex lists already shrunk (in case two models share one) */
+	for (int m : {187, 188, 189, 190})
+	{
+		auto model = img.model(m);
+		if (!model)
+			continue;
+		uint32_t list = model->addr + (uint32_t)model->vert_off;
+		if (std::find(done.begin(), done.end(), list) != done.end())
+			continue;
+		done.push_back(list);
+		double c[3] = {0, 0, 0};
+		for (const fe2::Vertex &v : model->verts)
+			if (v.type == 1)
+			{
+				c[1] += v.b;
+				c[2] += v.c;
+			}
+		double cl = std::sqrt(c[1] * c[1] + c[2] * c[2]);
+		if (cl <= 0)
+			continue;
+		c[1] /= cl;
+		c[2] /= cl;
+		for (int i = 0; i < model->num_verts; i++)
+		{
+			const fe2::Vertex &v = model->verts[(size_t)i];
+			if (v.type != 1)
+				continue;
+			double p[3] = {(double)v.a, (double)v.b, (double)v.c};
+			double len = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+			double along = p[1] * c[1] + p[2] * c[2];
+			double q[3];
+			for (int j = 0; j < 3; j++)
+				q[j] = along * c[j] + k * (p[j] - along * c[j]);
+			double ql = std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]);
+			if (ql <= 0)
+				continue;
+			uint32_t at = model->addr + (uint32_t)model->vert_off + (uint32_t)i * 4;
+			for (int j = 0; j < 3; j++)
+				img.data[at + 1 + (uint32_t)j] = (uint8_t)(int8_t)std::lround(q[j] * len / ql);
+		}
+	}
+}
+
+extern "C" void native_planet_far_patch(void)
+{
+	const fe2::Image &img = fe2::Image::game();
+	shrink_settlements(const_cast<fe2::Image &>(img));
+	if (getenv("GLF_PLANET_FAR") && !atoi(getenv("GLF_PLANET_FAR")))
+		return; /* GLF_PLANET_FAR=0: the game's own circles */
+	for (int m : img.model_numbers())
+	{
+		auto model = img.model(m);
+		bool ok = true;
+		auto ins = fe2::decode(img.data, model->code_addr(), 0x8000, &ok);
+		bool planet = false;
+		for (const fe2::Instr &i : ins)
+			planet = planet || i.op == 0x1f;
+		if (!ok || !planet)
+			continue;
+		for (const fe2::Instr &i : ins)
+		{
+			if (i.op == 0x1f)
+				break;
+			if ((i.op == 0x0b || i.op == 0x0c) && i.w.size() > 1 && !(i.w[1] & 0x8000))
+			{
+				uint16_t k = (uint16_t)(0x7ffe | (i.w[1] & 1));
+				uint32_t at = model->code_addr() + (uint32_t)i.off + 2;
+				wrword(at, k);
+				/* and the copy the native scene reads its models from */
+				const_cast<fe2::Image &>(img).data[at] = (uint8_t)(k >> 8);
+				const_cast<fe2::Image &>(img).data[at + 1] = (uint8_t)k;
+			}
+		}
+	}
+}
+
 /* image_for's and code_for's tables are filled as models are first met, from
  * the render thread and the thread big models run again on (async_run) */
 static std::recursive_mutex models_mx;
@@ -735,7 +836,6 @@ extern "C" void Nu_NativeFar(void)
 		f.shrink = native_frame_shrink(a6);
 		f.planet = planet;
 		capture_light(a6, f.light, f.tint);
-
 	}
 	SetReg(REG_D0, enabled == 2 && !planet ? 1 : 0);
 }

@@ -851,6 +851,11 @@ void Nu_PutPlanet(void)
 	p->pos = m68k_vertex(GetReg(REG_A0) + 4);
 	p->alt = (int32_t)STMemory_ReadLong(GAME_A6 + 692);
 	p->external = STMemory_ReadByte(GAME_A6 + A6_3DVIEW_MODE) == VIEW_EXTERNAL;
+	{
+		uint32_t obj = (uint32_t)STMemory_ReadLong(GetReg(REG_A6) - 212);
+		double true_mm = (double)STMemory_ReadWord(obj + 270) * 4294967296.0 + (double)(uint32_t)STMemory_ReadLong(obj + 266);
+		p->unit_mm = true_mm > 0 && p->radius > 0 ? (float)(true_mm / p->radius) : 0;
+	}
 	ground_planet(p);
 
 	/* 3x3 rotation matrix of signed 1.15 fixed point words, stored at A6-36 */
@@ -1320,6 +1325,7 @@ typedef struct
 	const PlanetSurface *surface; /* null: plain */
 	int32_t alt;   /* the ship's altitude when it was recorded (PlanetDesc.alt) */
 	bool external; /* ... and the external view (PlanetDesc.external) */
+	float unit_mm; /* mm per unit of pos and radius, 0 unknown */
 } SphereIn;
 
 /* The game lays out a planet's surface (cities, mountains, starports) on
@@ -1332,11 +1338,17 @@ typedef struct
  * is 1 again once the true planet's horizon is that low anyway (some km
  * up). The surface and light are still mapped as on the planet. */
 #define FLAT_REACH 6.0e7
-static double flatten(const double pos[3], double radius)
+#define FLAT_HIGH 1.0e9 /* mm: no flattening above 1,000 km */
+static double flatten(const double pos[3], double radius, double unit_mm)
 {
 	double d = sqrt(pos[0] * pos[0] + pos[1] * pos[1] + pos[2] * pos[2]);
 	double h = d - radius;
 	if (h <= 0 || radius <= 0)
+		return 1;
+	/* Far up there is no ground scenery to stand on it. A far planet comes
+	 * in coarser units (the Moon past 100,000 km: ~500 mm), and counted as
+	 * if near it was flattened and drawn up to twice too big. */
+	if (unit_mm > 0 && h * unit_mm > FLAT_HIGH)
 		return 1;
 	double k = 2 * FLAT_REACH * FLAT_REACH / (h * radius);
 	return k < 1 ? 1 : k > 1e5 ? 1e5 : k;
@@ -1366,7 +1378,7 @@ static void draw_sphere(const SphereIn *in)
 	}
 
 	/* flattened: the centre k times as far below the ground under the eye */
-	double flat = flatten(centre, in->radius);
+	double flat = flatten(centre, in->radius, in->unit_mm);
 	double h = dist - in->radius, r = in->radius * flat, pos[3];
 	for (int k = 0; k < 3; k++)
 		pos[k] = flat > 1 ? centre[k] * (h + r) / dist : centre[k];
@@ -1498,7 +1510,7 @@ void draw_planet(const void *payload)
 	}
 
 	SphereIn in = {{p->pos.x, p->pos.y, p->pos.z}, p->radius, {p->light[0], p->light[1], p->light[2]},
-				   p->light_col, p->obj_col, p->palette, p->axes, p->surface_ok ? &p->surface : NULL, p->alt, p->external};
+				   p->light_col, p->obj_col, p->palette, p->axes, p->surface_ok ? &p->surface : NULL, p->alt, p->external, p->unit_mm};
 	if (cockpit_active())
 	{
 		int i = find_dist(&dists_show, p->radius);
@@ -1528,7 +1540,8 @@ void planet_native_draw(int i)
 				   n->axes,
 				   n->surface_ok ? &n->surface : NULL,
 				   n->alt,
-				   n->external};
+				   n->external,
+				   n->ground_k};
 	draw_sphere(&in);
 }
 
