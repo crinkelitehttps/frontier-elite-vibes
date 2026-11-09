@@ -47,6 +47,7 @@ void Call_CustomPush(void);
 
 /* hcall: the system's name, if its file gives one (name = ...) */
 void Call_CustomName(void);
+void Call_CustomSafe(void);
 
 /* how many systems are loaded, after the first Call_CustomSystem */
 int custom_systems_count(void);

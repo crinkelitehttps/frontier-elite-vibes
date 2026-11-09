@@ -15,6 +15,7 @@ Edits show on the next system entry. `custom_systems=0` in glfrontier.cfg turns 
 
 - `system.replaces`: the catalog id as hex, or `{"sector": [x, y], "number": n}`. (Names: not yet.)
 - `system.name`: optional. `system.galaxy`: reserved (map data, step 5 of the plan), ignored with a log line.
+- `system.safe`: optional, `true` = no pirates (the pirate limit is made 0: arrival, event 3 and the weekly event 16 make none). Mission hostiles and police are not touched.
 - `bodies`: parents before children, 60 at most, 18 starports. Per body: `name` (21 chars), `type` (list in `src/custom_system.c`:
   asteroid ... star_g ... trading_post, orbital_station, orbital_city, surface_port), `parent`, `mass_kg` or `mass_earth`,
   `orbit_km`, `ecc`, `incl_deg`, `phase_deg`, `tilt_deg`, `temp_k`, `radius_km`, `spin` (0 none, 1 about a day, each step

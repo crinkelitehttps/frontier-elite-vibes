@@ -587,6 +587,7 @@ HOSTCALL hcalls[] = {
 	[0xa8] = Call_CustomHull,
 	[0xa9] = Call_CustomName,
 	[0xaa] = Call_CustomPush,
+	[0xab] = Call_CustomSafe,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

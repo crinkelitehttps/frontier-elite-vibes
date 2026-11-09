@@ -204,7 +204,7 @@ static void atlas_hcalls(HOSTCALL *table)
 	table[0x1b] = hcall_draw_str; /* Call_DrawStrShadowed */
 	table[0x1c] = hcall_draw_str; /* Call_DrawStr */
 #ifndef FE2GALAXY_TOOL
-	/* the game's hand-made systems from systems/*.sys, so the system map,
+	/* the game's hand-made systems from systems/*.json, so the system map,
 	 * the cheat menu's enter and the atlas see them (Call_CustomSystem in fe2*.s) */
 	table[0xa3] = Call_CustomSystem;
 	table[0xa4] = Call_CustomBody;

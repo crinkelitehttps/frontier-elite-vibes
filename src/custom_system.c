@@ -141,6 +141,7 @@ typedef struct
 	char file[64];
 	uint32_t key;
 	char name[NAME_LEN + 3]; /* the system's own, "" = the game's */
+	bool safe; /* "safe": true, no pirates */
 	int count;
 	Body bodies[BODIES_MAX];
 } System;
@@ -516,6 +517,7 @@ static void parse(const char *file, const char *text)
 		const char *name = jstr(info, "name");
 		if (name)
 			snprintf(sys->name, sizeof(sys->name), "%s", name);
+		sys->safe = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(info, "safe"));
 		if (cJSON_GetObjectItemCaseSensitive(info, "galaxy"))
 			log_printf("custom systems: %s: \"galaxy\" is not used yet\n", file);
 		const cJSON *o;
@@ -1085,4 +1087,22 @@ void Call_CustomName(void)
 		SetReg(REG_D1, 0);
 		return;
 	}
+}
+
+/* hcall Call_CustomSafe (Lcsys_pop, in L74732): d1 = the system's key. A
+ * custom system with "safe": true gets d3 = 0, the pirate limit, so none of
+ * the arrival, event 3 or weekly rolls make a pirate. */
+void Call_CustomSafe(void)
+{
+	if (!custom_systems_on)
+		return;
+	if (!loaded || SDL_GetTicks() - loaded_at > 1000)
+		load_all();
+	uint32_t key = (uint32_t)GetReg(REG_D1);
+	for (int i = 0; i < system_count; i++)
+		if (systems[i].key == key && systems[i].safe)
+		{
+			SetReg(REG_D3, 0);
+			return;
+		}
 }

@@ -10,7 +10,7 @@
 // See docs/system-overlays.md for the format.
 {
   "format": 1,
-  "system": { "replaces": "a91dc641", "name": "Kerbol" },
+  "system": { "replaces": "a91dc641", "name": "Kerbol", "safe": true },
   "looks": {
     // codes 0..7 of the planet model, here the thick-atmosphere model's: see docs/system-overlays.md
     "eve": { "colours": ["#6b3f8f", "#7d4fa3"], "atmosphere": "#a070d0" }

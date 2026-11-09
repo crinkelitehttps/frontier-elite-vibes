@@ -134,6 +134,7 @@ Call_CustomHull	equ	$a8
 * Custom systems: the system's name (d3/d4 sector words, d5 number, a0 = out); d1 = 0 when given.
 Call_CustomName	equ	$a9
 Call_CustomPush	equ	$aa
+Call_CustomSafe	equ	$ab
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -50131,8 +50132,8 @@ L74726:
 L74732:
 		move.l	726(a6),d1
 		moveq	#0,d0
-		movea.l	60(a6),a1
-		jsr	32(a1)
+		jsr	Lcsys_pop
+		nop
 		movea.l	A6_big_space(a6),a4
 		move.l	a4,14462(a6)
 		movem.w	d0-7,-(a7)
@@ -68783,7 +68784,7 @@ Lcsys_recs:
 		ds.b	4096
 
 ******************************************************************************
-* Custom systems: a body's radius other than its model's (radius_km in a .sys
+* Custom systems: a body's radius other than its model's (radius_km in a system JSON
 * file). The object's radius (266/270, 272/276) comes from its model when
 * L448b6 makes it; three hooks let the host change it and keep the picture
 * and the culling in step:
@@ -68840,7 +68841,7 @@ lcsys_ret:
 		dc.l	0
 
 ******************************************************************************
-* Custom systems: a system's own name (name = ... in a .sys file). L84706
+* Custom systems: a system's own name ("name" in a system JSON file). L84706
 * makes the name of system d5 of the sector d3, d4 (string code $3fe, every
 * place that shows one): from the core-sector table, else from syllables.
 * Lcsys_name replaces its first three instructions (jsr, same size): the
@@ -68878,4 +68879,22 @@ Lcsys_push:
 		addq.w	#1,4(a7)
 lcsys_push_ok:
 		addq.l	#4,(a7)
+		rts
+
+******************************************************************************
+* Custom systems: "safe": true in the system file means no pirates. L74732
+* asks the system module (32(a1)) for the pirate limit d3 and the traffic
+* limit d5; d3 drives the arrival, event 3 and weekly event 16 pirate rolls.
+* Lcsys_pop replaces "movea.l 60(a6),a1; jsr 32(a1)" there (jsr + nop, same
+* size): it does those, then the host (key in d1) makes d3 0 for a safe system.
+******************************************************************************
+Lcsys_pop:
+		move.l	d1,-(a7)
+		movea.l	60(a6),a1
+		jsr	32(a1)
+		move.l	d1,-(a7)
+		move.l	4(a7),d1
+		hcall	#Call_CustomSafe
+		move.l	(a7)+,d1
+		addq.l	#4,a7
 		rts
