@@ -11,6 +11,10 @@
 {
   "format": 1,
   "system": { "replaces": "a91dc641", "name": "Kerbol", "safe": true },
+  // prototype: a planet model of the file's own, a copy of Earth's with other colours (modded build only)
+  "models": {
+    "kerbin": { "like": "earth", "colours": ["#1c3a8c", "#4a8a2a"] }
+  },
   "looks": {
     // codes 0..7 of the planet model, here the thick-atmosphere model's: see docs/system-overlays.md
     "eve": { "surface": "ksp_eve.png", "colours": ["#6b3f8f", "#7d4fa3"], "atmosphere": "#a070d0" },
@@ -35,7 +39,7 @@
     {"name": "Eve", "type": "thick_atmosphere", "radius_km": 7000, "parent": "Kerbol", "mass_kg": 1.2244e+25, "orbit_km": 98326845, "ecc": 0.01, "incl_deg": 2.1, "phase_deg": 195, "temp_k": 420, "spin": 1, "look": "eve"},
     {"name": "Eve Orbital", "type": "trading_post", "parent": "Eve", "orbit_km": 12000},
     {"name": "Gilly", "type": "asteroid", "radius_km": 130, "parent": "Eve", "mass_kg": 1.24e+19, "orbit_km": 315000, "ecc": 0.55, "incl_deg": 12, "phase_deg": 142, "temp_k": 290, "spin": 3, "look": "gilly"},
-    {"name": "Kerbin", "type": "life", "radius_km": 6000, "parent": "Kerbol", "mass_kg": 5.2915e+24, "orbit_km": 135998403, "phase_deg": 180, "temp_k": 288, "spin": 3, "look": "kerbin"},
+    {"name": "Kerbin", "type": "life", "model": "kerbin", "radius_km": 6000, "parent": "Kerbol", "mass_kg": 5.2915e+24, "orbit_km": 135998403, "phase_deg": 180, "temp_k": 288, "spin": 3, "look": "kerbin"},
     {"name": "Kerbin Space Center", "type": "surface_port", "parent": "Kerbin", "lat_deg": -0.1, "lon_deg": -74.6},
     {"name": "Kerbin Station", "type": "orbital_station", "parent": "Kerbin", "orbit_km": 9000},
     {"name": "Mun", "type": "barren", "radius_km": 2000, "parent": "Kerbin", "mass_kg": 9.76e+22, "orbit_km": 120000, "phase_deg": 97, "temp_k": 250, "spin": 0, "look": "mun"},

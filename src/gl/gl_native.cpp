@@ -37,6 +37,7 @@ extern "C"
 #include "gl_shadow.h"
 #include "game_state.h"
 #include "host.h"
+#include "custom_system.h"
 #include "main.h"
 #include "scenery.h"
 }
@@ -940,7 +941,8 @@ extern "C" void Nu_NativeText(void)
 /* A planet object (L3cd9c, the planet command, is in these models) */
 static bool planet_model(const Object &o)
 {
-	return o.table == FE2_gamedata1 && ((o.model >= 61 && o.model <= 86) || o.model == 193 || o.model == 194);
+	return o.table == FE2_gamedata1 && ((o.model >= 61 && o.model <= 86) || o.model == 193 || o.model == 194 ||
+										 custom_system_planet_model(o.model));
 }
 
 /* v turned towards w (both unit) by angle a, in their plane */

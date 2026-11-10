@@ -14,6 +14,7 @@
 #include "game_state.h"
 #include "host.h" /* rdbyte, wrbyte, ... */
 #include "galaxy/fe2vm.h"
+#include "custom_system.h"
 
 bool cheat_ignore_space;
 
@@ -566,7 +567,7 @@ static void abs_pos(int slot, pos64 out[3])
 static bool is_planet_model(u32 obj)
 {
 	int model = (u16)rdword(obj + 90) / 2;
-	return (model >= 61 && model <= 87) || model == 193 || model == 194;
+	return (model >= 61 && model <= 87) || model == 193 || model == 194 || custom_system_planet_model(model);
 }
 
 static bool is_star_model(u32 obj)

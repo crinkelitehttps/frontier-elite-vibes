@@ -201,6 +201,7 @@ static void apply_records(const char *path, const unsigned char *p, long len, u3
  * same number (FE2ShipBuilder hands numbers out so this doesn't happen, but
  * files can be copied in by hand) */
 static const char *model_owner[MODEL_MAX];
+static u32 pool_next; /* first free pool byte after custom_ships_install (0: not run) */
 static char owner_names[MODEL_MAX][40];
 
 /* Returns the number of models installed from this file, -1 on error */
@@ -539,6 +540,7 @@ void custom_ships_install(void)
 	}
 	build_names();
 	build_picks();
+	pool_next = pool;
 	if (installed)
 		log_printf("Models: %d custom model(s) (%d file(s) built in, %d from %s), %d new ship type(s), "
 				   "%u of %u pool bytes used\n",
@@ -638,7 +640,64 @@ int custom_ships_stock_shipyards(void)
 	return ports;
 }
 
+/* -- models made at run time (planet models from a system file) ------------ */
+
+#define PLANET_MODEL_TOP 479 /* free numbers are searched downwards from here: ships use 240 up, big-ship parts 511 down */
+#define PLANET_MODEL_LOW 300
+
+u32 custom_ships_pool_alloc(u32 size)
+{
+	u32 end = pool_next + ((size + 1) & ~1u);
+	if (!pool_next || end > FE2_Lmdlmod_pool_end)
+		return 0;
+	u32 at = pool_next;
+	pool_next = end;
+	return at;
+}
+
+int custom_ships_free_index(void)
+{
+	for (int i = PLANET_MODEL_TOP; i >= PLANET_MODEL_LOW; i--)
+		if (!model_owner[i] && !(u32)rdlong(FE2_Lmdlmod_ptrs + 4 * i))
+			return i;
+	return -1;
+}
+
+void custom_ships_set_model(int index, u32 addr)
+{
+	if (index >= 0 && index < MODEL_MAX)
+		wrlong(FE2_Lmdlmod_ptrs + 4 * index, (int)addr);
+}
+
+u32 custom_ships_model_addr(int index)
+{
+	return (index >= 0 && index < MODEL_MAX) ? (u32)rdlong(FE2_Lmdlmod_ptrs + 4 * index) : 0;
+}
+
 #else /* original game: no hook to install into */
+
+u32 custom_ships_pool_alloc(u32 size)
+{
+	(void)size;
+	return 0;
+}
+
+int custom_ships_free_index(void)
+{
+	return -1;
+}
+
+void custom_ships_set_model(int index, u32 addr)
+{
+	(void)index;
+	(void)addr;
+}
+
+u32 custom_ships_model_addr(int index)
+{
+	(void)index;
+	return 0;
+}
 
 int custom_ships_stock_shipyards(void)
 {

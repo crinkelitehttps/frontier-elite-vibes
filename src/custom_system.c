@@ -41,6 +41,7 @@
 
 #include "custom_system.h"
 #include "cJSON.h"
+#include "custom_ships.h" /* the model pool */
 #include "game_state.h" /* labels */
 #include "host.h"       /* wrlong, SetReg */
 #include "main.h"       /* log_printf, REG_* */
@@ -132,9 +133,23 @@ typedef struct
 	uint32_t seed;
 	double mass_kg, orbit_km, ecc, incl, phase, tilt, lat, lon;
 	double radius_km; /* 0 = the model's */
+	int cmodel; /* index into the system's models ("model": "name" of its own), -1 = none */
 	bool has_look;
 	CustomLook look;
 } Body;
+
+#define MODELS_MAX 8
+
+/* a planet model of the file's own ("models"): a stock planet model copied to a free model
+ * number, with its first colours replaced */
+typedef struct
+{
+	char name[32];
+	int like; /* stock model index the copy starts from */
+	unsigned colours_set; /* bit k: colour word k (feature code k * 4) is replaced */
+	uint8_t colour[8][3];
+	int index; /* its model number once installed, else -1 */
+} CModel;
 
 typedef struct
 {
@@ -142,6 +157,8 @@ typedef struct
 	uint32_t key;
 	char name[NAME_LEN + 3]; /* the system's own, "" = the game's */
 	bool safe; /* "safe": true, no pirates */
+	int model_count;
+	CModel models[MODELS_MAX];
 	int count;
 	Body bodies[BODIES_MAX];
 } System;
@@ -186,6 +203,7 @@ static void new_body(Body *b, const char *name)
 	memset(b, 0, sizeof(*b));
 	snprintf(b->name, sizeof(b->name), "%s", name);
 	b->type = -1;
+	b->cmodel = -1;
 	b->kind = b->model = b->spin = b->temp = b->level = -1;
 	b->seed = name_hash(name);
 }
@@ -349,6 +367,87 @@ static bool parse_look(const char *file, const char *body, const cJSON *looks, c
 	return true;
 }
 
+static int find_cmodel(const System *sys, const char *name)
+{
+	for (int i = 0; i < sys->model_count; i++)
+		if (strcmp(sys->models[i].name, name) == 0)
+			return i;
+	return -1;
+}
+
+/* a stock model by name or number, as a model index (the model_names table holds byte offsets); -1 if unknown */
+static int stock_index(const cJSON *v)
+{
+	if (cJSON_IsNumber(v))
+		return (int)v->valuedouble;
+	if (cJSON_IsString(v))
+		for (size_t i = 0; i < sizeof(model_names) / sizeof(model_names[0]); i++)
+			if (strcmp(model_names[i].name, v->valuestring) == 0)
+				return model_names[i].model / 2;
+	return -1;
+}
+
+/* "models": {"name": {"like": "earth" or a model number, "colours": ["#rrggbb", ...]}} */
+static bool parse_models(System *sys, const cJSON *models)
+{
+	const char *file = sys->file;
+	if (!models)
+		return true;
+	if (!cJSON_IsObject(models))
+	{
+		log_printf("custom systems: %s: \"models\" must be an object\n", file);
+		return false;
+	}
+	const cJSON *m;
+	cJSON_ArrayForEach(m, models)
+	{
+		if (sys->model_count >= MODELS_MAX || !m->string || strlen(m->string) >= sizeof(sys->models[0].name) ||
+			!cJSON_IsObject(m))
+		{
+			log_printf("custom systems: %s: model '%s': at most %d, each an object, name under 32 characters\n",
+					   file, m->string ? m->string : "?", MODELS_MAX);
+			return false;
+		}
+		CModel *c = &sys->models[sys->model_count];
+		memset(c, 0, sizeof(*c));
+		snprintf(c->name, sizeof(c->name), "%s", m->string);
+		c->index = -1;
+		c->like = stock_index(cJSON_GetObjectItemCaseSensitive(m, "like"));
+		if (c->like < 61 || c->like > 240 - 1)
+		{
+			log_printf("custom systems: %s: model '%s': \"like\" must be a stock planet model (a name such as "
+					   "\"earth\" or a number 61-86, 193, 194)\n", file, c->name);
+			return false;
+		}
+		const cJSON *cols = cJSON_GetObjectItemCaseSensitive(m, "colours");
+		if (cols && !cJSON_IsArray(cols))
+		{
+			log_printf("custom systems: %s: model '%s': colours must be an array\n", file, c->name);
+			return false;
+		}
+		int k = 0;
+		const cJSON *col;
+		cJSON_ArrayForEach(col, cols)
+		{
+			if (k >= 8)
+				break;
+			if (!cJSON_IsNull(col))
+			{
+				if (!parse_colour(col, c->colour[k]))
+				{
+					log_printf("custom systems: %s: model '%s': colours[%d]: expected \"#rrggbb\" or null\n", file,
+							   c->name, k);
+					return false;
+				}
+				c->colours_set |= 1u << k;
+			}
+			k++;
+		}
+		sys->model_count++;
+	}
+	return true;
+}
+
 /* one body object; false (after logging) if it is unusable */
 static bool parse_body(System *sys, const cJSON *o, const cJSON *looks)
 {
@@ -407,6 +506,8 @@ static bool parse_body(System *sys, const cJSON *o, const cJSON *looks)
 	const cJSON *m = cJSON_GetObjectItemCaseSensitive(o, "model");
 	if (cJSON_IsNumber(m))
 		b->model = (int)m->valuedouble;
+	else if (cJSON_IsString(m) && find_cmodel(sys, m->valuestring) >= 0)
+		b->cmodel = find_cmodel(sys, m->valuestring);
 	else if (cJSON_IsString(m))
 	{
 		b->model = -1;
@@ -520,8 +621,9 @@ static void parse(const char *file, const char *text)
 		sys->safe = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(info, "safe"));
 		if (cJSON_GetObjectItemCaseSensitive(info, "galaxy"))
 			log_printf("custom systems: %s: \"galaxy\" is not used yet\n", file);
-		const cJSON *o;
-		cJSON_ArrayForEach(o, bodies)
+		ok = parse_models(sys, cJSON_GetObjectItemCaseSensitive(root, "models"));
+		const cJSON *o, *list = ok ? bodies : NULL;
+		cJSON_ArrayForEach(o, list)
 		{
 			if (sys->count >= BODIES_MAX)
 			{
@@ -681,6 +783,135 @@ static uint32_t clamp_units(double v)
 	return (uint32_t)llround(v);
 }
 
+
+/* -- planet models of the file's own ---------------------------------------- */
+
+#define STOCK_MODELS 240 /* entries of the game's model table */
+
+/* the models this file made, by number, so the renderer and the cheat menu know them as planets */
+static struct
+{
+	char name[32];
+	int index;
+	uint32_t addr, cap;
+} made[16];
+static int made_count;
+
+bool custom_system_planet_model(int index)
+{
+	for (int i = 0; i < made_count; i++)
+		if (made[i].index == index)
+			return true;
+	return false;
+}
+
+/* the stock model `index`: its address in the game's table and its length (up to the next model's start) */
+static bool stock_model(int index, uint32_t *addr, uint32_t *len)
+{
+	uint32_t data = (uint32_t)rdlong(GAME_A6 + A6_GAME_DATA);
+	if (!data || index < 0 || index >= STOCK_MODELS)
+		return false;
+	uint32_t off = (uint16_t)rdword(data + 2 * index), next = 0;
+	for (int i = 0; i < STOCK_MODELS; i++)
+	{
+		uint32_t o = (uint16_t)rdword(data + 2 * i);
+		if (o > off && (!next || o < next))
+			next = o;
+	}
+	if (!next || next - off < 32 || next - off > 4096)
+		return false;
+	*addr = data + off;
+	*len = next - off;
+	return true;
+}
+
+/* where the planet op's colour words are in the model at `m` (len bytes): the first word of the op's data
+ * (docs/planet-textures.md section 2); 0 if there is none. The op is found by scanning the code. */
+static uint32_t planet_colours(uint32_t m, uint32_t len)
+{
+	uint32_t code = (uint16_t)rdword(m);
+	for (uint32_t p = code & ~1u; p + 6 < len; p += 2)
+	{
+		uint16_t w = (uint16_t)rdword(m + p);
+		uint32_t n = (w >> 4) & 0xffe;
+		if ((w & 0x1f) == 0x1f && n >= 8 && p + 6 + n <= len)
+			return m + p + 6;
+	}
+	return 0;
+}
+
+/* Make the file's own planet models: copy the stock model into the pool, put the colours in, point a free model
+ * number at it. Again on the next entry of the system reuses the same number and space. */
+static void install_models(System *sys)
+{
+	for (int i = 0; i < sys->model_count; i++)
+	{
+		CModel *c = &sys->models[i];
+		uint32_t src, len;
+		if (!stock_model(c->like, &src, &len))
+		{
+			log_printf("custom systems: %s: model '%s': stock model %d not found\n", sys->file, c->name, c->like);
+			continue;
+		}
+		int slot = -1;
+		for (int k = 0; k < made_count; k++)
+			if (strcmp(made[k].name, c->name) == 0)
+				slot = k;
+		if (slot < 0)
+		{
+			if (made_count >= (int)(sizeof(made) / sizeof(made[0])))
+				continue;
+			int index = custom_ships_free_index();
+			uint32_t at = custom_ships_pool_alloc(len);
+			if (index < 0 || !at)
+			{
+				log_printf("custom systems: %s: model '%s': no free model number or pool space (modded build only)\n",
+						   sys->file, c->name);
+				continue;
+			}
+			slot = made_count++;
+			snprintf(made[slot].name, sizeof(made[slot].name), "%s", c->name);
+			made[slot].index = index;
+			made[slot].addr = at;
+			made[slot].cap = len;
+		}
+		if (len > made[slot].cap)
+		{
+			log_printf("custom systems: model '%s': \"like\" changed to a larger model; restart the game\n", c->name);
+			continue;
+		}
+		for (uint32_t k = 0; k < len; k++)
+			wrbyte(made[slot].addr + k, rdbyte(src + k));
+		uint32_t col = planet_colours(made[slot].addr, len);
+		if (c->colours_set && !col)
+			log_printf("custom systems: model '%s': no planet op found, colours not applied\n", c->name);
+		if (col)
+		{
+			int flags = (uint8_t)rdbyte(col) & 0x50; /* bit 4: 4 colours then alternative sets; bit 6: 4 colours only */
+			for (int k = 0; k < 8; k++)
+			{
+				if (!(c->colours_set & (1u << k)))
+					continue;
+				if (k >= 4 && flags)
+				{
+					log_printf("custom systems: model '%s': colours[%d]: this planet has only 4 colour words\n",
+							   c->name, k);
+					continue;
+				}
+				uint16_t old = (uint16_t)rdword(col + 2 * k), w = old & 0xf000;
+				for (int ch = 0; ch < 3; ch++)
+					w |= (uint16_t)(((c->colour[k][ch] * 15 + 127) / 255) << (8 - 4 * ch));
+				wrword(col + 2 * k, w);
+			}
+		}
+		custom_ships_set_model(made[slot].index, made[slot].addr);
+		c->index = made[slot].index;
+		if (getenv("GLF_CSYS_LOG"))
+			log_printf("custom systems: model '%s' = stock %d copied to model %d (%u bytes, colours at +%d)\n", c->name,
+					   c->like, c->index, len, col ? (int)(col - made[slot].addr) : -1);
+	}
+}
+
 static void write_records(const System *sys, uint32_t at)
 {
 	int bodies = 0, ports = 0, orbital = 0;
@@ -693,7 +924,7 @@ static void write_records(const System *sys, uint32_t at)
 		wrlong(at + 4, (int)b->seed);
 		wrword(at + 8, b->parent);
 		wrword(at + 10, b->kind);
-		wrword(at + 12, b->model);
+		wrword(at + 12, b->cmodel >= 0 && sys->models[b->cmodel].index >= 0 ? sys->models[b->cmodel].index * 2 : b->model);
 		if (t->port == PORT_SURFACE)
 		{
 			wrlong(at + 0, (int)0xfff60000); /* as London's */
@@ -754,6 +985,7 @@ void Call_CustomSystem(void)
 	for (int i = 0; i < system_count; i++)
 		if (systems[i].key == key)
 		{
+			install_models(&systems[i]);
 			write_records(&systems[i], FE2_Lcsys_recs);
 			active = &systems[i];
 			SetReg(REG_A1, (int)FE2_Lcsys_recs);
@@ -882,14 +1114,15 @@ static void set_obj_radius(uint32_t obj, int at, double mm)
 static uint32_t obj_model(uint32_t obj)
 {
 	uint32_t data = (uint32_t)rdlong(GAME_A6 + A6_GAME_DATA);
-	return data + (uint16_t)rdword(data + (uint16_t)rdword(obj + 90));
+	uint32_t made_at = custom_ships_model_addr((uint16_t)rdword(obj + 90) / 2); /* one of the pool's */
+	return made_at ? made_at : data + (uint16_t)rdword(data + (uint16_t)rdword(obj + 90));
 }
 
 /* planets and stars: the models with the planet op */
 static bool planet_model(uint32_t obj)
 {
 	int m = (uint16_t)rdword(obj + 90) / 2;
-	return (m >= 61 && m <= 86) || m == 193 || m == 194;
+	return (m >= 61 && m <= 86) || m == 193 || m == 194 || custom_system_planet_model(m);
 }
 
 /* the radius L448b6 gives an object of this model: header word 22 shifted

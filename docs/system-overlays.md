@@ -53,6 +53,24 @@ A body may have a `look`, an object or the name of one in the file's top-level `
   shipped or committed (`systems/ksp_*.png` is git-ignored); without the files the planets keep their stock look.
 - Not done yet: rings, an image embedded in the exe (the built-in Kerbol has none), named looks in `models` that define new models.
 
+## Planet models of the file's own: `models` (prototype, modded build only)
+
+```json
+"models": { "kerbin": { "like": "earth", "colours": ["#1c3a8c", "#4a8a2a"] } },
+"bodies": [ { "name": "Kerbin", "type": "life", "model": "kerbin", ... } ]
+```
+
+- `like`: the stock planet model to copy: a name (as for `model`) or a model number (61-86, 193, 194).
+- `colours`: replaces the copy's own colour words (feature code 0 = word 0, code 4 = word 1 ...; up to 4, or 8 if the model has
+  eight). Unlike `look.colours` this changes the model itself, so the classic renderer shows it too; the game shades its dark side
+  from it. `null` keeps a word. Not yet: new outlines/circles (the continents), a new radius word.
+- A body names it in `model`. At system entry the host copies the stock model into the model pool (`Lmdlmod_pool`), points a free
+  model number (479 downwards) at it, and writes that number in the body's record; entering again reuses the number and space.
+- The renderer, the cheat menu and the radius override treat that number as a planet (`custom_system_planet_model`).
+- The original build has no model hook: the log says so and the body keeps its type's stock model.
+- A saved game keeps the model number only: loaded without the file, a body of this model would read whatever is at that number.
+  (Enter the system once and it is back; the number is the same each run only if the same models are made in the same order.)
+
 ## Starting from a real system: `--dump-system`
 
 ```sh

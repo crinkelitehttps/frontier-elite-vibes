@@ -25,6 +25,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef struct
 {
 	const char *name;
@@ -49,6 +54,9 @@ void Call_CustomPush(void);
 void Call_CustomName(void);
 void Call_CustomSafe(void);
 
+/* True for a model number this program made from a system file's "models" (planet models of its own) */
+bool custom_system_planet_model(int index);
+
 /* how many systems are loaded, after the first Call_CustomSystem */
 int custom_systems_count(void);
 
@@ -69,5 +77,9 @@ void custom_look_surface(const CustomLook *look, char *out, int size, float *nig
 /* a haze band's (or the sky's) rgb444 colour recoloured to the look's atmosphere, its lightness kept;
  * returned unchanged when the look has none */
 uint16_t custom_look_atmosphere(const CustomLook *look, uint16_t rgb444);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

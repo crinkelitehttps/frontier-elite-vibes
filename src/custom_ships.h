@@ -57,6 +57,16 @@ int custom_ships_count(void);
 /* How many of those are new ship types (model numbers 240 and up) */
 int custom_ships_new_ships(void);
 
+/* Models made while the game runs (planet models from a system file, custom_system.c).
+ * pool_alloc: `size` bytes of the model pool (an address in game RAM), 0 if full or
+ * not the modded build; free_index: an unused model number, -1 if none;
+ * set_model: make model `index` read from `addr` (0 = back to the game's table);
+ * model_addr: where model `index` is if redirected, else 0 (use the game's table) */
+unsigned int custom_ships_pool_alloc(unsigned int size);
+int custom_ships_free_index(void);
+void custom_ships_set_model(int index, unsigned int addr);
+unsigned int custom_ships_model_addr(int index);
+
 /* One installed .fe2m file, for the mods menu */
 typedef struct
 {
