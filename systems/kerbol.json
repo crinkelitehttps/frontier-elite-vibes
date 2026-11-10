@@ -5,6 +5,9 @@
 // (that keeps each body's surface gravity: Kerbin comes out 6000 km, 0.89
 // Earth masses, 1 g, 0.91 AU from a 0.88-sun star). KSP figures from memory,
 // loosely; orbital phases are KSP's mean longitudes, roughly.
+// Exceptions: Mun moved out to 360000 km (x30, about our Moon's distance, so it
+// looks Moon-sized) and Minmus to 650000 km (x14, kept inside half Kerbin's
+// Hill sphere of ~1.36M km).
 //
 //
 // See docs/system-overlays.md for the format.
@@ -42,9 +45,9 @@
     {"name": "Kerbin", "type": "life", "model": "kerbin", "radius_km": 6000, "parent": "Kerbol", "mass_kg": 5.2915e+24, "orbit_km": 135998403, "phase_deg": 180, "temp_k": 288, "spin": 3, "look": "kerbin"},
     {"name": "Kerbin Space Center", "type": "surface_port", "parent": "Kerbin", "lat_deg": -0.1, "lon_deg": -74.6},
     {"name": "Kerbin Station", "type": "orbital_station", "parent": "Kerbin", "orbit_km": 9000},
-    {"name": "Mun", "type": "barren", "radius_km": 2000, "parent": "Kerbin", "mass_kg": 9.76e+22, "orbit_km": 120000, "phase_deg": 97, "temp_k": 250, "spin": 0, "look": "mun"},
+    {"name": "Mun", "type": "barren", "radius_km": 2000, "parent": "Kerbin", "mass_kg": 9.76e+22, "orbit_km": 360000, "phase_deg": 97, "temp_k": 250, "spin": 0, "look": "mun"},
     {"name": "Mun Base", "type": "surface_port", "parent": "Mun", "model": 108, "lat_deg": 2.5, "lon_deg": 81},
-    {"name": "Minmus", "type": "small_barren", "radius_km": 600, "parent": "Kerbin", "mass_kg": 2.646e+21, "orbit_km": 470000, "incl_deg": 6, "phase_deg": 168, "temp_k": 240, "spin": 2, "look": "minmus"},
+    {"name": "Minmus", "type": "small_barren", "radius_km": 600, "parent": "Kerbin", "mass_kg": 2.646e+21, "orbit_km": 650000, "incl_deg": 6, "phase_deg": 168, "temp_k": 240, "spin": 2, "look": "minmus"},
     {"name": "Duna", "type": "small_terraformed", "radius_km": 3200, "parent": "Kerbol", "mass_kg": 4.515e+23, "orbit_km": 207261553, "ecc": 0.051, "incl_deg": 0.06, "phase_deg": 315, "temp_k": 210, "spin": 1, "look": "duna"},
     {"name": "Duna Outpost", "type": "surface_port", "parent": "Duna", "model": 108, "lat_deg": 17, "lon_deg": -85},
     {"name": "Ike", "type": "small_barren", "radius_km": 1300, "parent": "Duna", "mass_kg": 2.782e+22, "orbit_km": 32000, "ecc": 0.03, "incl_deg": 0.2, "phase_deg": 97, "temp_k": 200, "spin": 0, "look": "ike"},

@@ -933,9 +933,17 @@ static void write_records(const System *sys, uint32_t at)
 		}
 		else
 		{
-			uint32_t mass = clamp_units(b->mass_kg / KG_PER_UNIT);
-			if (mass > 0x7fffffff)
-				mass = 0x7fffffff;
+			/* The copy loop takes 1 off (Earth is 599 for 5.98e24 kg), so 1 is
+			 * a mass of 0. Below 1e22 kg this rounds up; Call_CustomBody puts
+			 * the exact mass in before the object reads it. */
+			uint32_t mass = 1;
+			if (b->mass_kg > 0)
+			{
+				mass = clamp_units(b->mass_kg / KG_PER_UNIT);
+				if (mass > 0x7ffffffe)
+					mass = 0x7ffffffe;
+				mass++;
+			}
 			wrlong(at + 0, (int)mass);
 			wrlong(at + 14, b->parent ? (int)clamp_units(b->orbit_km / KM_PER_UNIT) : 0);
 			wrword(at + 18, angle16(b->phase));
@@ -1144,7 +1152,32 @@ static double radius_ratio(uint32_t obj, uint32_t model)
 	return fabs(r - 1) < 1e-4 ? 1 : r;
 }
 
-/* hcall Call_CustomBody (Lcsys_body): a1 = the new object, a2 = its record */
+/* Writes the exact mass into words 0/2 of a copied record, in the form the
+ * copy loop l4740c makes: mantissa $4000-$7fff, mass = mantissa *
+ * 2^(exponent - 78) units of 1e22 kg. The record's own mass is whole units
+ * (Minmus, Gilly, Bop, Pol are less than one) */
+static void set_record_mass(uint32_t rec, double kg)
+{
+	double m = kg / KG_PER_UNIT;
+	int e = 78;
+	if (m <= 0)
+		return;
+	while (m >= 32768.0)
+	{
+		m *= 0.5;
+		e++;
+	}
+	while (m < 16384.0)
+	{
+		m *= 2.0;
+		e--;
+	}
+	wrword(rec + 0, (int)m);
+	wrword(rec + 2, e);
+}
+
+/* hcall Call_CustomBody (Lcsys_body): a1 = the new object, a2 = its record
+ * (already copied: the object's mass and its 176 are read from it next) */
 void Call_CustomBody(void)
 {
 	if (!active)
@@ -1154,8 +1187,16 @@ void Call_CustomBody(void)
 	for (int i = 0; i < active->count; i++)
 	{
 		const Body *b = &active->bodies[i];
-		if (b->seed != seed || b->radius_km <= 0)
+		if (b->seed != seed)
 			continue;
+		if (b->mass_kg > 0 && !types[b->type].port)
+		{
+			set_record_mass(rec, b->mass_kg);
+			if (getenv("GLF_CSYS_LOG"))
+				log_printf("custom systems: %s mass %.4g kg\n", b->name, b->mass_kg);
+		}
+		if (b->radius_km <= 0)
+			return;
 		double now = obj_radius(obj, 266);
 		if (now <= 0)
 			return;
