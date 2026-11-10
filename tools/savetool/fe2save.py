@@ -10,7 +10,8 @@
 Addresses are 68k RAM addresses as the game sees them: A6 = 0x15e, big space = 0xd15e.
 Fields: name, cash (credits), ship (model word), fuel (tonnes), hull, equipment (hex long),
 ship_pos=X,Y,Z (km, relative to the ship's frame parent, normally the planet),
-ship_up=KM (move the ship that far further from its parent, keeping direction).
+ship_up=KM (move the ship that far further from its parent, keeping direction),
+land=SLOT (landed on the pad of the surface port in that object slot, same system).
 Objects: 115 slots, the flag bytes are the first 115 bytes of big space; slot 0 is at $74, slot n at
 $d4+286*(n-1). In an object +44/+48/+52 are the low longs and +56/+60/+64 the high longs of the 64-bit
 position (mm; one high unit = 2^32 mm = 4295 km), relative to the frame parent.
@@ -70,6 +71,49 @@ def move_ship(s, new):
         off = slot_off(i)
         if s.big[i] and (off == ship or obj_pos(s, off) == old):
             set_obj_pos(s, off, target)
+
+
+def obj_matrix(s, off):
+    """the object's orientation: 3x3 signed Q15 words at +0; column 1 is the object's up"""
+    w = struct.unpack(">9h", s.big[off:off + 18])
+    return [[w[3 * i + j] / 32768 for j in range(3)] for i in range(3)]
+
+
+def set_obj_matrix(s, off, m):
+    s.big[off:off + 18] = struct.pack(">9h", *[max(-32768, min(32767, round(m[i][j] * 32768)))
+                                              for i in range(3) for j in range(3)])
+
+
+def land(s, port):
+    """Put the player's ship landed on the pad of the surface port in slot `port` (the ship must already be in
+    that system). The pad spot, the ship's attitude and the landed-ship fields come from the mars-landed base
+    (Olympus Village, model 48), taken relative to that port's axes and applied with this port's axes.
+    Moving a flying ship is not enough: an engines-off ship just falls onto the port and is destroyed."""
+    import os
+    m = Save.load(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bases", "mars-landed"))
+    msh, mpo = ship_addr(m) - BIG_BASE, slot_off(95)
+    mul = lambda a, b: [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+    tr = lambda a: [[a[j][i] for j in range(3)] for i in range(3)]
+    mp = obj_matrix(m, mpo)
+    d = [a - b for a, b in zip(obj_pos(m, msh), obj_pos(m, mpo))]
+    local = [sum(mp[j][i] * d[j] for j in range(3)) for i in range(3)]  # ship from port, in port axes (mm)
+    po = slot_off(port)
+    if not s.big[port]:
+        raise ValueError("slot %d is empty" % port)
+    mk, kp = obj_matrix(s, po), obj_pos(s, po)
+    sh = ship_addr(s) - BIG_BASE
+    if s.big[sh + 68] != s.big[po + 68]:
+        # the ship's position is relative to its parent: it has to be the port's planet
+        s.big[sh + 68] = s.big[po + 68]
+    move_ship(s, lambda old: [kp[j] + round(sum(mk[j][i] * local[i] for i in range(3))) for j in range(3)])
+    set_obj_matrix(s, sh, mul(mk, mul(tr(mp), obj_matrix(m, msh))))
+    for a, b in ((18, 44), (98, 114), (143, 144), (192, 212), (281, 282)):  # landed-ship fields, velocity
+        s.big[sh + a:sh + b] = m.big[msh + a:msh + b]
+    s.a6[704] = 0x60            # flight state: landed
+    s.a6[705] = m.a6[705]       # flight flags (engines off bit)
+    s.a6[672] = s.a6[892] = port  # the port landed at
+    s.a6[688:692] = bytes(4)    # speed
+    s.a6[848:852] = bytes(4)    # set speed
 
 
 def info(s):
@@ -141,6 +185,8 @@ def setfield(s, spec):
     elif k == "ship_pos":
         km = [float(x) for x in v.split(",")]
         move_ship(s, lambda old: [round(c * 1e6) for c in km])
+    elif k == "land":
+        land(s, int(v, 0))
     elif k == "ship_up":
         d = float(v) * 1e6
         def up(old):
