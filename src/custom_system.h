@@ -57,6 +57,9 @@ void Call_CustomSafe(void);
 /* True for a model number this program made from a system file's "models" (planet models of its own) */
 bool custom_system_planet_model(int index);
 
+/* Makes those models (modded build); main.c calls it once at startup, after custom_ships_install */
+void custom_systems_install_models(void);
+
 /* how many systems are loaded, after the first Call_CustomSystem */
 int custom_systems_count(void);
 

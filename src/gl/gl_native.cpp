@@ -38,6 +38,7 @@ extern "C"
 #include "game_state.h"
 #include "host.h"
 #include "custom_system.h"
+#include "custom_ships.h"
 #include "main.h"
 #include "scenery.h"
 }
@@ -70,6 +71,11 @@ const fe2::Image &fe2::Image::game()
 		img.gamedata2 = FE2_gamedata2;
 		img.core_strings = FE2_L3e894;
 		set_table(img, FE2_gamedata1);
+		/* planet models a system file made (custom_system.c, at startup): the game finds them through
+		 * Lmdlmod_ptrs, past the end of its table */
+		for (int i = 0; i < 512; i++)
+			if (custom_system_planet_model(i) && custom_ships_model_addr(i))
+				img.overrides[i] = custom_ships_model_addr(i);
 	});
 	return img;
 }
@@ -687,6 +693,8 @@ extern "C" float native_frame_shrink(uint32_t a6)
 	uint32_t table = (uint32_t)rdlong(FE2_game_data);
 	uint32_t addr = (uint32_t)rdlong(a6 - 212);
 	uint32_t m = table + (uint16_t)rdword(table + (uint16_t)rdword(addr + 90));
+	if (table == FE2_gamedata1 && custom_ships_model_addr((uint16_t)rdword(addr + 90) / 2))
+		m = custom_ships_model_addr((uint16_t)rdword(addr + 90) / 2); /* moved to the pool (Lmdlmod_ptrs) */
 	int e = (int16_t)rdword(m + 10) - (int16_t)rdword(a6 - 208);
 	return e > 0 ? std::ldexp(1.0f, e) : 1.0f;
 }

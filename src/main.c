@@ -25,6 +25,7 @@
 #include "keymap.h"
 #include "manual.h"
 #include "custom_ships.h"
+#include "custom_system.h"
 #include "renderer.h"
 #include "script.h"
 #include "netplay.h"
@@ -534,6 +535,7 @@ static void main_init(void)
 	Init680x0();
 #if FE2_USE_MODDED
 	custom_ships_install(); /* tools/fe2ShipBuilder/custom_ships/NNN.fe2m, see custom_ships.h */
+	custom_systems_install_models(); /* the "models" of the system files, see custom_system.h */
 #endif
 	native_planet_far_patch();
 	Audio_Init();

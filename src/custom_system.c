@@ -808,8 +808,8 @@ bool custom_system_planet_model(int index)
 /* the stock model `index`: its address in the game's table and its length (up to the next model's start) */
 static bool stock_model(int index, uint32_t *addr, uint32_t *len)
 {
-	uint32_t data = (uint32_t)rdlong(GAME_A6 + A6_GAME_DATA);
-	if (!data || index < 0 || index >= STOCK_MODELS)
+	uint32_t data = FE2_gamedata1; /* the game's table, also before the game has set its pointer to it */
+	if (index < 0 || index >= STOCK_MODELS)
 		return false;
 	uint32_t off = (uint16_t)rdword(data + 2 * index), next = 0;
 	for (int i = 0; i < STOCK_MODELS; i++)
@@ -975,6 +975,16 @@ static void write_records(const System *sys, uint32_t at)
 	wrbyte(at + 4, bodies > 255 ? 255 : bodies);
 	wrbyte(at + 8, ports);
 	wrbyte(at + 9, orbital);
+}
+
+/* At startup, before anything is drawn: make every file's planet models, so a model number is the same each run
+ * (a saved game keeps it) and is there when a save is loaded without entering the system, and so the native
+ * renderer's copy of the game's memory, taken when it first draws, has them */
+void custom_systems_install_models(void)
+{
+	load_all();
+	for (int i = 0; i < system_count; i++)
+		install_models(&systems[i]);
 }
 
 void Call_CustomSystem(void)

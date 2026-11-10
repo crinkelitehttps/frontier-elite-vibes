@@ -15,6 +15,7 @@
 #include "host.h" /* rdbyte, wrbyte, ... */
 #include "galaxy/fe2vm.h"
 #include "custom_system.h"
+#include "custom_ships.h"
 
 bool cheat_ignore_space;
 
@@ -629,6 +630,8 @@ static u32 model_ship_data(u32 obj)
 {
 	u32 data = (u32)rdlong(a6(A6_GAME_DATA));
 	u32 model = data + rd16(data + rd16(obj + OBJ_MODEL));
+	if (custom_ships_model_addr(rd16(obj + OBJ_MODEL) / 2))
+		model = custom_ships_model_addr(rd16(obj + OBJ_MODEL) / 2); /* in the model pool */
 	u32 off = rd16(model + MODEL_SHIP_DATA);
 	return off ? model + off : 0;
 }
