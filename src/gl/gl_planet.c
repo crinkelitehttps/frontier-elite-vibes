@@ -141,7 +141,7 @@ static void capture_surface(PlanetDesc *p)
 	if (look)
 		custom_look_surface(look, s->image, sizeof(s->image), &s->image_night);
 	p->surface_ok = planet_surface_valid(s) || s->image[0];
-	if (p->surface_ok && planet_surface_valid(s))
+	if (p->surface_ok)
 	{
 		/* kept for planet_is_sea, by planet object */
 		static int next;

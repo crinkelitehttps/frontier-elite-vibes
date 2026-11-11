@@ -585,7 +585,7 @@ static uint32_t surface_key(const PlanetSurface *s)
 
 /* ---- surface images (the "surface" of a body's look) ---------------------- */
 
-#define IMAGE_SLOTS 8
+#define IMAGE_SLOTS 16
 
 static struct
 {
@@ -699,8 +699,59 @@ static int sea_next;
 
 /* 1 for sea (the base region of a planet with outlines), 0 for land, ice, craters; -1 when the planet has no
  * outlines or its surface can't be read. v: a direction in the planet's own axes (as the texture's). */
+/* The surface image's pixels on the CPU (game thread), for the land/sea test */
+static struct
+{
+	char name[48];
+	uint8_t *px; /* RGBA, NULL: failed */
+	int w, h;
+} sea_images[IMAGE_SLOTS];
+static int sea_image_count;
+
+/* 1 where the image is sea: clearly blue (blue over red and green; ice, grey rock and green land are not) */
+static int image_is_sea(const char *name, const float v[3])
+{
+	int i;
+	for (i = 0; i < sea_image_count; i++)
+		if (!strcmp(sea_images[i].name, name))
+			break;
+	if (i == sea_image_count)
+	{
+		if (sea_image_count >= IMAGE_SLOTS)
+			return -1;
+		char path[128];
+		int n = 0;
+		snprintf(path, sizeof(path), "systems/%s", name);
+		snprintf(sea_images[i].name, sizeof(sea_images[i].name), "%s", name);
+		sea_images[i].px = stbi_load(path, &sea_images[i].w, &sea_images[i].h, &n, 4);
+		sea_image_count++;
+	}
+	if (!sea_images[i].px)
+		return -1;
+	int w = sea_images[i].w, h = sea_images[i].h;
+	float x, y;
+	to_tex(v, &x, &y);
+	int ix = (int)(x * (float)w / TEX_W) % w, iy = (int)(y * (float)h / TEX_H);
+	if (ix < 0)
+		ix += w;
+	if (iy < 0)
+		iy = 0;
+	if (iy >= h)
+		iy = h - 1;
+	const uint8_t *c = sea_images[i].px + 4 * ((size_t)iy * (size_t)w + (size_t)ix);
+	return c[2] > c[0] + 24 && c[2] > c[1] + 12;
+}
+
 int planet_surface_is_sea(const PlanetSurface *s, const float v[3])
 {
+	/* drawn from an image: the image's sea, not the model's outlines under it (a missing image: the outlines, as
+	   the renderer then draws them) */
+	if (s->image[0])
+	{
+		int r = image_is_sea(s->image, v);
+		if (r >= 0)
+			return r;
+	}
 	uint32_t key = surface_key(s);
 	int slot = -1;
 	for (int i = 0; i < SEA_SLOTS; i++)

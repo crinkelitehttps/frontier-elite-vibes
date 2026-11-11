@@ -792,7 +792,7 @@ static uint32_t clamp_units(double v)
 static struct
 {
 	char name[32];
-	int index;
+	int index, like; /* like: the stock model it was copied from */
 	uint32_t addr, cap;
 } made[16];
 static int made_count;
@@ -803,6 +803,14 @@ bool custom_system_planet_model(int index)
 		if (made[i].index == index)
 			return true;
 	return false;
+}
+
+int custom_system_like_model(int index)
+{
+	for (int i = 0; i < made_count; i++)
+		if (made[i].index == index)
+			return made[i].like;
+	return index;
 }
 
 /* the stock model `index`: its address in the game's table and its length (up to the next model's start) */
@@ -875,6 +883,7 @@ static void install_models(System *sys)
 			made[slot].addr = at;
 			made[slot].cap = len;
 		}
+		made[slot].like = c->like;
 		if (len > made[slot].cap)
 		{
 			log_printf("custom systems: model '%s': \"like\" changed to a larger model; restart the game\n", c->name);
@@ -1389,4 +1398,236 @@ void Call_CustomSafe(void)
 			SetReg(REG_D3, 0);
 			return;
 		}
+}
+
+/* -- frames: sphere of influence ---------------------------------------------- */
+
+#define FRAME_SLOTS 115
+
+static uint32_t frame_obj(uint32_t table, int slot)
+{
+	return table + (uint16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)slot);
+}
+
+/* L440fe's candidate test (Lframe_cand): flagged bit 4, or a starport body */
+static bool frame_candidate(uint32_t table, int slot, bool *station)
+{
+	uint8_t flags = (uint8_t)rdbyte(table + (uint32_t)slot);
+	uint32_t o = frame_obj(table, slot);
+	bool port = flags && (uint8_t)rdbyte(o + 94) == 1 && (rdbyte(o + 280) & 0x10);
+	*station = port;
+	return (flags & 0x10) || port;
+}
+
+static void frame_pos(uint32_t o, double p[3])
+{
+	for (int k = 0; k < 3; k++)
+		p[k] = (double)(((int64_t)rdlong(o + 56 + 4 * k) << 32) | (uint32_t)rdlong(o + 44 + 4 * k));
+}
+
+/* L4350e's distance exponent: the bit length of the largest component (mm) less 13 */
+static int frame_dist_exp(const double a[3], const double b[3])
+{
+	uint64_t or_ = 0;
+	for (int k = 0; k < 3; k++)
+		or_ |= (uint64_t)fabs(a[k] - b[k]);
+	int n = 0;
+	while (or_)
+	{
+		n++;
+		or_ >>= 1;
+	}
+	return n > 13 ? n - 13 : 0;
+}
+
+/* the mass as the object holds it (122 mantissa, 124 exponent), any unit */
+static double frame_mass(uint32_t o)
+{
+	return (double)(uint16_t)rdword(o + 122) * ldexp(1.0, (int16_t)rdword(o + 124) - 78);
+}
+
+static void frame_name(uint32_t o, char out[24])
+{
+	int i = 0;
+	for (; i < 23; i++)
+	{
+		out[i] = (char)rdbyte(o + 246 + (uint32_t)i);
+		if (!out[i])
+			break;
+	}
+	out[i] = 0;
+}
+
+static double frame_dist(const double a[3], const double b[3])
+{
+	return sqrt((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2]));
+}
+
+/* hcall Call_FrameSoi (Lframe_soi, at the start of L440fe): a0 = an object, a4 = the object table. In a custom
+ * system the frame between stars, planets and moons is the body whose sphere of influence (orbit * (m / M)^0.4,
+ * at least 3 radii) holds the object, deepest first; the game's own rule (log2 distance against log2 mass)
+ * gives heavy moons zones of a million km and small ones none (docs/system-overlays.md). Starports keep the
+ * game's rule. One step per call. Out d6: 0 the game's rule, 1 stay, 2 up (a1 = the frame), 3 down to slot d0. */
+void Call_FrameSoi(void)
+{
+	SetReg(REG_D6, 0);
+	if (!custom_systems_on)
+		return;
+	/* the current system (A6+726), also after loading a save (no system build then) */
+	if (!loaded)
+		load_all();
+	uint32_t key = (uint32_t)rdlong((uint32_t)GetReg(REG_A6) + 726);
+	bool custom = false;
+	for (int i = 0; i < system_count && !custom; i++)
+		custom = systems[i].key == key;
+	if (!custom)
+		return;
+	uint32_t table = (uint32_t)GetReg(REG_A4), me = (uint32_t)GetReg(REG_A0);
+	int cur = (uint8_t)rdbyte(me + 68);
+	if (cur <= 0 || cur >= FRAME_SLOTS)
+		return;
+
+	/* every candidate's place, summed up the parent chain */
+	static double abs_[FRAME_SLOTS][3];
+	static signed char done[FRAME_SLOTS], cand[FRAME_SLOTS], port[FRAME_SLOTS];
+	for (int i = 0; i < FRAME_SLOTS; i++)
+	{
+		bool st = false;
+		done[i] = 0;
+		cand[i] = i > 0 && frame_candidate(table, i, &st);
+		port[i] = st;
+	}
+	if (!cand[cur])
+		return;
+	for (int i = 1; i < FRAME_SLOTS; i++)
+	{
+		if (!cand[i] || done[i])
+			continue;
+		int chain[FRAME_SLOTS], n = 0, s = i;
+		while (s > 0 && s < FRAME_SLOTS && !done[s] && n < FRAME_SLOTS)
+		{
+			chain[n++] = s;
+			s = (uint8_t)rdbyte(frame_obj(table, s) + 68);
+		}
+		double base[3] = {0, 0, 0};
+		if (s > 0 && s < FRAME_SLOTS && done[s] == 1)
+			memcpy(base, abs_[s], sizeof base);
+		else if (s != 0)
+			return; /* a loop or a parent that is no frame: leave it to the game */
+		while (n > 0)
+		{
+			int k = chain[--n];
+			double p[3];
+			frame_pos(frame_obj(table, k), p);
+			for (int a = 0; a < 3; a++)
+				abs_[k][a] = base[a] + p[a];
+			memcpy(base, abs_[k], sizeof base);
+			done[k] = 1;
+		}
+	}
+	double ship[3], p[3];
+	frame_pos(me, p);
+	for (int a = 0; a < 3; a++)
+		ship[a] = abs_[cur][a] + p[a];
+
+	/* the frame now held by a starport: the game's rule for going up to its body */
+	if (port[cur])
+		return;
+
+	/* the deepest body whose sphere holds the ship: from the top body down */
+	int top = cur;
+	while (1)
+	{
+		int up = (uint8_t)rdbyte(frame_obj(table, top) + 68);
+		if (up <= 0 || up >= FRAME_SLOTS || !cand[up] || port[up])
+			break;
+		top = up;
+	}
+	int target = top;
+	for (;;)
+	{
+		uint32_t to = frame_obj(table, target);
+		double M = frame_mass(to);
+		int best = -1;
+		double best_d = 0;
+		for (int i = 1; i < FRAME_SLOTS; i++)
+		{
+			if (!cand[i] || port[i] || (uint8_t)rdbyte(frame_obj(table, i) + 68) != target)
+				continue;
+			uint32_t o = frame_obj(table, i);
+			double m = frame_mass(o);
+			/* (massless, as in saves made before the mass fix: just the 3 radii) */
+			double soi = m > 0 && M > 0 ? frame_dist(abs_[i], abs_[target]) * pow(m / M, 0.4) : 0;
+			double r = (double)(uint16_t)rdword(o + 270) * 4294967296.0 + (double)(uint32_t)rdlong(o + 266);
+			if (soi < 3 * r)
+				soi = 3 * r;
+			/* a little more to leave than to enter, so the frame does not flicker on the edge */
+			bool inside_now = false;
+			for (int s = cur; s > 0 && s < FRAME_SLOTS; s = (uint8_t)rdbyte(frame_obj(table, s) + 68))
+				if (s == i)
+					inside_now = true;
+			if (inside_now)
+				soi *= 1.02;
+			double d = frame_dist(ship, abs_[i]);
+			if (d < soi && (best < 0 || d < best_d))
+			{
+				best = i;
+				best_d = d;
+			}
+		}
+		if (best < 0)
+			break;
+		target = best;
+	}
+
+	if (target != cur)
+	{
+		/* down when the target is under the frame, else up */
+		int s = target, below = -1;
+		while (s > 0 && s < FRAME_SLOTS && s != cur)
+		{
+			below = s;
+			s = (uint8_t)rdbyte(frame_obj(table, s) + 68);
+		}
+		if (s == cur && below > 0)
+		{
+			SetReg(REG_D0, below);
+			SetReg(REG_D6, 3);
+		}
+		else
+		{
+			SetReg(REG_A1, (int)frame_obj(table, cur));
+			SetReg(REG_D6, 2);
+		}
+		if (getenv("GLF_FRAME_LOG") && me == (uint32_t)game_player_ship())
+		{
+			char a[24], b[24];
+			frame_name(frame_obj(table, cur), a);
+			frame_name(frame_obj(table, target), b);
+			log_printf("frame: %s -> %s (step %s)\n", a, b, GetReg(REG_D6) == 3 ? "down" : "up");
+		}
+		return;
+	}
+
+	/* the right body: a starport under it by the game's rule (16(L - M) below 4(L - M) + 32 of the frame) */
+	uint32_t co = frame_obj(table, cur);
+	int keep = 4 * (frame_dist_exp(ship, abs_[cur]) - (int16_t)rdword(co + 176)) + 32, pick = -1;
+	for (int i = 1; i < FRAME_SLOTS; i++)
+	{
+		if (!port[i] || (uint8_t)rdbyte(frame_obj(table, i) + 68) != cur)
+			continue;
+		int sc = 16 * (frame_dist_exp(ship, abs_[i]) - (int16_t)rdword(frame_obj(table, i) + 176));
+		if (sc < keep)
+		{
+			keep = sc;
+			pick = i;
+		}
+	}
+	if (pick > 0)
+	{
+		SetReg(REG_D0, pick);
+		SetReg(REG_D6, 3);
+		return;
+	}
+	SetReg(REG_D6, 1);
 }

@@ -588,6 +588,8 @@ HOSTCALL hcalls[] = {
 	[0xa9] = Call_CustomName,
 	[0xaa] = Call_CustomPush,
 	[0xab] = Call_CustomSafe,
+	[0xac] = Call_ScenModel, /* scenery.h */
+	[0xad] = Call_FrameSoi, /* custom_system.h */
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

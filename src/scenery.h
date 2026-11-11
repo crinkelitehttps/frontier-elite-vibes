@@ -27,6 +27,7 @@ extern int scenery_radius_km;
 extern int scenery_cloud_wind_mps;
 
 void Call_ScenNext(void);
+void Call_ScenModel(void);
 void Call_ScenMade(void);
 void Call_VirtNext(void);
 void Call_ScenDrive(void);

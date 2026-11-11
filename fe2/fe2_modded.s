@@ -208,6 +208,8 @@ Call_CustomHull	equ	$a8
 Call_CustomName	equ	$a9
 Call_CustomPush	equ	$aa
 Call_CustomSafe	equ	$ab
+Call_ScenModel	equ	$ac
+Call_FrameSoi	equ	$ad
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -26400,8 +26402,8 @@ L440e6:
 		bra.s	l44148
 
 L440fe:
-		tst.b	69(a0)
-		bne.s	l440f4
+* Frame by sphere of influence in a custom system: hook, same size (Lframe_soi)
+		jsr	Lframe_soi
 		moveq	#0,d1
 		move.b	68(a0),d1
 		move.w	d1,-(a7)
@@ -40723,8 +40725,7 @@ Lscen_ray:
 		bne.w	l61ef2
 		move.l	a0,-(a7)
 		jsr	516(a5)
-		move.w	90(a0),d0
-		movea.l	(a7)+,a0
+		jsr	Lscen_mdl
 		cmpi.w	#$98,d0
 		bhi.s	l61dae
 		subi.w	#$7a,d0
@@ -69355,8 +69356,8 @@ lscen_pk:
 		movea.l	a0,a1
 		movea.l	(a7)+,a0
 		move.l	(a7)+,d7
-		move.w	90(a1),d0
-		cmpi.w	#$7a,d0
+		jsr	Lscen_mdl1
+		nop
 		blt.s	lscen_fail
 		cmpi.w	#$98,d0
 		bhi.s	lscen_fail
@@ -69729,5 +69730,54 @@ Lcsys_pop:
 		move.l	4(a7),d1
 		hcall	#Call_CustomSafe
 		move.l	(a7)+,d1
+		addq.l	#4,a7
+		rts
+
+******************************************************************************
+* Lscen_mdl (in Lscen_ray, in place of move.w 90(a0),d0 / movea.l (a7)+,a0):
+* the planet's model word in d0, a system file's own model made the stock one
+* it was copied from (its scenery row), and a0 back from the stack.
+* (not move.l (a7)+,(a7): the asm-to-C translator writes before the pop)
+******************************************************************************
+Lscen_mdl:
+		move.w	90(a0),d0
+		hcall	#Call_ScenModel
+		movea.l	4(a7),a0
+		move.l	(a7),4(a7)
+		addq.l	#4,a7
+		rts
+
+* Lscen_mdl1 (in Lscen_pick, in place of move.w 90(a1),d0 / cmpi.w #$7a,d0):
+* the same with the model word mapped as in Lscen_mdl
+Lscen_mdl1:
+		move.w	90(a1),d0
+		hcall	#Call_ScenModel
+		cmpi.w	#$7a,d0
+		rts
+
+******************************************************************************
+* Lframe_soi (start of L440fe, in place of tst.b 69(a0) / bne.s l440f4): in a
+* custom system the host picks the frame by sphere of influence. d6 from
+* Call_FrameSoi: 0 the game's rule (back into L440fe), 1 stay, 2 up (a1 = the
+* frame; L44064), 3 down to slot d0 (l440a6). Both end in L440fe's rts.
+******************************************************************************
+Lframe_soi:
+		tst.b	69(a0)
+		bne.s	lfs_quit
+		hcall	#Call_FrameSoi
+		tst.w	d6
+		beq.s	lfs_game
+		addq.l	#4,a7
+		cmpi.w	#2,d6
+		beq.s	lfs_up
+		bhi.s	lfs_down
+		rts
+lfs_up:
+		jmp	L44064
+lfs_down:
+		jmp	l440a6
+lfs_game:
+		rts
+lfs_quit:
 		addq.l	#4,a7
 		rts

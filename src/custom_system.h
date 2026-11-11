@@ -53,9 +53,13 @@ void Call_CustomPush(void);
 /* hcall: the system's name, if its file gives one (name = ...) */
 void Call_CustomName(void);
 void Call_CustomSafe(void);
+/* hcall: the frame (relative-to body) by sphere of influence in a custom system */
+void Call_FrameSoi(void);
 
 /* True for a model number this program made from a system file's "models" (planet models of its own) */
 bool custom_system_planet_model(int index);
+/* the stock model a file's own planet model was copied from ("like"); any other model: itself */
+int custom_system_like_model(int index);
 
 /* Makes those models (modded build); main.c calls it once at startup, after custom_ships_install */
 void custom_systems_install_models(void);

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "custom_system.h"
 #include "game_state.h"
 #include "gl/gl_planet.h"
 #include "host.h"
@@ -350,9 +351,22 @@ static uint64_t layer_key(int i, int j, int k, int cloud)
 }
 
 /* the 32 byte row of the planet's type in the game's kind table (8 entries of model and size), 0 if none */
+static int planet_model_word(uint32_t planet)
+{
+	return 2 * custom_system_like_model((uint16_t)rdword(planet + 90) / 2);
+}
+
+/* hcall Call_ScenModel (Lscen_pick, Lscen_mdl): d0 = a planet's model word (90(obj)). A system file's own planet
+   model becomes the stock one it was copied from, so it has that model's scenery row (Kerbin: Earth's) */
+void Call_ScenModel(void)
+{
+	int w = (uint16_t)GetReg(REG_D0);
+	SetReg(REG_D0, (int)(((uint32_t)GetReg(REG_D0) & 0xffff0000u) | (uint32_t)(2 * custom_system_like_model(w / 2))));
+}
+
 static uint32_t kind_row(uint32_t planet)
 {
-	int row_i = (int)(uint16_t)rdword(planet + 90) - 0x7a;
+	int row_i = planet_model_word(planet) - 0x7a;
 	if (row_i < 0 || row_i > 30)
 		return 0;
 	return FE2_Lscen_rows + (uint32_t)(int32_t)(int16_t)rdword(FE2_Lscen_rows + (uint32_t)row_i);

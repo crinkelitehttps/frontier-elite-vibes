@@ -477,5 +477,9 @@
 #define FE2_Lcsys_hull                               0xab2c4 /* Lcsys_hull */
 #define FE2_Lcsys_name                               0xab2e2 /* Lcsys_name */
 #define FE2_Lcsys_push                               0xab2f8 /* Lcsys_push */
+#define FE2_Lcsys_pop                                0xab30c /* Lcsys_pop */
+#define FE2_Lscen_mdl                                0xab326 /* Lscen_mdl */
+#define FE2_Lscen_mdl1                               0xab33a /* Lscen_mdl1 */
+#define FE2_Lframe_soi                               0xab348 /* Lframe_soi */
 
 #endif /* FE2_LABELS_H */
