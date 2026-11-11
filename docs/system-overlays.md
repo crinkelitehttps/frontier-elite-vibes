@@ -85,6 +85,25 @@ A body may have a `look`, an object or the name of one in the file's top-level `
 - A saved game keeps the model number only: loaded without the file, a body of this model would read whatever is at that number.
   (Enter the system once and it is back; the number is the same each run only if the same models are made in the same order.)
 
+### Starports of the file's own: `model`, `pads`, `parking`
+
+```json
+"models": { "ksc": { "model": 480, "pads": [[2072, -222], [-2, 1766]],
+                     "parking": [[1152, 1378], [3152, 1378], [1552, -862], [2952, -862]] } },
+"bodies": [ { "name": "Kerbin Space Center", "type": "surface_port", "model": "ksc", ... } ]
+```
+
+- `model`: a model installed from a .fe2m file (`tools/fe2ShipBuilder/custom_ships`), used as it is. The Kerbal Space Center is
+  model 480, made by `tools/ksc_model.py` (KSP's buildings as boxes, x4; pad 1 the launch pad, pad 2 the runway).
+- The pads are in the model's hull, as in the game's own ground ports (model 48 -> 164 -> 209): a record with flag `$80 + n` and
+  bits `$22` per pad, pointing at a hull-only model whose planes face in round the pad. A ship over pad n that touches down gently
+  on the ground has landed on it (L620a4: bit 5 from the hull, bit 6 from the ground contact in L3f566).
+- `pads` (up to 8) and `parking` (up to 4): metres east and north of the model's origin. The pads' count becomes the port's
+  (`164(obj)`, with `280(obj)` bit 6 set, in `Call_CustomBase`: the game gives pads only to stock models $5a-$64). Their places
+  replace the game's tables by pad count (hook `Lcsys_pad` in L5f18a, hcall `Call_CustomPad`): `pads` is where the station
+  module sends the autopilot, traffic and launches (fn 1), `parking` where parked ships stand (fn 9). List them in the hull's order.
+- Saved games keep the port's fields from when the system was made; enter the system again for a new pad count.
+
 ## Starting from a real system: `--dump-system`
 
 ```sh

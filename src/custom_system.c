@@ -140,14 +140,23 @@ typedef struct
 
 #define MODELS_MAX 8
 
-/* a planet model of the file's own ("models"): a stock planet model copied to a free model
- * number, with its first colours replaced */
+/* a model of the file's own ("models"): a stock planet model copied to a free model number, with its
+ * first colours replaced; or ("model": N) a model installed from a .fe2m file, used as it is: a surface
+ * starport of its own (the Kerbal Space Center, model 480 from tools/ksc_model.py) whose hull has numbered
+ * pads, with "pads" and "parking" telling the game where they are (see Call_CustomPad) */
+#define PADS_MAX 8  /* the starport's pad table (166(obj), 8 bytes) */
+#define PARKS_MAX 4 /* parked ships go to one of 4 spots (L7e024: RandInt(4)) */
+#define PAD_UNIT_M 1.024 /* the station module's pad offsets: 1024 mm units, the port's axes */
+
 typedef struct
 {
 	char name[32];
 	int like; /* stock model index the copy starts from */
 	unsigned colours_set; /* bit k: colour word k (feature code k * 4) is replaced */
 	uint8_t colour[8][3];
+	int model;          /* "model": an installed model used as is, -1 = none (a copy of `like`) */
+	int pads, parks;    /* how many "pads" and "parking" spots */
+	int16_t pad[PADS_MAX][2], park[PARKS_MAX][2]; /* x, z in PAD_UNIT_M */
 	int index; /* its model number once installed, else -1 */
 } CModel;
 
@@ -387,7 +396,30 @@ static int stock_index(const cJSON *v)
 	return -1;
 }
 
-/* "models": {"name": {"like": "earth" or a model number, "colours": ["#rrggbb", ...]}} */
+/* [[x, z], ...] in metres into out (PAD_UNIT_M); the count, -1 if malformed */
+static int parse_spots(const cJSON *a, int16_t (*out)[2], int max)
+{
+	if (!a)
+		return 0;
+	if (!cJSON_IsArray(a) || cJSON_GetArraySize(a) > max)
+		return -1;
+	int n = 0;
+	const cJSON *e;
+	cJSON_ArrayForEach(e, a)
+	{
+		const cJSON *x = cJSON_GetArrayItem(e, 0), *z = cJSON_GetArrayItem(e, 1);
+		if (!cJSON_IsArray(e) || !cJSON_IsNumber(x) || !cJSON_IsNumber(z) || fabs(x->valuedouble) > 30000 ||
+			fabs(z->valuedouble) > 30000)
+			return -1;
+		out[n][0] = (int16_t)lround(x->valuedouble / PAD_UNIT_M);
+		out[n][1] = (int16_t)lround(z->valuedouble / PAD_UNIT_M);
+		n++;
+	}
+	return n;
+}
+
+/* "models": {"name": {"like": "earth" or a model number, "colours": ["#rrggbb", ...]}}
+ * or {"name": {"model": 480, "pads": [[x, z], ...], "parking": [[x, z], ...]}} (metres in the model's axes) */
 static bool parse_models(System *sys, const cJSON *models)
 {
 	const char *file = sys->file;
@@ -412,6 +444,22 @@ static bool parse_models(System *sys, const cJSON *models)
 		memset(c, 0, sizeof(*c));
 		snprintf(c->name, sizeof(c->name), "%s", m->string);
 		c->index = -1;
+		c->model = -1;
+		double own;
+		if (jnum(m, "model", &own))
+		{
+			c->model = (int)own;
+			c->pads = parse_spots(cJSON_GetObjectItemCaseSensitive(m, "pads"), c->pad, PADS_MAX);
+			c->parks = parse_spots(cJSON_GetObjectItemCaseSensitive(m, "parking"), c->park, PARKS_MAX);
+			if (c->model < 1 || c->model > 511 || c->pads < 0 || c->parks < 0)
+			{
+				log_printf("custom systems: %s: model '%s': \"model\" is a model number (1-511), \"pads\" up to %d "
+						   "and \"parking\" up to %d [x, z] pairs in metres\n", file, c->name, PADS_MAX, PARKS_MAX);
+				return false;
+			}
+			sys->model_count++;
+			continue;
+		}
 		c->like = stock_index(cJSON_GetObjectItemCaseSensitive(m, "like"));
 		if (c->like < 61 || c->like > 240 - 1)
 		{
@@ -849,12 +897,21 @@ static uint32_t planet_colours(uint32_t m, uint32_t len)
 }
 
 /* Make the file's own planet models: copy the stock model into the pool, put the colours in, point a free model
- * number at it. Again on the next entry of the system reuses the same number and space. */
+ * number at it (a "model" of its own: just checked). Again on the next entry of the system reuses the same number
+ * and space. */
 static void install_models(System *sys)
 {
 	for (int i = 0; i < sys->model_count; i++)
 	{
 		CModel *c = &sys->models[i];
+		if (c->model >= 0)
+		{
+			c->index = custom_ships_model_addr(c->model) ? c->model : -1;
+			if (c->index < 0)
+				log_printf("custom systems: %s: model '%s': model %d is not installed (a .fe2m in "
+						   "tools/fe2ShipBuilder/custom_ships, modded build only)\n", sys->file, c->name, c->model);
+			continue;
+		}
 		uint32_t src, len;
 		if (!stock_model(c->like, &src, &len))
 		{
@@ -1276,12 +1333,65 @@ void Call_CustomCull(void)
 	SetReg(REG_D3, d3 > 2147483647.0 ? 0x7fffffff : (int)d3);
 }
 
+/* the "model" entry of a system file whose model is the object's (a starport of its own with pads), or NULL */
+static const CModel *own_port(uint32_t obj)
+{
+	if (!obj)
+		return NULL;
+	int m = (uint16_t)rdword(obj + 90) / 2;
+	for (int i = 0; i < system_count; i++)
+		for (int k = 0; k < systems[i].model_count; k++)
+		{
+			const CModel *c = &systems[i].models[k];
+			if (c->model >= 0 && c->index == m && c->pads > 0)
+				return c;
+		}
+	return NULL;
+}
+
+/* A starport of its own with pads: L469ca gives pads (280 bit 6, 164 = count - 1) only to stock models
+ * $5a-$64 by number, so set them here: as many pads as the file lists (the model's hull numbers them,
+ * flag $80 + n), none taken. 178 is L46a10's (count * 8). */
+static void own_port_setup(uint32_t port)
+{
+	const CModel *c = own_port(port);
+	if (!c)
+		return;
+	wrbyte(port + 280, (uint8_t)rdbyte(port + 280) | 0x40);
+	wrword(port + 164, c->pads - 1);
+	wrword(port + 178, c->pads * 8);
+	for (int k = 0; k < PADS_MAX; k++)
+		wrbyte(port + 166 + k, 0);
+}
+
+/* hcall Call_CustomPad (Lcsys_pad, in L5f18a): d3-d5 = the game's offset (PAD_UNIT_M, port axes) of pad d7
+ * (d6 = 1) or of parking spot d7 (d6 = 2) at starport a1; replaced from the file for a port of its own. */
+void Call_CustomPad(void)
+{
+	const CModel *c = own_port((uint32_t)GetReg(REG_A1));
+	int kind = (int)GetReg(REG_D6), k = (int)(GetReg(REG_D7) & 0xffff);
+	const int16_t *at = NULL;
+	if (!c)
+		return;
+	if (kind == 1 && k < c->pads)
+		at = c->pad[k];
+	else if (kind == 2 && c->parks > 0)
+		at = c->park[k % c->parks];
+	if (!at)
+		return;
+	SetReg(REG_D3, (int32_t)at[0]);
+	SetReg(REG_D4, 0);
+	SetReg(REG_D5, (int32_t)at[1]);
+}
+
 /* hcall Call_CustomBase (Lcsys_base): a surface starport (a1) was put on its
  * parent's (a0) model radius; move it out or in to the parent's own. The
- * position is 64-bit per axis, parent-relative: low longs at 44, high at 56. */
+ * position is 64-bit per axis, parent-relative: low longs at 44, high at 56.
+ * A starport of its own also gets its pads (own_port_setup). */
 void Call_CustomBase(void)
 {
 	uint32_t parent = (uint32_t)GetReg(REG_A0), port = (uint32_t)GetReg(REG_A1);
+	own_port_setup(port);
 	if (!parent || !planet_model(parent))
 		return;
 	double r = radius_ratio(parent, obj_model(parent));

@@ -55,6 +55,8 @@ void Call_CustomName(void);
 void Call_CustomSafe(void);
 /* hcall: the frame (relative-to body) by sphere of influence in a custom system */
 void Call_FrameSoi(void);
+/* hcall: a starport of a system file's own: where its pads and parking spots are */
+void Call_CustomPad(void);
 
 /* True for a model number this program made from a system file's "models" (planet models of its own) */
 bool custom_system_planet_model(int index);

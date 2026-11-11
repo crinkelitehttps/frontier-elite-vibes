@@ -137,6 +137,8 @@ Call_CustomPush	equ	$aa
 Call_CustomSafe	equ	$ab
 Call_ScenModel	equ	$ac
 Call_FrameSoi	equ	$ad
+* Custom systems: a custom starport's pad or parking spot (a1 = port, d7 = index, d6 = table kind; d3-d5 out).
+Call_CustomPad	equ	$ae
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -37133,9 +37135,10 @@ L5f138:
 		lea	L5f1fa(pc),a0
 
 L5f18a:
-		move.w	d7,d6
-		asl.w	#3,d6
-		movem.w	0(a0,d6.w),d3-5
+* Custom starport pads and parking spots: hook, same size (Lcsys_pad)
+		jsr	Lcsys_pad
+		nop
+		nop
 		movea.l	a1,a0
 		jsr	A5_MatrixVectorMult(a5)
 		asr.l	#6,d0
@@ -68947,4 +68950,32 @@ lfs_game:
 		rts
 lfs_quit:
 		addq.l	#4,a7
+		rts
+
+******************************************************************************
+* Lcsys_pad (L5f18a, in place of move.w d7,d6 / asl.w #3,d6 / movem.w
+* 0(a0,d6.w),d3-5): the station module's pad offset (fn 1: where pad d7 is)
+* or parking spot (fn 9: where a parked ship goes) of surface starport a1,
+* read from the game's tables by pad count, in the port's axes (units of
+* 1024 mm). Call_CustomPad replaces d3-d5 for a port of a system file's own
+* with pads given (src/custom_system.c). d6 tells it the table: 0 a padless
+* base's spots (L5f412), 1 pads, 2 parking spots. d6 is free after this.
+******************************************************************************
+Lcsys_pad:
+		move.w	d7,d6
+		asl.w	#3,d6
+		movem.w	0(a0,d6.w),d3-5
+		moveq	#0,d6
+		cmpa.l	#L5f412,a0
+		beq.s	lcp_host
+		moveq	#1,d6
+		cmpa.l	#L5f1ce,a0
+		beq.s	lcp_host
+		cmpa.l	#L5f1dc,a0
+		beq.s	lcp_host
+		cmpa.l	#L5f1fa,a0
+		beq.s	lcp_host
+		moveq	#2,d6
+lcp_host:
+		hcall	#Call_CustomPad
 		rts

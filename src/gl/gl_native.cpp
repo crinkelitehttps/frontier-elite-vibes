@@ -71,10 +71,11 @@ const fe2::Image &fe2::Image::game()
 		img.gamedata2 = FE2_gamedata2;
 		img.core_strings = FE2_L3e894;
 		set_table(img, FE2_gamedata1);
-		/* planet models a system file made (custom_system.c, at startup): the game finds them through
-		 * Lmdlmod_ptrs, past the end of its table */
+		/* models moved to the pool (Lmdlmod_ptrs): .fe2m files (custom_ships.c, e.g. the Kerbal Space
+		 * Center) and models a system file made (custom_system.c); all are installed at startup, and the
+		 * game finds them there instead of its table */
 		for (int i = 0; i < 512; i++)
-			if (custom_system_planet_model(i) && custom_ships_model_addr(i))
+			if (custom_ships_model_addr(i))
 				img.overrides[i] = custom_ships_model_addr(i);
 	});
 	return img;
