@@ -79,6 +79,8 @@ typedef struct
 {
 	Hist game;    /* game frame to game frame */
 	Hist picture; /* a picture's CPU time on the drawing thread */
+	Hist clock;   /* the clock probe: time / full-speed time, times 5 (a bucket is 0.1) */
+	unsigned swaps, missed; /* vsync-paced swaps, and those more than 1.5 refresh periods after the last */
 	unsigned vr_frames, vr_rendered, vr_missed;
 	double vr_wait_ms;
 	double gpu_ms[PERF_GPU_SLOTS];
@@ -134,6 +136,65 @@ void perf_picture(uint64_t t0, uint64_t t1)
 	SDL_AtomicLock(&lock);
 	hist_add(&cur.picture, ms(t1 - t0));
 	SDL_AtomicUnlock(&lock);
+}
+
+/* A tiny fixed loop, timed against its fastest run: a core held at a low clock
+ * takes 2.5-3 times as long. Calibrated on the first calls. */
+static volatile unsigned probe_sink;
+static double probe_run(void)
+{
+	uint64_t a = SDL_GetPerformanceCounter();
+	unsigned x = probe_sink;
+	for (int i = 0; i < 20000; i++)
+		x = x * 1664525u + 1013904223u + (x >> 7);
+	probe_sink = x;
+	return ms(SDL_GetPerformanceCounter() - a);
+}
+
+void perf_picture_begin(void)
+{
+	if (!on())
+		return;
+	static double best;
+	static int calls;
+	double t = probe_run();
+	if (calls < 200)
+	{
+		/* the least of many back-to-back runs is the full-clock time */
+		for (int i = 0; i < 20; i++)
+		{
+			double u = probe_run();
+			if (u < t)
+				t = u;
+		}
+		if (!best || t < best)
+			best = t;
+		calls++;
+		return;
+	}
+	if (t < best)
+		best = t;
+	/* the factor x 5 in the histogram, so a bucket is 0.1 */
+	SDL_AtomicLock(&lock);
+	hist_add(&cur.clock, t / best * 5.0);
+	SDL_AtomicUnlock(&lock);
+}
+
+void perf_swapped(double period_ms)
+{
+	static uint64_t last;
+	if (!on())
+		return;
+	uint64_t now = SDL_GetPerformanceCounter();
+	if (period_ms > 0 && last && ms(now - last) < 1000.0)
+	{
+		SDL_AtomicLock(&lock);
+		cur.swaps++;
+		if (ms(now - last) > 1.5 * period_ms)
+			cur.missed++;
+		SDL_AtomicUnlock(&lock);
+	}
+	last = period_ms > 0 ? now : 0;
 }
 
 void perf_vr_frame(int64_t display_ns, int64_t period_ns, bool render, uint64_t wait)
@@ -225,6 +286,9 @@ static void table_add(const char *name, double secs, const Interval *iv)
 	t->secs += secs;
 	hist_merge(&t->sum.game, &iv->game);
 	hist_merge(&t->sum.picture, &iv->picture);
+	hist_merge(&t->sum.clock, &iv->clock);
+	t->sum.swaps += iv->swaps;
+	t->sum.missed += iv->missed;
 	t->sum.vr_frames += iv->vr_frames;
 	t->sum.vr_rendered += iv->vr_rendered;
 	t->sum.vr_missed += iv->vr_missed;
@@ -244,6 +308,10 @@ static int describe(char *out, size_t n, const Interval *iv, double secs)
 					   iv->game.count / secs, hist_pct(&iv->game, 0.5), hist_pct(&iv->game, 0.95), hist_pct(&iv->game, 0.99),
 					   iv->game.max, iv->game.slow, SLOW_MS, iv->picture.count / secs, hist_pct(&iv->picture, 0.5),
 					   hist_pct(&iv->picture, 0.95));
+	if (iv->swaps && len < (int)n)
+		len += snprintf(out + len, n - len, "; %u of %u refreshes missed (%.2f%%)", iv->missed, iv->swaps, 100.0 * iv->missed / iv->swaps);
+	if (iv->clock.count && len < (int)n)
+		len += snprintf(out + len, n - len, "; clock factor p50 %.1f p95 %.1f", hist_pct(&iv->clock, 0.5) / 5.0, hist_pct(&iv->clock, 0.95) / 5.0);
 	if (iv->vr_frames && len < (int)n)
 		len += snprintf(out + len, n - len, "; headset %.1f/s, %u missed (%.1f%%), %u not drawn, xrWaitFrame %.1f ms", iv->vr_frames / secs,
 						iv->vr_missed, 100.0 * iv->vr_missed / (iv->vr_frames + iv->vr_missed), iv->vr_frames - iv->vr_rendered,

@@ -41,6 +41,9 @@ enum
 void perf_game_frame(void); /* game thread, each Nu_DrawScreen */
 void perf_picture(uint64_t t0, uint64_t t1); /* drawing thread: one picture's CPU span, in performance-counter ticks */
 /* the headset's frame (xrWaitFrame's answer); wait = ticks spent in xrWaitFrame */
+void perf_picture_begin(void); /* drawing thread: first thing in each picture (the clock-speed probe) */
+/* drawing thread, right after SDL_GL_SwapWindow; period_ms = the display's refresh period, 0 = not paced by vsync */
+void perf_swapped(double period_ms);
 void perf_vr_frame(int64_t display_ns, int64_t period_ns, bool render, uint64_t wait);
 void perf_gpu_add(int slot, double ms);
 void perf_gpu_available(bool yes, const char *why);

@@ -991,6 +991,15 @@ static void update_swap_interval(bool vr)
 	current = want;
 }
 
+/* The window's display refresh period in ms (60 Hz if SDL does not say) */
+static double refresh_period_ms(void)
+{
+	SDL_DisplayMode m;
+	if (window && SDL_GetWindowDisplayMode(window, &m) == 0 && m.refresh_rate > 0)
+		return 1000.0 / m.refresh_rate;
+	return 1000.0 / 60.0;
+}
+
 /* The emulator menu's picture for its screen in the cockpit (PLACE_MENU),
  * while the menu is open: 0 if it is not. Mipmapped, as it is seen small;
  * what no window covers is clear. */
@@ -1782,6 +1791,7 @@ static void draw_fps(int w, int h)
 /* One picture: the headset's (if any), then the window's */
 static void draw_picture(bool with_menu)
 {
+	perf_picture_begin();
 	Uint64 lap = SDL_GetPerformanceCounter(), pic0 = lap;
 	bool new_frame = acquire_frame();
 	log_rates(new_frame);
@@ -1833,7 +1843,10 @@ static void draw_picture(bool with_menu)
 	last_draw_ticks = SDL_GetTicks();
 	Uint64 swap0 = SDL_GetPerformanceCounter();
 	if (window_seen)
+	{
 		SDL_GL_SwapWindow(window);
+		perf_swapped(!vr_running() && SDL_GL_GetSwapInterval() == 1 ? refresh_period_ms() : 0);
+	}
 	stage_ms[5] += stage_lap(&lap);
 	if (prof_on)
 		prof_render_add(pic0, swap0, SDL_GetPerformanceCounter());

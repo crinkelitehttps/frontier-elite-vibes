@@ -220,3 +220,42 @@ int main(int c, char **v)
 	return 0;
 }
 ```
+
+## Results so far (2026-11-11, Sonnet session)
+
+Steps 1 and 2 implemented, uncommitted: `perf_log.c` (missed refreshes, clock factor probe in the PERF lines),
+`cpu_boost.c/.h` (`cpu_boost` cfg, 0 = off, default 1024; cog-menu checkbox on Linux). Scratch build, modded
+only, 1920x1080 vsync on, user's cfg, user's own game running at the same time. Snap27 does not exist on
+disk, so London = `new 4` (landed at London); Mars = `new 2`; KSC2 loads in rear view. 50-70 s each.
+
+| Scene | boost | picture cpu p50/p95 ms | missed refreshes | clock factor p50/p95 |
+|---|---|---|---|---|
+| KSC2 | off (3 runs) | 4.5-5.0 / 6.5-7.0 | 0.13% | 3.1 / 3.5-4.1 |
+| KSC2 | 1024 (2 runs) | 3.5-4.0 / 4.5-5.5 | 0.10-0.17% | 3.1 / 4.1 |
+| London | off (3 runs) | 10.0 / 15.5-16.5 | 0.10% | 2.9-3.1 / 3.3-3.8 |
+| London | 1024 (2 runs) | 9.5-10.0 / 13.5-15.5 | 0.10-0.13% | 3.1 / 3.5-3.8 |
+| Mars landed | off (3 runs) | 19.0 / 28.5 | 18-20% | 1.2 / 1.5-1.7 |
+| Mars landed | 1024 (2 runs) | 20.0 / 29-29.5 | 20-21% | 1.2-1.3 / 1.7-2.5 |
+
+(512 gave the same as off on KSC2/London; Mars worse, probably noise from the user's game.)
+
+- Finding 1 holds in the game: the render thread runs at factor ~3 (slow clock) in light scenes.
+- The clamp helps only a little: p95 down ~1.5-2 ms in KSC2, ~1-2 ms in London, and the probe's factor stays 3.1
+  (a 20 us probe at the start of a picture still sees the slow clock; the render thread also hops cores).
+- Missed refreshes in KSC2/London are already ~0.1%. The real misses are Mars landed: picture CPU is 19 ms p50
+  at near-full clock (factor 1.2), so that scene is step 4 work, not clock work.
+
+Update: the clamp (step 2) was removed again: gain 1-2 ms p95 in light scenes, nothing where it matters, and the
+user felt a slight slowdown. `cpu_boost.c/.h` and the option are gone. The PERF logging stays.
+
+## Step 4 profile (2026-11-11)
+
+Save `Snap29` (London, low flight; `load Snap29; waitgame; poke b a6+706 0; wait 2; click 22 182`, it crashes after
+~20 s) reproduces the drops: vsync on, 9% of refreshes missed, picture CPU p50 16 / p95 27 ms. (`Snap27` is gone.)
+Uncapped, per picture: window 16 ms = sky stage 8 (model runs + placement 3.4 per game frame, sort 0.4, spans 0.3,
+shadow setup 1.2, planet/atmosphere/far discs ~2.5) + native draw 3.6 + overlays; cockpit screens 2.3.
+Re-running models: periodic bursts (models 4-8, 12, 13 every ~9 frames, scale/key) cost only ~1 ms: not the cause.
+Model 48 (the big London/Mars settlement, 14000 faces, 2000 nodes) costs ~1.0 ms/frame reused (cache_place 0.55 +
+checks 0.35) + 0.56 as shadow caster. Model 44 re-runs every frame (var 0), 0.22 ms.
+Settings A/B in the London flight, uncapped, picture CPU p95 ms: all on 18.5; map/ship screens off 18; camera_hires
+off 17.5; detail x4 -> x2 15; **all shadows off 13**. Shadows are the biggest single cost (~5 ms p95).
