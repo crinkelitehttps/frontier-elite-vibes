@@ -657,6 +657,25 @@ static int ship_nearer(const void *a, const void *b)
 	return x < y ? -1 : x > y;
 }
 
+bool cheat_body_distance_km(int slot, double *km)
+{
+	if (!ship() || slot <= 0 || slot >= OBJECT_SLOTS || !rdbyte(FE2_big_space + slot))
+		return false;
+	pos64 base[3], me[3], at[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	u32 o = slot_object(slot);
+	abs_pos((u8)rdbyte(o + OBJ_PARENT), at);
+	double sum = 0.0;
+	for (int a = 0; a < 3; a++)
+	{
+		me[a] = base[a] + obj_pos(ship(), a);
+		double d = (double)(at[a] + obj_pos(o, a) - me[a]) / MM_PER_KM;
+		sum += d * d;
+	}
+	*km = sqrt(sum);
+	return true;
+}
+
 int cheat_ships(CheatShip *out)
 {
 	if (!ship())

@@ -87,6 +87,25 @@ static int step_down_key(int index)
 	return index >= 12 ? KEY_1000X : index >= 10 ? KEY_100X : index >= 7 ? KEY_10X : KEY_1X;
 }
 
+void time_guard_cap(double max_frame_seconds)
+{
+	static int cooldown;
+	if (cooldown > 0)
+	{
+		cooldown--;
+		return;
+	}
+	const int rate = (int)rdlong(a6(A6_RATE));
+	const int index = (int)(uint16_t)rdword(a6(A6_RATE_INDEX));
+	if (index <= 0 || index >= HYPERSPACE_INDEX || rate <= 0 || (double)rate / GAME_SECOND <= max_frame_seconds)
+		return;
+	if ((rdbyte(a6(A6_MODAL)) & 1) || rdbyte(a6(A6_SCANCODE_ASCII)))
+		return; /* a screen is taking keys, or one is waiting: the next frame */
+	wrbyte(a6(A6_PUSHED_ASCII), (rdbyte(a6(A6_UNDER_ATTACK)) & 2) ? KEY_1X : step_down_key(index));
+	wrbyte(a6(A6_SCANCODE_ASCII), 0xff);
+	cooldown = STEP_FRAMES;
+}
+
 void time_guard_update(void)
 {
 	static uint32_t last_time;

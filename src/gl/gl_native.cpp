@@ -40,6 +40,7 @@ extern "C"
 #include "custom_system.h"
 #include "custom_ships.h"
 #include "main.h"
+#include "orbit_plan.h"
 #include "scenery.h"
 }
 
@@ -522,6 +523,7 @@ struct Frame
 	int map_par = 0;
 	double map_r[3];
 	MapOrbit orbit;
+	MapOrbit plan; /* the orbit the autopilot is to fly (orbit_plan.h) */
 	/* The system map's objects, where they are only (native_object_pos):
 	 * the map is the game's own drawing, they aren't drawn natively */
 	struct MapPos
@@ -1112,6 +1114,7 @@ extern "C" void native_reset(void)
 	rec.map_ship = 0;
 	rec.nmpos = 0;
 	rec.orbit.n = 0;
+	rec.plan.n = 0;
 }
 
 /* The ship's orbit in the system map. The map has its own copy of the
@@ -1133,7 +1136,8 @@ static bool map_log()
 static void map_orbit_build(Frame &f, bool page = false)
 {
 	f.orbit.n = 0;
-	ConicElems el;
+	f.plan.n = 0;
+	ConicElems el, pel;
 	/* GLF_MAP_LOG: why there is none, each time that changes while the map is up */
 	static int why = -1;
 	int now = !f.cam_ok ? 1 : !hud_conic_elements(&el) ? 2 : 0;
@@ -1144,7 +1148,10 @@ static void map_orbit_build(Frame &f, bool page = false)
 				   orbit_display ? "on" : "off");
 		why = now;
 	}
-	if (now)
+	/* the orbit the player asked for, when it is round the body the map's ship is relative to (checked below) */
+	const OrbitPlan *wanted = orbit_plan_current();
+	bool have_plan = f.cam_ok && wanted->valid;
+	if (now && !have_plan)
 		return;
 	uint32_t ship = game_player_ship();
 	uint32_t space = (uint32_t)GAME_A6 + 17348;
@@ -1158,6 +1165,12 @@ static void map_orbit_build(Frame &f, bool page = false)
 					   (uint8_t)rdbyte(ship + 93), ship, (uint8_t)rdbyte(ship + 68));
 		return;
 	}
+	if (have_plan && wanted->body_slot != par)
+		have_plan = false;
+	if (now && !have_plan)
+		return;
+	if (have_plan)
+		orbit_plan_conic(wanted, wanted->radius, &pel);
 	uint32_t mp = space + (uint32_t)(int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)par);
 	float ps[3], pp[3], sh_s, sh_p;
 	bool has_s = native_object_pos(ms, ps, &sh_s), has_p = native_object_pos(mp, pp, &sh_p);
@@ -1235,14 +1248,15 @@ static void map_orbit_build(Frame &f, bool page = false)
 		return;
 	double centre[3] = {lp * up[0], lp * up[1], lp * up[2]};
 	double k = 1; /* position units */
-	double rad_view = el.radius;
+	auto build = [&](const ConicElems &e, MapOrbit &out) {
+	double rad_view = e.radius;
 	/* the path: a closed orbit all round, an escape out to 20 times the
 	 * larger of its periapsis and the ship's distance */
 	double nu0 = -3.14159265358979, nu1 = 3.14159265358979;
-	if (!el.closed)
+	if (!e.closed)
 	{
-		double rmax = 20 * std::max(el.rp, std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]));
-		double lim = std::min(el.lim, std::acos(std::max(-1.0, std::min(1.0, (el.p / rmax - 1) / el.e))));
+		double rmax = 20 * std::max(e.rp, std::sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]));
+		double lim = std::min(e.lim, std::acos(std::max(-1.0, std::min(1.0, (e.p / rmax - 1) / e.e))));
 		nu0 = -lim;
 		nu1 = lim;
 	}
@@ -1250,9 +1264,9 @@ static void map_orbit_build(Frame &f, bool page = false)
 	int n = MAP_ORBIT_PTS - 1;
 	for (int j = 0; j <= n; j++)
 	{
-		double nu = nu0 + (nu1 - nu0) * j / n, rad = el.p / (1 + el.e * std::cos(nu)), w[3], c[3];
+		double nu = nu0 + (nu1 - nu0) * j / n, rad = e.p / (1 + e.e * std::cos(nu)), w[3], c[3];
 		for (int i = 0; i < 3; i++)
-			w[i] = rad * (std::cos(nu) * el.pe[i] + std::sin(nu) * el.q[i]);
+			w[i] = rad * (std::cos(nu) * e.pe[i] + std::sin(nu) * e.q[i]);
 		for (int i = 0; i < 3; i++)
 			c[i] = A[i][0] * w[0] + A[i][1] * w[1] + A[i][2] * w[2];
 		c[2] = -c[2];
@@ -1270,7 +1284,7 @@ static void map_orbit_build(Frame &f, bool page = false)
 			cc += centre[i] * centre[i];
 		}
 		double disc = b * b - 4 * a * cc, t = a > 0 ? (-b - std::sqrt(std::max(disc, 0.0))) / (2 * a) : 2;
-		f.orbit.hid[j] = disc > 0 && t > 0 && t < 1;
+		out.hid[j] = disc > 0 && t > 0 && t < 1;
 	}
 	/* a uniform scale about the eye changes nothing seen; it takes the
 	 * numbers, in position units, well beyond the projection's near plane */
@@ -1279,20 +1293,31 @@ static void map_orbit_build(Frame &f, bool page = false)
 		s = 5e9 / big;
 	for (int j = 0; j <= n; j++)
 		for (int i = 0; i < 3; i++)
-			f.orbit.pt[j][i] = (float)(pts[j][i] * s);
-	f.orbit.n = n + 1;
+			out.pt[j][i] = (float)(pts[j][i] * s);
+	};
+	if (!now)
+		build(el, f.orbit);
+	if (have_plan)
+		build(pel, f.plan);
 }
 
 static void map_orbit_draw(const Frame &f)
 {
-	if (f.orbit.n < 2)
-		return;
 	gd_set_depth(nullptr);
-	gd_color3f(0.0f, 1.0f, 0.0f);
-	/* not where it passes behind the planet */
-	for (int i = 0; i + 1 < f.orbit.n; i++)
-		if (!(f.orbit.hid[i] || f.orbit.hid[i + 1]))
-			gd_line(f.orbit.pt[i], f.orbit.pt[i + 1]);
+	/* the ship's orbit green, the planned one cyan; not where they pass behind the planet */
+	const MapOrbit *o[2] = {&f.orbit, &f.plan};
+	for (int k = 0; k < 2; k++)
+	{
+		if (o[k]->n < 2)
+			continue;
+		if (k == 0)
+			gd_color3f(0.0f, 1.0f, 0.0f);
+		else
+			gd_color3f(0.0f, 1.0f, 1.0f);
+		for (int i = 0; i + 1 < o[k]->n; i++)
+			if (!(o[k]->hid[i] || o[k]->hid[i + 1]))
+				gd_line(o[k]->pt[i], o[k]->pt[i + 1]);
+	}
 }
 
 /* A far disc (a sun, a far planet's dot) is only put when a pass of the
@@ -3783,7 +3808,7 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 	bool same = key_same && cache_inputs_same(o, e);
 	static const bool dbg = getenv("GLF_NATIVE_CACHE") && atoi(getenv("GLF_NATIVE_CACHE")) == 2;
 	std::string why;
-	/* GLF_NATIVE_CACHE=2: an object taking over 3 ms is logged */
+	/* GLF_NATIVE_CACHE=2: an object taking over 3 ms (GLF_NATIVE_SLOW_MS) is logged */
 	struct Slow
 	{
 		bool on;
@@ -3799,7 +3824,8 @@ void cached_run(const Object &o, Drawn &d, bool casting, int &ran, int &reused, 
 			if (!on)
 				return;
 			double ms = (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency();
-			if (ms > 3)
+			static const double slow_ms = getenv("GLF_NATIVE_SLOW_MS") ? atof(getenv("GLF_NATIVE_SLOW_MS")) : 3;
+			if (ms > slow_ms)
 				log_printf("native slow object: model %d%s %.1f ms, %s (%s), %zu faces\n", o.model, casting ? " casting" : "",
 						   ms, ran != ran0 ? "ran" : "reused", why.empty() ? "-" : why.c_str(), e.rec.faces.size());
 		}

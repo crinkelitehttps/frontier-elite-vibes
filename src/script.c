@@ -36,6 +36,19 @@
  *     astlog N [VX VY VZ] for the next N host updates print one line each: game seconds, asteroid
  *                        count/cap, then every asteroid (slot, km from the ship per axis, +95 byte);
  *                        with VX VY VZ also hold the ship's raw velocity (+98) at that each update
+ *     circ               circular orbit at the current radius, engines off (orbit_probe.c)
+ *     orbitlog N K       N ORBIT lines (pe, ap, e, speed), one every K host updates
+ *     plan [HP HA [INC NODE ARGPE]]  describe the body/pole/ship orbit; with apsis altitudes (km) work out the
+ *                        wanted orbit ("-" leaves INC, NODE or ARGPE, in degrees, to the program) and check it
+ *                        (orbit_plan.c)
+ *     target NAME        make the body NAME the ship's target
+ *     orbitplan HP HA [INC NODE ARGPE]  the planned orbit as the ORBIT page makes it (round the target if it is a
+ *                        body, else the frame's body)
+ *     engage, disengage, apstatus  the ORBIT page's ENGAGE (orbit autopilot): on, off, what it says
+ *     giveautopilot      fit the Automatic Pilot (test)
+ *     fly [A [K]]        guide the ship into the planned orbit (orbit_guide.c): each host update its velocity is
+ *                        changed towards the wanted one by at most A m/s^2 (default 10); logs a GUIDE line every K
+ *                        updates (default 50) and when it is done. flystop ends it
  *     snap               write savs/SnapNN
  *     echo TEXT
  *     quit
@@ -59,6 +72,9 @@
 #include "game_state.h"
 #include "host.h"
 #include "input.h"
+#include "orbit_guide.h"
+#include "orbit_plan.h"
+#include "orbit_probe.h"
 #include "state_file.h"
 
 #define MAX_QUEUE 512
@@ -463,6 +479,66 @@ static void run(char *line)
 		cmd_dust();
 	else if (!strcmp(line, "astlog"))
 		astlog_hold = sscanf(args, "%d %d %d %d", &astlog_left, &astlog_vel[0], &astlog_vel[1], &astlog_vel[2]) == 4;
+	else if (!strcmp(line, "circ"))
+		orbit_probe_circ();
+	else if (!strcmp(line, "orbitlog"))
+	{
+		int n = 0, k = 1;
+		sscanf(args, "%d %d", &n, &k);
+		orbit_probe_start(n, k);
+	}
+	else if (!strcmp(line, "plan"))
+		orbit_plan_script(args);
+	else if (!strcmp(line, "target"))
+	{
+		CheatBody bodies[64];
+		int count = cheat_bodies(bodies, 64), found = 0;
+		for (int i = 0; i < count && !found; i++)
+			if (!strcasecmp(bodies[i].name, args))
+				found = bodies[i].slot;
+		if (found)
+			cheat_set_target(found);
+		say("target %s: %s", args, found ? "set" : "no such body");
+	}
+	else if (!strcmp(line, "orbitplan"))
+	{
+		/* the plan as the ORBIT page makes it (round the target if it is a body, else the frame body) */
+		char t[5][32] = {"", "", "-", "-", "-"};
+		sscanf(args, "%31s %31s %31s %31s %31s", t[0], t[1], t[2], t[3], t[4]);
+		OrbitSpec spec;
+		memset(&spec, 0, sizeof spec);
+		spec.hp_km = atof(t[0]);
+		spec.ha_km = atof(t[1]);
+		if (strcmp(t[2], "-"))
+			spec.has_inc = true, spec.inc_deg = atof(t[2]);
+		if (strcmp(t[3], "-"))
+			spec.has_node = true, spec.node_deg = atof(t[3]);
+		if (strcmp(t[4], "-"))
+			spec.has_argpe = true, spec.argpe_deg = atof(t[4]);
+		bool ok = orbit_plan_set(&spec);
+		say("orbitplan: %s round %s", ok ? "set" : "failed", ok ? orbit_plan_current()->body_name : "?");
+	}
+	else if (!strcmp(line, "engage"))
+		orbit_ap_request(true);
+	else if (!strcmp(line, "disengage"))
+		orbit_ap_request(false);
+	else if (!strcmp(line, "apstatus"))
+		say("apstatus: %s (%s)", orbit_ap_status(), orbit_ap_active() ? "on" : "off");
+	else if (!strcmp(line, "giveautopilot"))
+	{
+		uint32_t ship = game_player_ship();
+		if (ship)
+			wrlong(ship + 158, (uint32_t)rdlong(ship + 158) | 0x20);
+	}
+	else if (!strcmp(line, "fly"))
+	{
+		double a = 10;
+		int every = 50;
+		sscanf(args, "%lf %d", &a, &every);
+		orbit_fly_start(a, every);
+	}
+	else if (!strcmp(line, "flystop"))
+		orbit_fly_stop();
 	else if (!strcmp(line, "snap"))
 	{
 		char name[32];
@@ -542,6 +618,8 @@ void script_poll(void)
 {
 	read_control();
 	astlog_poll();
+	orbit_probe_poll();
+	orbit_fly_poll();
 	for (int guard = 0; guard < 64; guard++)
 	{
 		if (waiting != IDLE)

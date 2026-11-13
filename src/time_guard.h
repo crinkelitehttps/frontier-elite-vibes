@@ -28,6 +28,11 @@ extern int time_guard_seconds; /* 0 = off; a setting */
 /* Game thread, from the host update; does its work once per game frame */
 void time_guard_update(void);
 
+/* Steps the rate down (by the game's own key, one step a few frames apart) while one frame would be more than
+ * `max_frame_seconds` of game time: for something that must not cross a distance in a frame (the orbit autopilot, near
+ * its body). */
+void time_guard_cap(double max_frame_seconds);
+
 #ifdef __cplusplus
 }
 #endif

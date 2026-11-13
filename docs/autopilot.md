@@ -14,6 +14,8 @@ Labels like `L6199c` are labels in `fe2/fe2.s`. `NNN(a6)` is a game global, `NNN
 object (field list in the AI doc, section 2.2). Message numbers like `$98a3` are string ids (`$86xx` are entries of the
 table at `L653c8`, `$98xx` of the table at `L79280`).
 
+See also: `docs/orbit-autopilot.md` (circular-orbit measurements, plan for an orbit mode).
+
 ## 1. Short version
 
 - The autopilot is the equipment item **Automatic Pilot** (140 credits, 1 t, bit 5 of the ship's equipment flags

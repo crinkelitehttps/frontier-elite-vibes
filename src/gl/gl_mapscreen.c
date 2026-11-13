@@ -1,6 +1,8 @@
 /*
  * gl_mapscreen.c - see gl_mapscreen.h.
  */
+#include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,8 @@
 #include "hostcall.h"
 #include "input.h"
 #include "m68000.h"
+#include "orbit_guide.h"
+#include "orbit_plan.h"
 #include "renderer.h"
 #include "screen_text.h"
 
@@ -104,6 +108,7 @@ enum
 	EXTRA_NONE,
 	EXTRA_SHIPS,
 	EXTRA_DEBUG,
+	EXTRA_ORBIT,
 };
 /* The ship log page (320 x 168): a header, then rows of two lines, and arrows on the right. A tap on
  * a row makes that ship the target. */
@@ -116,6 +121,29 @@ enum
 #define LOG_ARROW_H      24
 #define LOG_REPEAT_DELAY 12 /* batches an arrow is held before it repeats, then how often */
 #define LOG_REPEAT_EVERY 4
+
+/* The ORBIT page (320 x 168): a keypad on the left, the orbit's numbers on the right (docs/orbit-autopilot-plan.md
+ * section 3). The keys type into the selected field; what is typed makes the plan (orbit_plan.h) at once. */
+#define OP_KEY_W     26
+#define OP_KEY_H     22
+#define OP_KEY_X0    8
+#define OP_KEY_Y0    14
+#define OP_KEY_DX    30
+#define OP_KEY_DY    25
+#define OP_FIELDS    5 /* typed: periapsis, apoapsis, inclination, node, argument of periapsis */
+#define OP_LABEL_X   116
+#define OP_FIELD_X0  214
+#define OP_FIELD_X1  314
+#define OP_FIELD_Y0  14
+#define OP_FIELD_DY  20
+#define OP_FIELD_H   16
+#define OP_TEXT_MAX  7
+#define OP_BTN_Y0    150
+#define OP_BTN_Y1    164
+#define OP_ENGAGE_X0 8
+#define OP_ENGAGE_X1 110
+#define OP_CLEAR_X0  118
+#define OP_CLEAR_X1  230
 
 /* L457d8, the modules' fn 16 loop, is 0x7c before L45854 (no label) */
 #define MODULES_FN16 (FE2_CallHUDModfuncs - 0x7c)
@@ -937,6 +965,110 @@ static bool ship_log_input(const Pointer *p)
 	return true;
 }
 
+static const char *const op_key_label[4][3] = {{"7", "8", "9"}, {"4", "5", "6"}, {"1", "2", "3"}, {"0", "DEL", "CLR"}};
+static const char *const op_label[OP_FIELDS + 1] = {"PERIAPSIS KM", "APOAPSIS KM", "INCLINATION DEG",
+													"NODE LONG DEG", "ARG OF PE DEG", "PLANE"};
+static struct
+{
+	char text[OP_FIELDS][OP_TEXT_MAX + 1]; /* what is typed, digits; empty is left to the program (auto) */
+	int sel;	  /* the field the keypad types into, -1 none (the keyboard is never the page's: the flight's keys are not touched) */
+	bool started; /* the defaults (a 100 km equatorial orbit) have been put in */
+} orbit_ui = {.sel = -1};
+
+/* The plan for what is typed: both apsides, and what else is typed. The first two empty: no plan. */
+static void orbit_ui_apply(void)
+{
+	if (!orbit_ui.text[0][0] || !orbit_ui.text[1][0])
+	{
+		orbit_plan_clear();
+		return;
+	}
+	OrbitSpec spec;
+	memset(&spec, 0, sizeof spec);
+	spec.hp_km = atof(orbit_ui.text[0]);
+	spec.ha_km = atof(orbit_ui.text[1]);
+	if (orbit_ui.text[2][0])
+		spec.has_inc = true, spec.inc_deg = atof(orbit_ui.text[2]);
+	if (orbit_ui.text[3][0])
+		spec.has_node = true, spec.node_deg = atof(orbit_ui.text[3]);
+	if (orbit_ui.text[4][0])
+		spec.has_argpe = true, spec.argpe_deg = atof(orbit_ui.text[4]);
+	orbit_plan_set(&spec);
+}
+
+/* A keypad key or a typed one for the selected field: a digit, 'b' backspace, 'c' clear it */
+static void orbit_ui_key(int ch)
+{
+	if (orbit_ui.sel < 0)
+		orbit_ui.sel = 0;
+	char *t = orbit_ui.text[orbit_ui.sel];
+	size_t n = strlen(t);
+	if (ch >= '0' && ch <= '9')
+	{
+		if (n < OP_TEXT_MAX)
+			t[n] = (char)ch, t[n + 1] = 0;
+	}
+	else if (ch == 'b')
+	{
+		if (n)
+			t[n - 1] = 0;
+	}
+	else if (ch == 'c')
+		t[0] = 0;
+	orbit_ui_apply();
+}
+
+static void orbit_ui_clear_all(void)
+{
+	orbit_ap_request(false);
+	memset(orbit_ui.text, 0, sizeof orbit_ui.text);
+	orbit_ui.started = true;
+	orbit_plan_clear();
+}
+
+/* A press on the ORBIT page: true when it was on one of its keys, fields or buttons */
+static bool orbit_page_input(const Pointer *p)
+{
+	if (!p->pressed)
+		return false;
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 3; c++)
+		{
+			int x0 = OP_KEY_X0 + c * OP_KEY_DX, y0 = OP_KEY_Y0 + r * OP_KEY_DY;
+			if (p->x >= x0 && p->x < x0 + OP_KEY_W && p->y >= y0 && p->y < y0 + OP_KEY_H)
+			{
+				orbit_ui_key(r < 3 ? '7' - 3 * r + c : "0bc"[c]);
+				return true;
+			}
+		}
+	for (int f = 0; f < OP_FIELDS; f++)
+	{
+		int y0 = OP_FIELD_Y0 + f * OP_FIELD_DY;
+		if (p->x >= OP_FIELD_X0 && p->x <= OP_FIELD_X1 && p->y >= y0 && p->y < y0 + OP_FIELD_H)
+		{
+			orbit_ui.sel = f;
+			return true;
+		}
+	}
+	if (p->y >= OP_BTN_Y0 && p->y <= OP_BTN_Y1)
+	{
+		if (p->x >= OP_CLEAR_X0 && p->x <= OP_CLEAR_X1)
+		{
+			orbit_ui_clear_all();
+			return true;
+		}
+		if (p->x >= OP_ENGAGE_X0 && p->x <= OP_ENGAGE_X1)
+		{
+			if (orbit_ap_active())
+				orbit_ap_request(false);
+			else if (orbit_plan_current()->valid)
+				orbit_ap_request(true);
+			return true;
+		}
+	}
+	return false;
+}
+
 static void take_input(int group, Batch *b)
 {
 	memset(b, 0, sizeof *b);
@@ -1019,7 +1151,7 @@ static void take_input(int group, Batch *b)
 		if (b->keys[i] == SCAN_F3)
 			b->turn = true;
 	b->nkeys = 0;
-	const bool own = ship.extra == EXTRA_SHIPS && ship_log_input(&b->p);
+	const bool own = (ship.extra == EXTRA_SHIPS && ship_log_input(&b->p)) || (ship.extra == EXTRA_ORBIT && orbit_page_input(&b->p));
 	if (b->p.pressed && !own)
 	{
 		int hit = -1;
@@ -1275,6 +1407,147 @@ static void draw_ship_log_page(MapPage *out)
 	draw_log_arrow(out, bottom - LOG_ARROW_H, false, ship.log_first < last_first ? bright : mid, dark);
 }
 
+static void draw_rect(MapPage *out, int x0, int y0, int x1, int y1, int col)
+{
+	fill_rect(out, x0, y0, x1, y0, col);
+	fill_rect(out, x0, y1, x1, y1, col);
+	fill_rect(out, x0, y0, x0, y1, col);
+	fill_rect(out, x1, y0, x1, y1, col);
+}
+
+static void draw_text_centred(MapPage *out, int x0, int x1, int y, int col, const char *text)
+{
+	draw_text(out, x0 + (x1 - x0 + 1 - text_width(text)) / 2, y, col, text);
+}
+
+/* A time as h/m/s, the largest two units */
+static void orbit_fmt_time(char *dst, size_t n, double sec)
+{
+	int t = (int)sec;
+	if (t >= 3600)
+		snprintf(dst, n, "%dH %02dM", t / 3600, t / 60 % 60);
+	else if (t >= 60)
+		snprintf(dst, n, "%dM %02dS", t / 60, t % 60);
+	else
+		snprintf(dst, n, "%dS", t);
+}
+
+/* The ORBIT page, in the map screen's colours: its dark green ground, the light green of its orbit lines for the
+ * text and the outlines, a dimmer green for what is not set */
+static void draw_orbit_page(MapPage *out)
+{
+	enum { DARK = 1, BRIGHT = 2, MID = 3 };
+	out->main_pal[DARK] = 0x030;
+	out->main_pal[BRIGHT] = 0x0f0;
+	out->main_pal[MID] = 0x060;
+	if (out->len_main < 4)
+		out->len_main = 4;
+	memset(out->screen, DARK, (size_t)320 * SHIP_PAGE_ROWS);
+	out->text.n = 0; /* (the game's page is gone) */
+
+	OrbitCtx ctx;
+	const int body = orbit_body_pick();
+	const bool have_body = body > 0 && orbit_ctx_body(body, &ctx);
+	const OrbitPlan *pl = orbit_plan_current();
+	if (have_body)
+	{
+		/* the first time: a simple 100 km equatorial orbit (circular, inclination 0) */
+		if (!orbit_ui.started)
+		{
+			orbit_ui.started = true;
+			snprintf(orbit_ui.text[0], sizeof orbit_ui.text[0], "100");
+			snprintf(orbit_ui.text[1], sizeof orbit_ui.text[1], "100");
+			snprintf(orbit_ui.text[2], sizeof orbit_ui.text[2], "0");
+			orbit_ui_apply();
+		}
+		/* the ship came to another body's frame, or the plan was lost: made again for what is typed */
+		else if ((!pl->valid || pl->body_slot != body) && !orbit_ap_active() && orbit_ui.text[0][0] && orbit_ui.text[1][0])
+			orbit_ui_apply();
+		pl = orbit_plan_current();
+	}
+	char title[64] = "ORBIT";
+	if (have_body)
+	{
+		char name[24];
+		snprintf(name, sizeof name, "%s", ctx.name);
+		for (char *c = name; *c; c++)
+			*c = (char)toupper((unsigned char)*c);
+		snprintf(title, sizeof title, "ORBIT ROUND %s", name);
+	}
+	draw_text(out, 4, 2, BRIGHT, title);
+	if (!have_body)
+	{
+		draw_text(out, 4, 30, MID, "NO BODY TO ORBIT HERE");
+		return;
+	}
+
+	/* the keypad */
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 3; c++)
+		{
+			int x0 = OP_KEY_X0 + c * OP_KEY_DX, y0 = OP_KEY_Y0 + r * OP_KEY_DY;
+			draw_rect(out, x0, y0, x0 + OP_KEY_W - 1, y0 + OP_KEY_H - 1, BRIGHT);
+			draw_text_centred(out, x0, x0 + OP_KEY_W - 1, y0 + (OP_KEY_H - 8) / 2, BRIGHT, op_key_label[r][c]);
+		}
+
+	/* the fields: a typed value, or AUTO and what the program took */
+	const double auto_val[3] = {pl->valid ? pl->el.inc * 180 / M_PI : 0, pl->valid ? pl->el.node * 180 / M_PI : 0,
+								pl->valid ? pl->el.argpe * 180 / M_PI : 0};
+	for (int f = 0; f <= OP_FIELDS; f++)
+	{
+		int y0 = OP_FIELD_Y0 + f * OP_FIELD_DY;
+		draw_text(out, OP_LABEL_X, y0 + (OP_FIELD_H - 8) / 2, f == OP_FIELDS ? MID : BRIGHT, op_label[f]);
+		const bool sel = f == orbit_ui.sel;
+		if (sel)
+			fill_rect(out, OP_FIELD_X0, y0, OP_FIELD_X1, y0 + OP_FIELD_H - 1, BRIGHT);
+		else
+			draw_rect(out, OP_FIELD_X0, y0, OP_FIELD_X1, y0 + OP_FIELD_H - 1, f == OP_FIELDS ? MID : BRIGHT);
+		char text[32] = "";
+		int col = sel ? DARK : BRIGHT;
+		if (f == OP_FIELDS)
+		{
+			snprintf(text, sizeof text, "EQUATOR");
+			col = MID;
+		}
+		else if (orbit_ui.text[f][0])
+			snprintf(text, sizeof text, "%s", orbit_ui.text[f]);
+		else if (f >= 2)
+		{
+			if (pl->valid)
+				snprintf(text, sizeof text, "AUTO %.0f", auto_val[f - 2]);
+			else
+				snprintf(text, sizeof text, "AUTO");
+			col = sel ? DARK : MID;
+		}
+		draw_text(out, OP_FIELD_X0 + 4, y0 + (OP_FIELD_H - 8) / 2, col, text);
+	}
+
+	/* what the orbit comes to */
+	if (pl->valid)
+	{
+		char line[80], per[24];
+		orbit_fmt_time(per, sizeof per, pl->period_s);
+		snprintf(line, sizeof line, "E %.4f  A %.0f KM  PERIOD %s", pl->el.e, pl->el.a * 4294.967296, per);
+		draw_text(out, 4, 132, BRIGHT, line);
+		snprintf(line, sizeof line, "SPEED AT PE %.2f  AT AP %.2f KM/S", pl->vp_kms, pl->va_kms);
+		draw_text(out, 4, 141, BRIGHT, line);
+	}
+	else
+		draw_text(out, 4, 132, MID, "TYPE PERIAPSIS AND APOAPSIS ALTITUDE");
+
+	/* the buttons: ENGAGE is lit when there is an orbit to fly, filled while the autopilot is on it */
+	const bool can = pl->valid, on = orbit_ap_active();
+	if (on)
+		fill_rect(out, OP_ENGAGE_X0, OP_BTN_Y0, OP_ENGAGE_X1, OP_BTN_Y1, BRIGHT);
+	else
+		draw_rect(out, OP_ENGAGE_X0, OP_BTN_Y0, OP_ENGAGE_X1, OP_BTN_Y1, can ? BRIGHT : MID);
+	draw_text_centred(out, OP_ENGAGE_X0, OP_ENGAGE_X1, OP_BTN_Y0 + 3, on ? DARK : can ? BRIGHT : MID,
+					  on ? "DISENGAGE" : "ENGAGE");
+	draw_rect(out, OP_CLEAR_X0, OP_BTN_Y0, OP_CLEAR_X1, OP_BTN_Y1, BRIGHT);
+	draw_text_centred(out, OP_CLEAR_X0, OP_CLEAR_X1, OP_BTN_Y0 + 3, BRIGHT, "CLEAR ORBIT");
+	draw_text(out, OP_CLEAR_X1 + 8, OP_BTN_Y0 + 3, BRIGHT, orbit_ap_status());
+}
+
 bool mapscreen_page(int group, MapPage *out)
 {
 	static bool failed[COCKPIT_SCREENS];
@@ -1322,11 +1595,13 @@ bool mapscreen_page(int group, MapPage *out)
 	if (is_ship && input.turn)
 	{
 		/* one turn past the game's last page (its next is the first) shows the
-		 * ship log, one more the debug page, and one more the first */
+		 * ship log, one more the orbit page, then the debug page, and one more the first */
 		if (ship.extra == EXTRA_DEBUG)
 			ship.extra = EXTRA_NONE;
-		else if (ship.extra == EXTRA_SHIPS)
+		else if (ship.extra == EXTRA_ORBIT)
 			ship.extra = EXTRA_DEBUG, input.turn = false;
+		else if (ship.extra == EXTRA_SHIPS)
+			ship.extra = EXTRA_ORBIT, orbit_ui.sel = -1, input.turn = false;
 		else if (ship.held && ship.state[4 + 1] == 0) /* (11959, the next page) */
 			ship.extra = EXTRA_SHIPS, input.turn = false;
 	}
@@ -1405,6 +1680,8 @@ bool mapscreen_page(int group, MapPage *out)
 	bool keep = false;
 	if (ok && is_ship && ship.extra == EXTRA_SHIPS)
 		draw_ship_log_page(out);
+	else if (ok && is_ship && ship.extra == EXTRA_ORBIT)
+		draw_orbit_page(out);
 	else if (ok && is_ship && ship.extra == EXTRA_DEBUG)
 		draw_debug_page(out);
 	if (ok)

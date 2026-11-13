@@ -165,6 +165,8 @@ void cheat_ship_set_velocity(const int raw[3]);
 /* The ship's current target (the object the panel shows and a missile goes for): the slot of its
  * object, 0 for none */
 int cheat_target(void);
+/* The distance in km from the ship to the centre of the body in `slot` (any body of the system, whatever frame it is in) */
+bool cheat_body_distance_km(int slot, double *km);
 /* Makes the object in `slot` the target (0: none). NULL or a reason. */
 const char *cheat_set_target(int slot);
 /* The target's registration, or its name if it is a body; "" for none */
