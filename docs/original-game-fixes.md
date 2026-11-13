@@ -278,6 +278,20 @@ uses the `move.b`'s flags). Modded: in the existing `Lfreecam_camera` hook. Meas
 Snap26: before, the sun's view position changed on one frame in 255 (same wrong value each time); after,
 1203 frames with one value.
 
+## 13. Gravity is worked out in 16 bits, so orbits wobble (`L43ed6`, `Lgrav_pre`)
+
+Symptom: a circular orbit at time acceleration is not circular: e up to 0.001 at 1000x and 0.002 at 10000x (Mars 300 km: the
+altitude moves 295-303 km), the semi-major axis creeps.
+Cause: `L43ed6` makes the pull `M r / |r|^3` by hand with 16 bit mantissas: r is cut to 16 bits, then r^2, r^3 and the mass
+division each lose bits again, a relative error of about 1e-4 that changes with the position (and with the shift the position
+needed), so the pull jitters from step to step. (At 10000x the step size adds a first-order integrator error on top.)
+Fix: a hook at the start of `L43ed6` (`jsr Lgrav_pre`, same size; it returns to the caller itself when the host did it) hands
+it to `Call_GravExact` (hcall `$af`): `dv = -mant * 2^(exp - 51) * dt * r / |r|^3` in double on the velocity words, with the
+game's own mass and the sigma = 1 calibration of fix 1 (`Lgrav_norm`). A negative mass is left to the original code.
+`glfrontier.cfg` `exact_gravity` (default on), Debug-menu check box, `GLF_EXACT_GRAV=0` for the original maths. Both variants.
+Measured, Mars 300 km: at 1000x e max 0.00106 -> 0.00012; at 10000x 0.00194 -> 0.00121 (the rest is the step size; a
+half-kick/drift/half-kick step would remove it); at 1x e < 1e-6. Details in `orbit-autopilot.md`.
+
 ## Known, not fixed
 
 - Speed bumps briefly at 20 km on a climb: `L61c26` in the player physics

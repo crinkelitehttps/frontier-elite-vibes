@@ -676,6 +676,19 @@ bool cheat_body_distance_km(int slot, double *km)
 	return true;
 }
 
+bool cheat_body_offset_km(int slot, double out[3])
+{
+	if (!ship() || slot <= 0 || slot >= OBJECT_SLOTS || !rdbyte(FE2_big_space + slot))
+		return false;
+	pos64 base[3], at[3];
+	abs_pos((u8)rdbyte(ship() + OBJ_PARENT), base);
+	u32 o = slot_object(slot);
+	abs_pos((u8)rdbyte(o + OBJ_PARENT), at);
+	for (int a = 0; a < 3; a++)
+		out[a] = (double)(at[a] + obj_pos(o, a) - base[a]) / MM_PER_KM;
+	return true;
+}
+
 int cheat_ships(CheatShip *out)
 {
 	if (!ship())

@@ -482,5 +482,6 @@
 #define FE2_Lscen_mdl1                               0xab33a /* Lscen_mdl1 */
 #define FE2_Lframe_soi                               0xab348 /* Lframe_soi */
 #define FE2_Lcsys_pad                                0xab374 /* Lcsys_pad */
+#define FE2_Lgrav_pre                                0xab3aa /* Lgrav_pre */
 
 #endif /* FE2_LABELS_H */

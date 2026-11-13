@@ -131,6 +131,47 @@ bool orbit_assist = true;
    it by the exact time (see Lpos_dt in fe2.s) */
 bool exact_step = true;
 
+/* Gravity of a parent on an orbiting object in double precision (hook Lgrav_pre in fe2.s). The game's own L43ed6 works in 16 bit
+   mantissas (r, r^2, r^3 and the mass division each cut to 16 bits: an error of about 1e-4 that varies with the position, which
+   wobbles an orbit by e of 0.001). a0 = the object, a1 = its parent, d7 = the time step. The change of the object's velocity words
+   (+98 longs, +192 fractions) is mass * dt * r / |r|^3 with mass = mantissa * 2^(exponent - 51), r in position units (2^32 mm): the
+   constants of orbit_probe.c / gl_hud.c, which the Lgrav_norm fix (the sigma = 1 calibration) made true for the game. d0 = 1 when
+   done; 0 leaves it to the game's code (a negative mass, which the original does odd things with). */
+bool exact_gravity = true;
+
+void Call_GravExact(void)
+{
+	static int env = -1;
+	if (env < 0)
+		env = getenv("GLF_EXACT_GRAV") ? atoi(getenv("GLF_EXACT_GRAV")) : 1;
+	SetReg(REG_D0, 0);
+	if (!exact_gravity || !env)
+		return;
+	uint32_t a0 = (uint32_t)GetReg(REG_A0), a1 = (uint32_t)GetReg(REG_A1);
+	double dt = (double)(uint32_t)GetReg(REG_D7);
+	int mant = (int16_t)rdword(a1 + 122), exp = (int16_t)rdword(a1 + 124);
+	if (mant < 0)
+		return;
+	SetReg(REG_D0, 1);
+	if (mant == 0)
+		return;
+	double r[3], l2 = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		r[i] = (double)(int32_t)rdlong(a0 + 56 + 4 * i) + (double)(uint32_t)rdlong(a0 + 44 + 4 * i) / 4294967296.0;
+		l2 += r[i] * r[i];
+	}
+	if (l2 <= 0)
+		return;
+	double f = -(double)mant * ldexp(1.0, exp - 51) * dt / (l2 * sqrt(l2));
+	for (int i = 0; i < 3; i++)
+	{
+		int64_t v = ((int64_t)(int32_t)rdlong(a0 + 98 + 4 * i) << 16) + (rdword(a0 + 192 + 2 * i) & 0xffff) + llround(r[i] * f * 65536.0);
+		wrlong(a0 + 98 + 4 * i, (uint32_t)(int32_t)(v >> 16));
+		wrword(a0 + 192 + 2 * i, (unsigned)(v & 0xffff));
+	}
+}
+
 void Call_ExactStep(void)
 {
 	SetReg(REG_D0, exact_step);
@@ -591,6 +632,7 @@ HOSTCALL hcalls[] = {
 	[0xac] = Call_ScenModel, /* scenery.h */
 	[0xad] = Call_FrameSoi, /* custom_system.h */
 	[0xae] = Call_CustomPad, /* custom_system.h */
+	[0xaf] = Call_GravExact,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

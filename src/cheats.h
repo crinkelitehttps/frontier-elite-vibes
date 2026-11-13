@@ -167,6 +167,8 @@ void cheat_ship_set_velocity(const int raw[3]);
 int cheat_target(void);
 /* The distance in km from the ship to the centre of the body in `slot` (any body of the system, whatever frame it is in) */
 bool cheat_body_distance_km(int slot, double *km);
+/* The centre of the body in `slot` from the centre of the ship's frame body, km, in the system's axes */
+bool cheat_body_offset_km(int slot, double out[3]);
 /* Makes the object in `slot` the target (0: none). NULL or a reason. */
 const char *cheat_set_target(int slot);
 /* The target's registration, or its name if it is a body; "" for none */

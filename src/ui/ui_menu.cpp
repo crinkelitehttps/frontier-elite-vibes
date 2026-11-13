@@ -234,6 +234,7 @@ void page_settings()
 	ui_heading("Flight");
 	wrapped_checkbox("Ship turns belly-down to a planet below 40 km", &orbit_assist);
 	wrapped_checkbox("Exact motion at every time acceleration step (orbits stay put)", &exact_step);
+	wrapped_checkbox("Exact gravity (double precision, smoother orbits)", &exact_gravity);
 	wrapped_checkbox("Smooth motion: game time by the real clock, a game frame per picture (off: the original 50 steps a second)", &realtime_clock);
 	wrapped_checkbox("Picture counter, top left: pictures a second, how many show new game time, longest wait for one", &show_fps);
 	wrapped_checkbox("Smoke trails of fast damaged ships stay near them (smoke takes the ship's speed over the limit below)", &smoke_inherit);

@@ -14,8 +14,12 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
+#include "cheats.h"
 #include "game_state.h"
+#include "orbit_plan.h"
 #include "host.h"
 
 #define A6_BIG_SPACE  14466
@@ -124,6 +128,108 @@ void orbit_probe_circ(void)
 		(s.rr - s.radius) * PU_KM, sqrt(s.uu) / s.k, s.e);
 }
 
+/* ---- pathlog: GLF_PATH_LOG=1 writes pathlog.csv, ten rows a second of real time, whatever the game is doing ----
+ * For flying a route by hand and reading it afterwards (the orbit autopilot's reference runs). Everything is relative to the
+ * target body (the selected target if it has gravity, else the frame body), in the system's axes (the game's body-axes
+ * regime is turned back by the body's matrix), so a run is the same whichever frame the game had the ship in:
+ *   pos, vel     ship from the body's centre (km), ship velocity (km/s)
+ *   nose         the ship's forward axis (unit)
+ *   thrust       the ship's thrust words (x y z, ship axes), rate = its rotation words, eng = engines-off flag
+ *   n_tgt        angle nose -> direction to the body, n_vel angle nose -> velocity, n_pro angle nose -> prograde... (deg)
+ *   pe ap e inc  the ship's orbit round the body when the ship is in its frame (km above the surface, degrees) */
+static void pathlog_poll(void)
+{
+	static FILE *f;
+	static int state; /* 0 not asked yet, 1 on, -1 off */
+	static struct timespec last;
+	static unsigned int shown_body;
+	if (state < 0)
+		return;
+	if (!state)
+	{
+		state = getenv("GLF_PATH_LOG") ? 1 : -1;
+		if (state < 0)
+			return;
+		f = fopen("pathlog.csv", "w");
+		if (!f)
+		{
+			state = -1;
+			return;
+		}
+		fprintf(f, "t_s,accel,body,frame,x_km,y_km,z_km,alt_km,vx_kms,vy_kms,vz_kms,speed_kms,vr_kms,vt_kms,"
+				   "nose_x,nose_y,nose_z,thr_x,thr_y,thr_z,rate_x,rate_y,rate_z,eng_off,flight,speed_set,"
+				   "nose_to_body_deg,nose_to_vel_deg,pe_km,ap_km,e,inc_deg\n");
+	}
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	if ((now.tv_sec - last.tv_sec) * 1000 + (now.tv_nsec - last.tv_nsec) / 1000000 < 100)
+		return;
+	last = now;
+	unsigned int ship = game_player_ship();
+	int slot = orbit_body_pick();
+	if (!ship || slot <= 0)
+		return;
+	OrbitCtx c, here;
+	if (!orbit_ctx_body(slot, &c))
+		return;
+	CheatPlayerMotion pm;
+	double off[3];
+	if (!cheat_player_motion(&pm) || !cheat_body_offset_km(slot, off))
+		return;
+	/* the ship's frame body: its regime says whether its axes are the system's */
+	int rot = 0;
+	if (orbit_ctx_get(&here) && here.regime == 255)
+		rot = 1;
+	double M[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+	if (rot)
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				M[i][j] = here.m[i][j];
+#define ROT(v, o) for (int i_ = 0; i_ < 3; i_++) (o)[i_] = M[i_][0] * (v)[0] + M[i_][1] * (v)[1] + M[i_][2] * (v)[2]
+	double up[3], vel[3], nose[3], vk[3], r[3];
+	for (int i = 0; i < 3; i++)
+		vk[i] = pm.vel_mps[i] / 1000.0;
+	ROT(pm.up_km, up);
+	ROT(vk, vel);
+	ROT(pm.axis[2], nose);
+	for (int i = 0; i < 3; i++)
+		r[i] = up[i] - off[i];
+	double rr = sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]), sp = sqrt(vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]);
+	double vr = rr > 0 ? (r[0] * vel[0] + r[1] * vel[1] + r[2] * vel[2]) / rr : 0;
+	double vt = sqrt(fmax(0, sp * sp - vr * vr));
+	double ang_body = rr > 0 ? acos(fmax(-1, fmin(1, -(r[0] * nose[0] + r[1] * nose[1] + r[2] * nose[2]) / rr))) * 180 / M_PI : 0;
+	double ang_vel = sp > 0 ? acos(fmax(-1, fmin(1, (vel[0] * nose[0] + vel[1] * nose[1] + vel[2] * nose[2]) / sp))) * 180 / M_PI : 0;
+	double pe = -1, ap = -1, e = -1, inc = -1;
+	if (here.ok && here.body_slot == slot)
+	{
+		OrbitEl el;
+		if (orbit_el_from_state(&here, here.r, here.u, &el))
+		{
+			pe = (el.rp - here.radius) * PU_KM;
+			ap = el.bound ? (el.ra - here.radius) * PU_KM : -1;
+			e = el.e;
+			inc = el.inc * 180 / M_PI;
+		}
+	}
+	if (shown_body != (unsigned)slot)
+	{
+		shown_body = (unsigned)slot;
+		fprintf(f, "# body %d %s radius %.1f km pole %.5f %.5f %.5f prime %.5f %.5f %.5f\n", slot, c.name, c.radius * PU_KM,
+			c.pole[0], c.pole[1], c.pole[2], c.prime[0], c.prime[1], c.prime[2]);
+	}
+	unsigned int a6 = GAME_A6;
+	double t = ((double)(unsigned int)rdlong(a6 + 528) * 4294967296.0 + (unsigned int)rdlong(a6 + 524)) / 49710.0;
+	char fr[24] = "";
+	if (here.ok)
+		snprintf(fr, sizeof fr, "%s", here.name);
+	fprintf(f, "%.1f,%u,%s,%s,%.1f,%.1f,%.1f,%.1f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.5f,%.2f\n",
+		t, (unsigned int)rdlong(a6 + A6_TICK_DT), c.name, fr, r[0], r[1], r[2], rr - c.radius * PU_KM, vel[0], vel[1], vel[2],
+		sp, vr, vt, nose[0], nose[1], nose[2], (short)rdword(ship + 140), (short)rdword(ship + 142), (short)rdword(ship + 144),
+		(short)rdword(ship + 134), (short)rdword(ship + 136), (short)rdword(ship + 138), rdbyte(a6 + 705) & 1, rdbyte(a6 + 704),
+		(int)rdlong(a6 + 848), ang_body, ang_vel, pe, ap, e, inc);
+	fflush(f);
+}
+
 void orbit_probe_start(int n, int k)
 {
 	left = n;
@@ -134,6 +240,7 @@ void orbit_probe_start(int n, int k)
 void orbit_probe_poll(void)
 {
 	static int row;
+	pathlog_poll();
 	if (left <= 0)
 		return;
 	if (countdown-- > 0)

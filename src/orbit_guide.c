@@ -363,6 +363,7 @@ enum { AP_OFF, AP_APPROACH, AP_FLYBY, AP_GUIDE };
 static struct
 {
 	int st;
+	uint8_t eng_flag; /* the engines-off bit as it was when the autopilot started: the pilot's, restored at the end */
 	int request; /* 1 engage, -1 cancel (from the page: it asks, the next update does) */
 	double last_clock;
 	int done_looks, log_countdown;
@@ -396,7 +397,12 @@ static void ap_stop(const char *why)
 	if (ship && ap.st != AP_OFF)
 	{
 		game_autopilot_off(ship);
-		engines_off(false);
+		/* The speed governor must not be left with the set speed it had (0 after the game's autopilot): with the engines-off flag
+		 * clear it brakes the ship to a stop at full thrust, which dropped the ship out of orbit twice. The set speed is the
+		 * present one, and after reaching the orbit the flag stays set (no governor, the ship coasts as in manual flight);
+		 * else it goes back to the pilot's. */
+		wrlong(GAME_A6 + A6_SPEED_SET, rdlong(GAME_A6 + A6_SPEED_NOW));
+		engines_off(!strcmp(why, "IN ORBIT") || (ap.eng_flag & 1));
 	}
 	ap.st = AP_OFF;
 	ap_status(why);
@@ -431,6 +437,7 @@ static void ap_start(const OrbitCtx *have)
 		ap_status("NO ORBIT");
 		return;
 	}
+	ap.eng_flag = (uint8_t)rdbyte(GAME_A6 + 705);
 	memset(&ap.g, 0, sizeof ap.g);
 	ap.cap_clock = 0;
 	ap.cap_frac = 0.1;
@@ -516,6 +523,15 @@ static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 		ap_status("GUIDING");
 		return;
 	}
+	if (fb.vr_frac >= -0.05 && sqrt(dot3(have->r, have->r)) > 1.3 * pl->el.rp)
+	{
+		/* turned round far out (an apoapsis, not the periapsis): the guidance has it from here */
+		ap.st = AP_GUIDE;
+		ap.cap_frac = 0.1;
+		orbit_guide_reset(&ap.g);
+		ap_status("GUIDING");
+		return;
+	}
 	if (fb.vr_frac >= -0.05)
 	{
 		double vs = sqrt(dot3(have->u, have->u)), vt = orbit_brake_speed(have, pl), u[3];
@@ -539,18 +555,48 @@ static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 	}
 	double amax = accel_pu(AP_ACCEL_MS2), dv[3] = {fb.uw[0] - have->u[0], fb.uw[1] - have->u[1], fb.uw[2] - have->u[2]};
 	double l = sqrt(dot3(dv, dv)), lim = amax * steps, f = l > lim ? lim / l : 1;
+	double brake = 0;
 	if (steps > 0)
 	{
 		double u[3];
 		for (int i = 0; i < 3; i++)
 			u[i] = have->u[i] + dv[i] * f;
+		/* The way a pilot does it (the pathlog of a manual approach to Aster): not one burn at the periapsis but a steady
+		 * braking along the motion (the nose stays prograde) over the whole inbound leg, at the rate that has the speed at
+		 * the periapsis the planned orbit's. The speed the ship would have there if it coasted, against the speed it
+		 * needs, shed over the time left to get there; with some margin so it is done before. What is left at the
+		 * periapsis the burn below takes. */
+		/* Not down to the planned orbit's energy yet: a ship with that energy cannot be farther out than the orbit is (for a
+		 * circular plan it would turn round at its apoapsis, short of the periapsis). The target is the ellipse with the
+		 * planned periapsis and an apoapsis 30% above where the ship is, which tightens as it falls in (the pilot's
+		 * capture orbit, apoapsis 22,000 km, was 1.6 times the radius at the end of the burn) */
+		double r = sqrt(dot3(have->r, have->r)), v = sqrt(dot3(u, u)), rp = pl->el.rp;
+		double ra_cap = fmax(pl->el.ra, 1.3 * r), a = 0.5 * (rp + ra_cap);
+		double vfree2 = v * v + 2 * have->mu * (1 / rp - 1 / r), vp2 = have->mu * (2 / rp - 1 / a);
+		if (r > rp && vfree2 > 0 && vp2 > 0 && v > 0)
+		{
+			double vfree = sqrt(vfree2), need = vfree - sqrt(vp2), tleft = (r - rp) / (0.5 * (v + vfree));
+			if (need > 0 && tleft > 0)
+			{
+				double areq = need / tleft * 1.3, db = areq > amax ? amax : areq;
+				db *= steps; /* tleft is in steps, as a velocity is a distance per step */
+				if (db > need)
+					db = need;
+				if (db > v)
+					db = v;
+				for (int i = 0; i < 3; i++)
+					u[i] *= 1 - db / v;
+				brake = db;
+			}
+		}
 		set_velocity(ship, have, u);
 	}
 	if (getenv("GLF_MAP_LOG") && ap.log_countdown-- <= 0)
 	{
 		ap.log_countdown = 12;
-		printf("FLYBY t=%.1f alt=%.0f km e=%.3f turn %.2f deg du %.3f km/s\n", clock / CLOCK_HZ,
-			(sqrt(dot3(have->r, have->r)) - have->radius) * PU_KM, fb.e, fb.turn_deg, l * f * PU_KM * CLOCK_HZ / REF_DT);
+		printf("FLYBY t=%.1f alt=%.0f km e=%.3f turn %.2f deg du %.3f km/s brake %.3f km/s\n", clock / CLOCK_HZ,
+			(sqrt(dot3(have->r, have->r)) - have->radius) * PU_KM, fb.e, fb.turn_deg, l * f * PU_KM * CLOCK_HZ / REF_DT,
+			brake * PU_KM * CLOCK_HZ / REF_DT);
 		fflush(stdout);
 	}
 }

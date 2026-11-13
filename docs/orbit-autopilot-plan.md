@@ -362,3 +362,34 @@ Changes, uncommitted, in all three builds:
 Not done / known: the plane change is spread over the arc; a body's orbit line on the map while the ship is not in its frame;
 only whole-number entry; the plane is fixed at the equator; the original game's own autopilot (F7) still flies into a planet at
 high time acceleration when ENGAGE is not used.
+
+## 14. Step 6 status (2026-11-13): the approach, from a manual flight (user-tested Merlin -> Aster)
+
+The flyby of step 5 (one burn at the periapsis) failed in the game. The user flew the approach by hand with the path logger
+(`GLF_PATH_LOG=1`, `pathlog.csv`, `orbit_probe.c` `pathlog_poll`, on in `glfrontier.sh`: ship position, velocity, nose, thrust
+words, flight state, set speed and orbit elements relative to the target body, 10 rows a second). The manual approach to a
+gas giant (Aster, radius 30,497 km), read from the log:
+
+1. Leave Merlin with the nose on the velocity (prograde burns, coasting between).
+2. Entering Aster's frame at 98,000 km the periapsis was inside the planet: a forward burn (nose 26-30 degrees off the
+   velocity) moved it to about 1,100 km altitude, a small one at 73,000 km to about 1,800 km. The plane was already near the
+   final one (8 degrees) and was not changed again.
+3. The capture is a steady retro burn (reverse thrust, the nose stays prograde) from about 28,000 km altitude down to
+   about 1,900 km, shedding speed over the whole inbound leg: the eccentricity fell from 6.5 to 0.25 (apoapsis 22,000 km, 1.6 times
+   the radius at the end of the burn), not an instant burn at the periapsis.
+4. A second short retro burn just after the periapsis lowered the apoapsis: final 880 x 2,300 km, e 0.02.
+
+What the autopilot does now (`flyby_poll`, `orbit_guide.c`): the aiming is as before (the velocity turned, at constant speed, so
+the periapsis is the planned one); added **continuous braking** along the motion, at the rate that has the speed at the
+periapsis the plan's, with 30% margin, capped at 200 m/s^2; the target is **not** the plan's energy but the ellipse with the
+planned periapsis and an apoapsis 30% above the ship's radius (tightening as it falls in): a ship with a circular plan's energy
+cannot be farther out than the orbit, and it turned round at its apoapsis, which the periapsis test took for the periapsis and
+the ship dived (first test). The periapsis burn (only when the ship is within 1.3 planned-periapsis radii) trims the rest. Else the
+guidance of step 4 takes over.
+
+**The handover** killed two tests: the ship was in a good orbit (968 km, e 0.001, planned 1000 km circular) and after IN ORBIT it
+fell. The speed governor (set speed, `848(a6)`) was 0 after the game's autopilot and the engines-off flag (`705(a6)` bit 0) was
+clear, so the governor braked the ship to a stop at full thrust. `ap_stop` now sets the set speed to the present one and, after
+reaching the orbit, leaves the engines-off flag set (coasting, as in manual flight); any other stop restores the flag as it was.
+Result: user confirmed Merlin -> Aster works and holds. See also `orbit-autopilot.md` ("Exact gravity") for the wobble of the orbit.
+

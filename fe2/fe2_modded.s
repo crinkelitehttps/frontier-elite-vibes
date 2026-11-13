@@ -212,6 +212,8 @@ Call_ScenModel	equ	$ac
 Call_FrameSoi	equ	$ad
 * Custom systems: a custom starport's pad or parking spot (a1 = port, d7 = index, d6 = table kind; d3-d5 out).
 Call_CustomPad	equ	$ae
+* Exact gravity: a1 = parent, a0 = object, d7 = time step; d0 = 1 if the host applied it (src/hostcall.c Call_GravExact).
+Call_GravExact	equ	$af
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -26178,8 +26180,9 @@ L43d48:
 	l43ed4:	rts
 
 L43ed6:
-		move.b	68(a0),d0
-		beq.s	l43ed4
+* Exact gravity hook, same size (see Lgrav_pre at the end of the file): it returns to the caller itself when it has
+* done the gravity, else comes back here for the game's own 16 bit maths.
+		jsr	Lgrav_pre
 		move.l	d7,-(a7)
 		bsr.w	L44af4
 		movem.l	44(a0),d0-5
@@ -69811,4 +69814,25 @@ Lcsys_pad:
 		moveq	#2,d6
 lcp_host:
 		hcall	#Call_CustomPad
+		rts
+
+
+* Exact gravity (L43ed6, hooked at its start; replaces move.b 68(a0),d0 / beq.s l43ed4, 6 bytes).
+* The game's pull is worked out by hand in 16 bit mantissas (r, r^2, r^3 and the mass division each cut to 16 bits), a
+* relative error of about 1e-4 that changes with the ship's position and wobbles an orbit by e about 0.001. The host does
+* it in double (Call_GravExact: a0 = object, a1 = its parent, d7 = the step), keeping the game's constant and the
+* sigma = 1 calibration of the Lgrav_norm fix. Returns to L43ed6's caller (the pushed return address dropped) when
+* there is no parent or the host did it; else returns into L43ed6 for the original code.
+Lgrav_pre:
+		move.b	68(a0),d0
+		beq.s	lgp_done
+		movem.l	d1-7/a1,-(a7)
+		jsr	L44af4
+		hcall	#Call_GravExact
+		tst.w	d0
+		movem.l	(a7)+,d1-7/a1
+		bne.s	lgp_done
+		move.b	68(a0),d0
+		rts
+lgp_done:	addq.l	#4,a7
 		rts

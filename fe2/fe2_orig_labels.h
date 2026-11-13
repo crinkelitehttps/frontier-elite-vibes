@@ -440,6 +440,7 @@
 #define FE2_Lscen_mdl1                               0x85450 /* Lscen_mdl1 */
 #define FE2_Lframe_soi                               0x8545e /* Lframe_soi */
 #define FE2_Lcsys_pad                                0x8548a /* Lcsys_pad */
+#define FE2_Lgrav_pre                                0x854c0 /* Lgrav_pre */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

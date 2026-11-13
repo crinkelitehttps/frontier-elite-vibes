@@ -51,3 +51,25 @@ Conclusions:
 - Default altitude: above the atmosphere (drag cutoff about 20 km, `L61c26`) plus a margin; stars and gas giants need their own minimum.
 - Open questions: why accelerated Jupiter orbits did not hold; whether the game's own acceleration keys give the one-frame kick; what the time guard (`time_guard.c`) does around an orbiting ship.
 - Test method: `circ` + `orbitlog` above; `new 2`, not `load Start2`.
+
+## Exact gravity (2026-11-13)
+
+The game's gravity (L43ed6) works in 16 bit mantissas (r, r^2, r^3 and the mass division each cut to 16 bits), a relative error of
+about 1e-4 that changes with the position. `Lgrav_pre` (end of both .s files, hooked at L43ed6's start) now hands it to
+`Call_GravExact` (hostcall.c, hcall $af), which does `dv = -mant * 2^(exp-51) * dt * r / |r|^3` in double on the velocity words.
+Switches: `exact_gravity` in glfrontier.cfg (default on), the Debug menu check box, `GLF_EXACT_GRAV=0` to compare.
+
+Mars 300 km circular orbit, 120 ORBIT lines (about 1 orbit at 1000x, 9 at 10000x), original against exact:
+
+| Rate | Gravity | e max / mean | pe..ap spread | semi-major axis |
+|---|---|---|---|---|
+| 1000x | original | 0.00106 / 0.00072 | 294.4..303.1 | 3698.16..3699.13 |
+| 1000x | exact | 0.00012 / 0.00007 | 299.1..300.1 | 3699.37..3699.66 |
+| 10000x | original | 0.00194 / 0.00118 | 287.4..301.9 | 3694.18..3694.99 |
+| 10000x | exact | 0.00121 / 0.00075 | 293.1..302.1 | 3697.33..3697.64 |
+| 1x | exact | < 1e-6 | | 3699.867 |
+
+At 1000x the wobble was mostly rounding (9 times smaller now). At 10000x what is left is the step size (a sub-step is about
+1.5 game seconds, the kick-then-move integrator is first order): the next step would be a half-kick / drift / half-kick
+(velocity Verlet) in `Lgrav_step`. Test harness: `orb.sh`-style `--do` script as above, after `goto Mars 300` wait 6 s
+(with 3 s the goto sometimes found no body called Mars).
