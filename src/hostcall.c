@@ -139,6 +139,18 @@ bool exact_step = true;
    done; 0 leaves it to the game's code (a negative mass, which the original does odd things with). */
 bool exact_gravity = true;
 
+/* The sub-steps of Lgrav_step as velocity Verlet (half kick, drift, kick ..., half kick) instead of kick, drift: second order,
+   so the wobble of an orbit at 10000x (a sub-step is about 1.5 game seconds) shrinks. GLF_LEAPFROG=0 for the original order. */
+bool leapfrog_gravity = true;
+
+void Call_Leapfrog(void)
+{
+	static int env = -1;
+	if (env < 0)
+		env = getenv("GLF_LEAPFROG") ? atoi(getenv("GLF_LEAPFROG")) : 1;
+	SetReg(REG_D0, leapfrog_gravity && env);
+}
+
 void Call_GravExact(void)
 {
 	static int env = -1;
@@ -633,6 +645,7 @@ HOSTCALL hcalls[] = {
 	[0xad] = Call_FrameSoi, /* custom_system.h */
 	[0xae] = Call_CustomPad, /* custom_system.h */
 	[0xaf] = Call_GravExact,
+	[0xb0] = Call_Leapfrog,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

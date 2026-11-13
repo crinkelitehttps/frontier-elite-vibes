@@ -22,6 +22,8 @@ extern bool exact_step;
 void Call_ExactStep(void);
 void Call_GravExact(void);
 extern bool exact_gravity;
+void Call_Leapfrog(void);
+extern bool leapfrog_gravity;
 extern bool smoke_inherit;
 extern int smoke_cap_ms;
 void Call_SmokeVel(void);

@@ -289,8 +289,10 @@ Fix: a hook at the start of `L43ed6` (`jsr Lgrav_pre`, same size; it returns to 
 it to `Call_GravExact` (hcall `$af`): `dv = -mant * 2^(exp - 51) * dt * r / |r|^3` in double on the velocity words, with the
 game's own mass and the sigma = 1 calibration of fix 1 (`Lgrav_norm`). A negative mass is left to the original code.
 `glfrontier.cfg` `exact_gravity` (default on), Debug-menu check box, `GLF_EXACT_GRAV=0` for the original maths. Both variants.
-Measured, Mars 300 km: at 1000x e max 0.00106 -> 0.00012; at 10000x 0.00194 -> 0.00121 (the rest is the step size; a
-half-kick/drift/half-kick step would remove it); at 1x e < 1e-6. Details in `orbit-autopilot.md`.
+The sub-steps of the player's ship (`Lgrav_step`) also run as velocity Verlet (half kick, drift, kick ..., half kick; hcall `$b0`,
+`leapfrog_gravity`, Debug-menu check box, `GLF_LEAPFROG=0`), which takes the first-order step error out. Measured, Mars 300 km:
+at 1000x e mean 0.00072 -> 0.00001; at 10000x 0.00118 -> 0.00004 (max 0.00194 -> 0.00059, one blip); at 1x e < 1e-6.
+Details in `orbit-autopilot.md`.
 
 ## Known, not fixed
 

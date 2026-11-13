@@ -75,6 +75,7 @@ typedef struct
 	int orbit_assist;
 	int exact_step;
 	int exact_gravity;
+	int leapfrog_gravity;
 	int realtime_clock;
 	int show_fps;
 	int smoke_inherit;
@@ -136,6 +137,7 @@ static const struct
 	{"orbit_assist", offsetof(Settings, orbit_assist)},
 	{"exact_step", offsetof(Settings, exact_step)},
 	{"exact_gravity", offsetof(Settings, exact_gravity)},
+	{"leapfrog_gravity", offsetof(Settings, leapfrog_gravity)},
 	{"realtime_clock", offsetof(Settings, realtime_clock)},
 	{"show_fps", offsetof(Settings, show_fps)},
 	{"smoke_inherit", offsetof(Settings, smoke_inherit)},
@@ -295,6 +297,7 @@ static Settings current(void)
 	s.orbit_assist = orbit_assist;
 	s.exact_step = exact_step;
 	s.exact_gravity = exact_gravity;
+	s.leapfrog_gravity = leapfrog_gravity;
 	s.realtime_clock = realtime_clock;
 	s.show_fps = show_fps;
 	s.smoke_inherit = smoke_inherit;
@@ -369,6 +372,7 @@ static void apply(const Settings *s)
 	orbit_assist = s->orbit_assist != 0;
 	exact_step = s->exact_step != 0;
 	exact_gravity = s->exact_gravity != 0;
+	leapfrog_gravity = s->leapfrog_gravity != 0;
 	realtime_clock = s->realtime_clock != 0;
 	show_fps = s->show_fps != 0;
 	smoke_inherit = s->smoke_inherit != 0;

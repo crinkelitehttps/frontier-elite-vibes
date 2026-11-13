@@ -69,7 +69,18 @@ Mars 300 km circular orbit, 120 ORBIT lines (about 1 orbit at 1000x, 9 at 10000x
 | 10000x | exact | 0.00121 / 0.00075 | 293.1..302.1 | 3697.33..3697.64 |
 | 1x | exact | < 1e-6 | | 3699.867 |
 
-At 1000x the wobble was mostly rounding (9 times smaller now). At 10000x what is left is the step size (a sub-step is about
-1.5 game seconds, the kick-then-move integrator is first order): the next step would be a half-kick / drift / half-kick
-(velocity Verlet) in `Lgrav_step`. Test harness: `orb.sh`-style `--do` script as above, after `goto Mars 300` wait 6 s
+Leapfrog (`Lgrav_step`, hcall `$b0` `Call_Leapfrog`, `leapfrog_gravity` in the cfg, Debug-menu check box, `GLF_LEAPFROG=0` for
+the old order): the sub-steps run as velocity Verlet, half a kick, then drift + kick for each sub-step, the last kick a half, so
+the velocity is a whole step's at the end of the frame. Only the player's ship is sub-stepped (other objects take one kick and
+one move a frame). Same Mars run, exact gravity on:
+
+| Rate | Order | e max / mean | pe..ap spread | semi-major axis (true 3699.88) |
+|---|---|---|---|---|
+| 1000x | kick, drift | 0.00012 / 0.00007 | 299.1..300.1 | 3699.37..3699.66 |
+| 1000x | leapfrog | 0.00006 / 0.00001 | 299.8..300.1 | 3699.60..3699.89 |
+| 10000x | kick, drift | 0.00121 / 0.00075 | 293.1..302.1 | 3697.33..3697.64 |
+| 10000x | leapfrog | 0.00059 (one row, e steady about 0.00002) / 0.00004 | 297.6..302.1 | 3699.56..3699.87 |
+
+At 1000x the wobble was mostly rounding (9 times smaller with exact gravity). At 10000x what was left is the step size (a
+sub-step is about 1.5 game seconds, the kick-then-move integrator is first order), which the leapfrog above removes. Test harness: `orb.sh`-style `--do` script as above, after `goto Mars 300` wait 6 s
 (with 3 s the goto sometimes found no body called Mars).

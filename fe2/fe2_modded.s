@@ -214,6 +214,8 @@ Call_FrameSoi	equ	$ad
 Call_CustomPad	equ	$ae
 * Exact gravity: a1 = parent, a0 = object, d7 = time step; d0 = 1 if the host applied it (src/hostcall.c Call_GravExact).
 Call_GravExact	equ	$af
+* Leapfrog sub-steps: d0 = 1 for the half-kick / drift / half-kick order in Lgrav_step (src/hostcall.c Call_Leapfrog).
+Call_Leapfrog	equ	$b0
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -68104,6 +68106,9 @@ lgrav_sub:
 		moveq	#1,d4
 		lsl.w	d0,d4
 		move.w	d4,-(a7)
+		hcall	#Call_Leapfrog
+		tst.w	d0
+		bne.w	lgrav_lf
 lgrav_loop:
 		movea.l	4(a7),a0
 		move.w	2(a7),d0
@@ -68124,6 +68129,44 @@ lgrav_mv:
 		jsr	570(a5)
 		subq.w	#1,(a7)
 		bne.s	lgrav_loop
+		movea.l	4(a7),a0
+		lea	8(a7),a7
+		rts
+
+* Leapfrog (velocity Verlet): half a kick, then each sub-step a drift and a kick (the last one half a kick), so the velocity
+* is a whole step's at the end and every kick is made at the middle of the drifts round it: the error of the step goes
+* from first order (kick, drift) to second. Same number of gravity calls plus one.
+lgrav_lf:
+		movea.l	4(a7),a0
+		move.w	2(a7),d0
+		move.l	14446(a6),d7
+		lsr.l	d0,d7
+		lsr.l	#1,d7
+		jsr	750(a5)
+lgrav_lf_loop:
+		movea.l	4(a7),a0
+		move.w	2(a7),d0
+		movem.l	696(a6),d2-3
+lgrav_lf_sh:
+		tst.w	d0
+		beq.s	lgrav_lf_mv
+		lsr.l	#1,d3
+		roxr.l	#1,d2
+		subq.w	#1,d0
+		bra.s	lgrav_lf_sh
+lgrav_lf_mv:
+		jsr	570(a5)
+		movea.l	4(a7),a0
+		move.w	2(a7),d0
+		move.l	14446(a6),d7
+		lsr.l	d0,d7
+		subq.w	#1,(a7)
+		beq.s	lgrav_lf_last
+		jsr	750(a5)
+		bra.s	lgrav_lf_loop
+lgrav_lf_last:
+		lsr.l	#1,d7
+		jsr	750(a5)
 		movea.l	4(a7),a0
 		lea	8(a7),a7
 		rts
