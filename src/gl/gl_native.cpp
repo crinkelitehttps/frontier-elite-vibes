@@ -1294,6 +1294,7 @@ static void map_orbit_build(Frame &f, bool page = false)
 	for (int j = 0; j <= n; j++)
 		for (int i = 0; i < 3; i++)
 			out.pt[j][i] = (float)(pts[j][i] * s);
+	out.n = n + 1;
 	};
 	if (!now)
 		build(el, f.orbit);

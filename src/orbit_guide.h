@@ -75,6 +75,8 @@ void orbit_fly_poll(void);
  * does, and it ends in orbit with the engines as they were. `orbit_ap_status` says what it is doing or why it stopped. */
 void orbit_ap_request(bool on);
 bool orbit_ap_active(void);
+/* True while the autopilot is flying the ship itself (flyby, guidance): the game skips the player's controls then */
+bool orbit_ap_controls_locked(void);
 const char *orbit_ap_status(void);
 
 #ifdef __cplusplus

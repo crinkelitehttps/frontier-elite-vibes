@@ -216,6 +216,8 @@ Call_CustomPad	equ	$ae
 Call_GravExact	equ	$af
 * Leapfrog sub-steps: d0 = 1 for the half-kick / drift / half-kick order in Lgrav_step (src/hostcall.c Call_Leapfrog).
 Call_Leapfrog	equ	$b0
+* Orbit autopilot flying the ship (flyby, guidance): d0 = 1 and the player's controls are skipped, as in the game's own autopilot (src/orbit_guide.c).
+Call_ApLock	equ	$b1
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -67687,6 +67689,14 @@ Lnative_text:
 * "tst.b A6_mod_player_active(a6) / bpl.w l62752" at the start of L62606_PlayerControlUpdate.
 ******************************************************************************
 Lscreen_controls:
+		move.l	d0,-(a7)
+		hcall	#Call_ApLock
+		tst.w	d0
+		movem.l	(a7)+,d0
+		beq.s	lscreen_controls_free
+		addq.l	#4,a7
+		jmp	l62752
+lscreen_controls_free:
 		tst.b	A6_mod_player_active(a6)
 		bmi.s	lscreen_controls_on
 		move.l	d0,-(a7)

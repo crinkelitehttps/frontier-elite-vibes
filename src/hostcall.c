@@ -24,6 +24,7 @@
 #include "cheats.h"
 #include "game_state.h"
 #include "hostcall.h"
+#include "orbit_guide.h"
 #include "custom_system.h"
 #include "input.h"
 #include "keymap.h"
@@ -142,6 +143,11 @@ bool exact_gravity = true;
 /* The sub-steps of Lgrav_step as velocity Verlet (half kick, drift, kick ..., half kick) instead of kick, drift: second order,
    so the wobble of an orbit at 10000x (a sub-step is about 1.5 game seconds) shrinks. GLF_LEAPFROG=0 for the original order. */
 bool leapfrog_gravity = true;
+
+void Call_ApLock(void)
+{
+	SetReg(REG_D0, orbit_ap_controls_locked());
+}
 
 void Call_Leapfrog(void)
 {
@@ -646,6 +652,7 @@ HOSTCALL hcalls[] = {
 	[0xae] = Call_CustomPad, /* custom_system.h */
 	[0xaf] = Call_GravExact,
 	[0xb0] = Call_Leapfrog,
+	[0xb1] = Call_ApLock,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

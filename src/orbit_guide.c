@@ -628,6 +628,14 @@ static void ap_poll(const OrbitCtx *have)
 		ap_stop("");
 		return;
 	}
+	if (orbit_ap_controls_locked())
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			wrword(ship + 140 + 2 * i, 0); /* thrust */
+			wrword(ship + 134 + 2 * i, 0); /* rotation rates */
+		}
+	}
 	ap_time_cap(pl->body_slot);
 	if (ap.st == AP_APPROACH)
 	{
@@ -676,6 +684,14 @@ static void ap_poll(const OrbitCtx *have)
 void orbit_ap_request(bool on)
 {
 	ap.request = on ? 1 : -1;
+}
+
+/* The orbit autopilot flies the ship (flyby, guidance): the player's controls are skipped, as the game's own autopilot (flight
+ * state 4) skips them. A turn of the nose or a burst of thrust would put the ship off its path (and into the planet). The
+ * thrust and rotation words are cleared on engaging so nothing stale goes on. */
+bool orbit_ap_controls_locked(void)
+{
+	return ap.st == AP_FLYBY || ap.st == AP_GUIDE;
 }
 
 bool orbit_ap_active(void)

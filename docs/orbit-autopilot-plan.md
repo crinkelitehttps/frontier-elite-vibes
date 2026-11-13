@@ -399,3 +399,10 @@ the planet). The velocity is changed directly, so there is no thrust to respect:
 `AP_FLYBY_ACCEL_MS2` = 50 km/s^2 (the braking rate is still what the remaining distance needs, so Aster is unchanged). User-tested
 on the Kerbol save: captured into the 100 km orbit.
 
+
+**Controls locked while it flies.** The game's own autopilot (flight state 4) skips `L62606_PlayerControlUpdate`, so the stick and
+keys do nothing; the orbit autopilot's flyby and guidance run in flight state 0 (manual physics), where a turn of the nose or a
+burst of thrust put the ship off its path and into the planet. Now the hook at the start of `L62606_PlayerControlUpdate`
+(`Lscreen_controls`, both .s files) asks the host (`Call_ApLock`, hcall `$b1`, `orbit_ap_controls_locked()` = FLYBY or GUIDE) and
+returns at once when locked; the thrust and rotation words are cleared each update while locked so nothing stale goes on. Weapons
+and turrets still work (they are in the key handler `L62be6`, as in the game's autopilot). Unlocked again when it stops.
