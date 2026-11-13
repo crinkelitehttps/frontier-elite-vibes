@@ -393,3 +393,9 @@ clear, so the governor braked the ship to a stop at full thrust. `ap_stop` now s
 reaching the orbit, leaves the engines-off flag set (coasting, as in manual flight); any other stop restores the flag as it was.
 Result: user confirmed Merlin -> Aster works and holds. See also `orbit-autopilot.md` ("Exact gravity") for the wobble of the orbit.
 
+**Fast arrivals (Kerbin from 10 AU, 2026-11-13).** The game's autopilot hands over about 130,000 km out at about 1,100 km/s, which
+needs 5-10 km/s^2 to stop; the flyby's 200 m/s^2 cap let it dive in (periapsis inside the planet, e still 26,000, hit at
+the planet). The velocity is changed directly, so there is no thrust to respect: the flyby's turning and braking cap is now
+`AP_FLYBY_ACCEL_MS2` = 50 km/s^2 (the braking rate is still what the remaining distance needs, so Aster is unchanged). User-tested
+on the Kerbol save: captured into the 100 km orbit.
+

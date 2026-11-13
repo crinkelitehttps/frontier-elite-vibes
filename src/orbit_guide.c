@@ -350,6 +350,10 @@ static void fly_poll(const OrbitCtx *have)
 
 #define AP_ACCEL_MS2 200.0 /* what the guidance counts on: the game's own autopilot arrives at 100 km/s from 50,000 km out,
 							* which is a braking of about 110 m/s^2, so this is more than the ships do */
+#define AP_FLYBY_ACCEL_MS2 50000.0 /* the flyby's turning and braking: the velocity is changed directly, so there is no thrust limit to
+							* respect, and what the arrival needs is set by the speed it comes in at (about 1,100 km/s at 130,000 km at
+							* Kerbin, from 10 AU: 5-10 km/s^2; at 200 m/s^2 it dived in with e still 26,000). The braking rate is the one
+							* the distance needs (with margin), so slow arrivals are not braked harder because of this cap. */
 #define AP_DONE_LOOKS 3   /* looks in a row in the planned orbit before it is called reached */
 #define A6_FLIGHT_STATE 704
 #define A6_TARGET       708
@@ -553,7 +557,7 @@ static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 		ap_status("GUIDING");
 		return;
 	}
-	double amax = accel_pu(AP_ACCEL_MS2), dv[3] = {fb.uw[0] - have->u[0], fb.uw[1] - have->u[1], fb.uw[2] - have->u[2]};
+	double amax = accel_pu(AP_FLYBY_ACCEL_MS2), dv[3] = {fb.uw[0] - have->u[0], fb.uw[1] - have->u[1], fb.uw[2] - have->u[2]};
 	double l = sqrt(dot3(dv, dv)), lim = amax * steps, f = l > lim ? lim / l : 1;
 	double brake = 0;
 	if (steps > 0)
