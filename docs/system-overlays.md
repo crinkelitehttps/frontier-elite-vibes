@@ -65,6 +65,43 @@ A body may have a `look`, an object or the name of one in the file's top-level `
   shipped or committed (`systems/ksp_*.png` is git-ignored); without the files the planets keep their stock look.
 - Not done yet: rings, an image embedded in the exe (the built-in Kerbol has none), named looks in `models` that define new models.
 
+## Kerbol and your own KSP install (tools)
+
+The built-in Kerbol system (`systems/kerbol.json`, in 82 Eridani) looks best with pictures and a space center taken from the
+user's own copy of Kerbal Space Program. **Nothing from KSP is shipped or committed**: the tools read your install, and what they
+write (`systems/ksp_*.png`, OBJ files) is for your own use only. Without them Kerbol still works with the stock planet looks.
+
+What is and is not taken from KSP:
+
+| Thing | How | KSP data used |
+|---|---|---|
+| Planet pictures | `tools/ksp_textures.py` | the planet colour maps (shrunk to 1024x512, 64 colours) |
+| KSC layout | `tools/ksp_ksc.py` | positions and sizes of the space center buildings (a dump, not geometry) |
+| KSC model 480 | `tools/ksc_model.py` | none: a few boxes per building, sized by hand from the dump, x4 |
+| Orbits, masses, radii, tilt | written by hand in `systems/kerbol.json` | none extracted (numbers from KSP's published values) |
+
+Set up (Python 3):
+
+```sh
+pip install UnityPy Pillow numpy
+python3 tools/ksp_textures.py                      # all 15 bodies -> systems/ksp_<body>.png
+python3 tools/ksp_textures.py --size 512 --colours 32 duna mun   # some bodies, smaller
+python3 tools/ksp_textures.py --list               # texture names found in the install
+python3 tools/ksp_ksc.py --level 1                 # print the KSC layout (--json FILE, --obj DIR for Blender)
+python3 tools/ksc_model.py --help                  # build the KSC port model (480) from the layout
+```
+
+**Finding the install** (`tools/ksp_find.py`, shared by both scripts; Windows, Linux and macOS): a path given as the first
+argument (the install folder, its `KSP_x64_Data` / `KSP_Data` folder, or the folder above it), else `$KSP_DIR`, else every
+Steam library (read from Steam's `libraryfolders.vdf`, and on Windows from the registry, so a library on another drive is found),
+GOG (`GOG Games`, `C:\GOG Games`...), `Program Files (x86)\Steam`, other drive letters, `~/ksp` and macOS Steam. If none is
+found the script says so; pass the folder yourself: `python tools/ksp_textures.py "D:\Games\Kerbal Space Program"`
+(Steam: right-click the game, Manage, Browse local files). Needs KSP 1.x with `sharedassets*.assets` in its data folder.
+Tested on Linux with the Linux GOG copy; the Windows paths have not been run on Windows.
+
+Using the pictures: the `looks` section of the file names `ksp_<body>.png` (see `look.surface` above). Turn a picture east or west
+with `--shift DEG` if a feature does not line up on the planet in the game.
+
 ## Planet models of the file's own: `models` (prototype, modded build only)
 
 ```json

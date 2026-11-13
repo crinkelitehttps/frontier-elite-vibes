@@ -13,7 +13,8 @@ KSP install (the Unity asset files in KSP_Data), shrinks them and writes PNGs th
 Options: --size W  output width (height W/2, default 1024); --colours N  reduce to N colours (0 = keep
 all, default 64); --shift DEG  turn the map east by DEG degrees (to line features up in the game);
 --sharpen  keep more fine detail.  Output files are ksp_<body>.png (e.g. ksp_kerbin.png).
-Without a path the usual Steam / GOG / ~/ksp locations are searched.
+Without a path the Steam libraries (also on other drives), GOG, Program Files and ~/ksp are searched, and $KSP_DIR
+if set (tools/ksp_find.py). Works on Windows, Linux and macOS.
 """
 import argparse, glob, os, re, sys
 
@@ -25,17 +26,7 @@ BODIES = {
     "vall": "gp1icemoon00", "tylo": "rockyMoon00", "bop": "gp1minormoon100", "pol": "gp1minormoon200",
     "eeloo": "snowydwarfplanet00",
 }
-GUESSES = ["~/ksp/kerbalspaceprogram/KSP_linux", "~/.steam/steam/steamapps/common/Kerbal Space Program",
-           "~/.local/share/Steam/steamapps/common/Kerbal Space Program", "~/GOG Games/Kerbal Space Program/game",
-           "C:/Program Files (x86)/Steam/steamapps/common/Kerbal Space Program",
-           "C:/GOG Games/Kerbal Space Program", "~/Library/Application Support/Steam/steamapps/common/Kerbal Space Program"]
-
-def find_data(root):
-    for sub in ("KSP_Data", "KSP_x64_Data", "KSP.app/Contents/Resources/Data"):
-        d = os.path.join(root, sub)
-        if glob.glob(os.path.join(d, "sharedassets*.assets")):
-            return d
-    return None
+from ksp_find import locate
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -48,10 +39,7 @@ def main():
     root = a.ksp
     if root and root.lower() in BODIES:      # path left out: first word is a body
         a.bodies.insert(0, root); root = None
-    data = find_data(os.path.expanduser(root)) if root else next(
-        filter(None, (find_data(os.path.expanduser(g)) for g in GUESSES)), None)
-    if not data:
-        sys.exit("KSP_Data not found: give the KSP install folder as the first argument")
+    data = locate(root)
     try:
         import UnityPy
         from PIL import Image

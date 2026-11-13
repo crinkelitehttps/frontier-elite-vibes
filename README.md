@@ -63,6 +63,10 @@ With the 3D cockpit on (Ctrl-K, the default) the free camera is shown through th
 
 On touch screens: drag on the left half to move (a thumbstick that starts under your finger), drag on the right half to look, and use the on-screen buttons for up / down, roll, speed, help and exit.
 
+## Custom star systems (Kerbol)
+
+`systems/*.json` can replace a generated star system; the included Kerbol (in 82 Eridani) is the Kerbal system. Its planet pictures and space center come from **your own** Kerbal Space Program install through `tools/ksp_textures.py` and `tools/ksp_ksc.py` (Windows, Linux and macOS; nothing from KSP is shipped). See `docs/system-overlays.md`.
+
 ## Inherited from GLFrontier Extended (Brett Wilson)
 
 Everything in this section, including the Android and WebAssembly builds and the FE2 Ship Builder, is Brett Wilson's work in GLFrontier Extended, not this fork's. The Android and WebAssembly builds have not been built or tested since this fork's changes (cockpit, head tracking, VR, render thread), so they may need fixes.

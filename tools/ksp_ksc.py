@@ -24,10 +24,7 @@ Without a path the usual Steam / GOG / ~/ksp locations are searched.
 """
 import argparse, glob, json, os, re, sys
 
-GUESSES = ["~/ksp/kerbalspaceprogram/KSP_linux", "~/.steam/steam/steamapps/common/Kerbal Space Program",
-           "~/.local/share/Steam/steamapps/common/Kerbal Space Program", "~/GOG Games/Kerbal Space Program/game",
-           "C:/Program Files (x86)/Steam/steamapps/common/Kerbal Space Program",
-           "C:/GOG Games/Kerbal Space Program", "~/Library/Application Support/Steam/steamapps/common/Kerbal Space Program"]
+from ksp_find import locate
 
 # KSC child node -> prefab name per upgrade level 1..3 (KSP's own numbering skips some)
 FACILITIES = {
@@ -45,13 +42,6 @@ FACILITIES = {
 }
 DETAIL = re.compile(r"decal|_ao$|_ao_|detail|props|lights|collider|rock\d|flare", re.I)
 
-
-def find_data(root):
-    for sub in ("KSP_Data", "KSP_x64_Data", "KSP.app/Contents/Resources/Data"):
-        d = os.path.join(root, sub)
-        if glob.glob(os.path.join(d, "sharedassets*.assets")):
-            return d
-    return None
 
 
 class Scene:
@@ -170,10 +160,7 @@ def main():
     except ImportError:
         sys.exit("needs: pip install UnityPy numpy")
 
-    roots = [a.ksp] if a.ksp else [os.path.expanduser(g) for g in GUESSES]
-    data = next((d for d in map(find_data, roots) if d), None)
-    if not data:
-        sys.exit("KSP_Data not found; give the KSP folder as the first argument")
+    data = locate(a.ksp)
 
     if a.file:
         files = [a.file if os.path.isabs(a.file) else os.path.join(data, a.file)]
