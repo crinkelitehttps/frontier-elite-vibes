@@ -373,12 +373,20 @@ static struct
 	int done_looks, log_countdown;
 	double cap_clock, cap_km;
 	double cap_frac; /* the fraction of the way to the body a frame may cover */
+	bool thrusting;  /* the last update changed the velocity (more than a trim): the time cap allows for a frame of thrust */
+	/* burn mode (the guidance on a closed orbit): one-update burns at the apsides and nodes, coasting in between */
+	bool burn_mode;               /* the last update was in burn mode (the distance cap is off then: the event cap rules) */
+	bool bm_have_prev;            /* the values below are from the last update in burn mode */
+	double bm_nu, bm_ang, bm_side; /* the ship's true anomaly, its angle from the plan's periapsis, its side of the plan's plane */
+	int bm_burns;
 	OrbitGuide g;
 	char status[24];
 } ap;
 
 static void ap_status(const char *s)
 {
+	if (!strcmp(ap.status, s))
+		return;
 	snprintf(ap.status, sizeof ap.status, "%s", s);
 	if (getenv("GLF_MAP_LOG"))
 		printf("script: ap: %s\n", s);
@@ -409,6 +417,8 @@ static void ap_stop(const char *why)
 		engines_off(!strcmp(why, "IN ORBIT") || (ap.eng_flag & 1));
 	}
 	ap.st = AP_OFF;
+	ap.burn_mode = false;
+	ap.bm_have_prev = false;
 	ap_status(why);
 }
 
@@ -418,13 +428,20 @@ static void ap_stop(const char *why)
 static void ap_time_cap(int body)
 {
 	double km;
+	if (ap.burn_mode)
+	{
+		ap.cap_clock = 0; /* the event cap rules (burn_poll); a fresh closing speed when it is left */
+		return;
+	}
 	if (!cheat_body_distance_km(body, &km))
 		return;
 	double clock = game_clock(), dt = (clock - ap.cap_clock) / CLOCK_HZ;
 	if (ap.cap_clock > 0 && dt > 0 && dt < 1e5)
 	{
 		double closing = (ap.cap_km - km) / dt; /* km per game second */
-		const double accel = 0.2;               /* km/s^2: more than the ships brake at (about 0.11) */
+		/* km/s^2: more than the ships brake at (about 0.11). Only while thrusting: coasting (a closed orbit, a trim of a few
+		 * m/s) the speed cannot change within a frame, so the closing speed alone decides and 10000x is allowed far out. */
+		const double accel = ap.thrusting ? 0.2 : 0.0;
 		double v = (closing > 0 ? closing : 0) + accel * dt;
 		time_guard_cap(ap.cap_frac * km / v);
 	}
@@ -445,6 +462,10 @@ static void ap_start(const OrbitCtx *have)
 	memset(&ap.g, 0, sizeof ap.g);
 	ap.cap_clock = 0;
 	ap.cap_frac = 0.1;
+	ap.thrusting = true;
+	ap.burn_mode = false;
+	ap.bm_have_prev = false;
+	ap.bm_burns = 0;
 	orbit_guide_reset(&ap.g);
 	ap.last_clock = game_clock();
 	ap.done_looks = 0;
@@ -605,6 +626,225 @@ static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 	}
 }
 
+
+/* ---- burn mode ----
+ * On a closed orbit that clears the planet, the guidance does what a pilot does: coast, and make each correction in one
+ * update at the point of the orbit where it changes only what it is meant to:
+ *  - plane: where the ship crosses the plan's plane (a node), the velocity is turned about the radius into it, speed kept;
+ *  - apsides: at an apsis the speed (made horizontal) is set so the opposite apsis is the plan's. For a circular plan the
+ *    apsides are the ship's own (any point of a near-circular ship orbit is one); for an ellipse they are the plan's
+ *    periapsis and apoapsis directions, which puts the periapsis where the plan has it too.
+ * The other apsis is always one of the plan's, so no burn lowers the orbit below the plan. Burns are skipped when what
+ * they would fix is already within the tolerances (a deadband), and events are found as crossings between two updates,
+ * so a burn is late by at most a frame; the time acceleration is stepped down ahead of the next event (Kepler's equation)
+ * so a frame there is a small part of the orbit, and is free in between. */
+#define BM_FRAME_FRAC  0.1   /* a frame at most this part of the time to the next event ... */
+#define BM_MIN_FRAME   360.0 /* ... but never below the period / this (a degree of the orbit): the burn's own lateness */
+#define BM_SHIP_CIRC_E 0.002 /* a ship orbit rounder than this: every point is an apsis */
+
+static double wrap_pi(double a)
+{
+	return remainder(a, TWO_PI);
+}
+
+/* the update moved the angle across `at` (either way round), not by going the long way */
+static bool crossed(double prev, double cur, double at)
+{
+	double d1 = wrap_pi(prev - at), d2 = wrap_pi(cur - at);
+	return ((d1 < 0 && d2 >= 0) || (d1 > 0 && d2 <= 0)) && fabs(d2 - d1) < M_PI;
+}
+
+/* game seconds for the ship to go from true anomaly nu0 to nu1 on its orbit (forward) */
+static double time_to_nu(const OrbitCtx *c, const OrbitEl *se, double nu0, double nu1)
+{
+	double k = sqrt((1 - se->e) / (1 + se->e));
+	double e0 = 2 * atan(k * tan(nu0 / 2)), e1 = 2 * atan(k * tan(nu1 / 2));
+	double m0 = e0 - se->e * sin(e0), m1 = e1 - se->e * sin(e1);
+	double dm = fmod(m1 - m0 + 2 * TWO_PI, TWO_PI), n = sqrt(c->mu / (se->a * se->a * se->a)); /* rad / step */
+	return dm / n * REF_DT / CLOCK_HZ;
+}
+
+/* the ship's true anomaly where its orbit points along the unit vector d (projected into its plane) */
+static double nu_of_dir(const OrbitEl *se, const double d[3])
+{
+	return atan2(dot3(d, se->q), dot3(d, se->pe));
+}
+
+/* horizontal velocity at r (pu from the centre, direction rh) in the plane of normal hh, for the orbit whose apsides are r and R */
+static void apsis_velocity(const OrbitCtx *c, const double rh[3], double r, const double hh[3], double R, double u[3])
+{
+	double a = 0.5 * (r + R), v = sqrt(fmax(0, c->mu * (2 / r - 1 / a)));
+	double t[3] = {hh[1] * rh[2] - hh[2] * rh[1], hh[2] * rh[0] - hh[0] * rh[2], hh[0] * rh[1] - hh[1] * rh[0]};
+	double tl = sqrt(dot3(t, t));
+	for (int i = 0; i < 3; i++)
+		u[i] = t[i] / tl * v;
+}
+
+static void bm_log(const char *what, const OrbitCtx *c, double dv)
+{
+	if (getenv("GLF_MAP_LOG"))
+	{
+		OrbitEl se;
+		if (orbit_el_from_state(c, c->r, c->u, &se))
+			printf("BURN %d %s alt %.1f km dv %.4f km/s -> pe %.1f ap %.1f inc %.2f\n", ap.bm_burns, what,
+				(sqrt(dot3(c->r, c->r)) - c->radius) * PU_KM, dv * PU_KM * CLOCK_HZ / REF_DT, (se.rp - c->radius) * PU_KM,
+				se.bound ? (se.ra - c->radius) * PU_KM : -1.0, se.inc * 180 / M_PI);
+		fflush(stdout);
+	}
+}
+
+/* sets the ship's velocity to u, and the copy in c (so a second burn in the same update starts from it) */
+static void bm_apply(OrbitCtx *c, const double u[3], const char *what)
+{
+	double d[3] = {u[0] - c->u[0], u[1] - c->u[1], u[2] - c->u[2]};
+	set_velocity(game_player_ship(), c, u);
+	memcpy(c->u, u, sizeof c->u);
+	ap.bm_burns++;
+	bm_log(what, c, sqrt(dot3(d, d)));
+}
+
+/* One update of burn mode. False if the ship's orbit is not one for it (open, or a periapsis too low): the continuous
+ * guidance flies it then. */
+static bool burn_poll(const OrbitCtx *have, const OrbitPlan *pl)
+{
+	const OrbitEl *o = &pl->el;
+	OrbitCtx c = *have;
+	OrbitEl se;
+	if (!orbit_el_from_state(&c, c.r, c.u, &se) || !se.bound || se.e >= 1 || se.rp < c.radius + 0.5 * (o->rp - c.radius) ||
+		se.ra > 3 * o->ra + c.radius)
+	{
+		ap.burn_mode = false;
+		ap.bm_have_prev = false;
+		return false;
+	}
+	if (!ap.burn_mode)
+	{
+		ap.burn_mode = true;
+		ap.bm_have_prev = false;
+		ap.thrusting = false;
+	}
+	bool ellipse = o->e > 0.02;
+	double r = sqrt(dot3(c.r, c.r)), rh[3] = {c.r[0] / r, c.r[1] / r, c.r[2] / r};
+	double nu = se.nu, ang = atan2(dot3(rh, o->q), dot3(rh, o->pe)), side = dot3(rh, o->h);
+	OrbitErr er;
+	orbit_plan_errors(pl, &se, &er);
+	double d_argpe = fabs(wrap_pi(se.argpe - o->argpe)) * 180 / M_PI;
+	bool plane_ok = er.plane_deg < GUIDE_PLANE_TOL_DEG;
+	bool rp_ok = fabs(er.d_rp) < GUIDE_APSIS_TOL * o->rp, ra_ok = fabs(er.d_ra) < GUIDE_APSIS_TOL * o->ra;
+	bool argpe_ok = !ellipse || se.e <= 0.005 || d_argpe < GUIDE_ARGPE_TOL_DEG;
+
+	if (ap.bm_have_prev)
+	{
+		/* plane, at a node */
+		if (!plane_ok && ((ap.bm_side < 0) != (side < 0)))
+		{
+			double vr = dot3(c.u, rh), uh[3], u[3];
+			for (int i = 0; i < 3; i++)
+				uh[i] = c.u[i] - vr * rh[i];
+			double vh = sqrt(dot3(uh, uh));
+			double t[3] = {o->h[1] * rh[2] - o->h[2] * rh[1], o->h[2] * rh[0] - o->h[0] * rh[2], o->h[0] * rh[1] - o->h[1] * rh[0]};
+			double tl = sqrt(dot3(t, t));
+			if (tl > 1e-9)
+			{
+				for (int i = 0; i < 3; i++)
+					u[i] = vr * rh[i] + t[i] / tl * vh;
+				bm_apply(&c, u, "PLANE");
+			}
+		}
+		/* apsides */
+		double hv[3] = {c.r[1] * c.u[2] - c.r[2] * c.u[1], c.r[2] * c.u[0] - c.r[0] * c.u[2], c.r[0] * c.u[1] - c.r[1] * c.u[0]};
+		double hl = sqrt(dot3(hv, hv));
+		for (int i = 0; i < 3; i++)
+			hv[i] /= hl;
+		double u[3];
+		if (ellipse)
+		{
+			/* at the plan's periapsis direction the opposite apsis is its apoapsis, and the other way round */
+			bool at_pe = crossed(ap.bm_ang, ang, 0), at_ap = crossed(ap.bm_ang, ang, M_PI);
+			if ((at_pe || at_ap) && !(rp_ok && ra_ok && argpe_ok))
+			{
+				double R = at_pe ? o->ra : o->rp;
+				/* the deadband: the far apsis is already right and the periapsis already points the plan's way */
+				double far = (at_pe == (r < 0.5 * (se.rp + se.ra))) ? se.ra : se.rp;
+				if (!(fabs(far - R) < GUIDE_APSIS_TOL * R && argpe_ok))
+				{
+					apsis_velocity(&c, rh, r, hv, R, u);
+					bm_apply(&c, u, at_pe ? "AT PLAN PE" : "AT PLAN AP");
+				}
+			}
+		}
+		else
+		{
+			bool circ = se.e < BM_SHIP_CIRC_E;
+			bool at_pe = crossed(ap.bm_nu, nu, 0), at_ap = crossed(ap.bm_nu, nu, M_PI);
+			if ((circ || at_pe || at_ap) && !(rp_ok && ra_ok))
+			{
+				/* this point stays an apsis; the opposite one goes to whichever of the plan's this point is not nearer */
+				double R = fabs(r - o->ra) < fabs(r - o->rp) ? o->rp : o->ra;
+				double far = circ ? r : at_pe ? se.ra : se.rp;
+				if (!(fabs(far - R) < GUIDE_APSIS_TOL * R))
+				{
+					apsis_velocity(&c, rh, r, hv, R, u);
+					bm_apply(&c, u, circ ? "CIRC" : at_pe ? "AT PE" : "AT AP");
+				}
+			}
+		}
+	}
+	orbit_el_from_state(&c, c.r, c.u, &se); /* after any burn */
+	ap.bm_have_prev = true;
+	ap.bm_nu = se.nu;
+	ap.bm_ang = atan2(dot3(rh, o->q), dot3(rh, o->pe));
+	ap.bm_side = side;
+
+	/* done, as the guidance has it */
+	orbit_plan_errors(pl, &se, &er);
+	d_argpe = fabs(wrap_pi(se.argpe - o->argpe)) * 180 / M_PI;
+	plane_ok = er.plane_deg < GUIDE_PLANE_TOL_DEG;
+	rp_ok = fabs(er.d_rp) < GUIDE_APSIS_TOL * o->rp;
+	ra_ok = fabs(er.d_ra) < GUIDE_APSIS_TOL * o->ra;
+	argpe_ok = !ellipse || se.e <= 0.005 || d_argpe < GUIDE_ARGPE_TOL_DEG;
+	bool done = se.bound && plane_ok && rp_ok && ra_ok && argpe_ok;
+	ap.done_looks = done ? ap.done_looks + 1 : 0;
+	if (done)
+	{
+		if (ap.done_looks >= AP_DONE_LOOKS)
+			ap_stop("IN ORBIT");
+		return true;
+	}
+	ap_status("COASTING");
+
+	/* the time to the next event that has something to fix, and the frame cap from it */
+	double t_next = INFINITY;
+	if (!plane_ok)
+	{
+		double nl[3] = {se.h[1] * o->h[2] - se.h[2] * o->h[1], se.h[2] * o->h[0] - se.h[0] * o->h[2], se.h[0] * o->h[1] - se.h[1] * o->h[0]};
+		double l = sqrt(dot3(nl, nl));
+		if (l > 1e-9)
+			for (int s2 = -1; s2 <= 1; s2 += 2)
+			{
+				double d[3] = {s2 * nl[0] / l, s2 * nl[1] / l, s2 * nl[2] / l};
+				t_next = fmin(t_next, time_to_nu(&c, &se, se.nu, nu_of_dir(&se, d)));
+			}
+	}
+	if (!(rp_ok && ra_ok && argpe_ok))
+	{
+		if (ellipse)
+			for (int s2 = -1; s2 <= 1; s2 += 2)
+			{
+				double d[3] = {s2 * o->pe[0], s2 * o->pe[1], s2 * o->pe[2]};
+				t_next = fmin(t_next, time_to_nu(&c, &se, se.nu, nu_of_dir(&se, d)));
+			}
+		else if (se.e >= BM_SHIP_CIRC_E)
+			t_next = fmin(time_to_nu(&c, &se, se.nu, 0), time_to_nu(&c, &se, se.nu, M_PI));
+		else
+			t_next = 0; /* a burn on the next update */
+	}
+	double period = TWO_PI / sqrt(c.mu / (se.a * se.a * se.a)) * REF_DT / CLOCK_HZ;
+	if (t_next < INFINITY)
+		time_guard_cap(fmax(BM_FRAME_FRAC * t_next, period / BM_MIN_FRAME));
+	return true;
+}
+
 static void ap_poll(const OrbitCtx *have)
 {
 	const OrbitPlan *pl = orbit_plan_current();
@@ -664,13 +904,25 @@ static void ap_poll(const OrbitCtx *have)
 	}
 	if (ap.st == AP_FLYBY)
 	{
+		ap.thrusting = true; /* turning and braking every update */
 		flyby_poll(have, pl);
 		return;
 	}
+	if (burn_poll(have, pl))
+	{
+		ap.last_clock = game_clock(); /* the continuous guidance's next look counts from here */
+		return;
+	}
+	ap_status("GUIDING");
 	GuideOut go;
-	double du;
+	double du, prev_clock = ap.last_clock;
 	if (!drive(have, &ap.g, &ap.last_clock, AP_ACCEL_MS2, &go, &du))
 		return;
+	{
+		/* thrusting: the velocity change this update, as an acceleration, above 1% of what the guidance counts on (2 m/s^2) */
+		double dt = (ap.last_clock - prev_clock) / CLOCK_HZ, a_ms2 = dt > 0 ? du * PU_KM * 1000.0 * CLOCK_HZ / REF_DT / dt : 0;
+		ap.thrusting = a_ms2 > 0.01 * AP_ACCEL_MS2;
+	}
 	if (getenv("GLF_MAP_LOG") && ap.log_countdown-- <= 0)
 	{
 		ap.log_countdown = 24;
