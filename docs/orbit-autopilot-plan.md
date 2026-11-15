@@ -406,26 +406,3 @@ burst of thrust put the ship off its path and into the planet. Now the hook at t
 (`Lscreen_controls`, both .s files) asks the host (`Call_ApLock`, hcall `$b1`, `orbit_ap_controls_locked()` = FLYBY or GUIDE) and
 returns at once when locked; the thrust and rotation words are cleared each update while locked so nothing stale goes on. Weapons
 and turrets still work (they are in the key handler `L62be6`, as in the game's autopilot). Unlocked again when it stops.
-
-## 15. Burn mode (2026-11-15)
-
-Once the ship's own orbit is closed and clears the planet (bound, periapsis above half the plan's periapsis altitude, apoapsis
-under 3x the plan's), the guidance stops trickling corrections and works like a pilot: it coasts, and makes each correction
-in one update at the point where it changes only what it should (`burn_poll` in `orbit_guide.c`):
-
-- **Plane**, at a node (the ship crossing the plan's plane): the velocity is turned about the radius into the plan's plane,
-  speed kept.
-- **Apsides**: at an apsis the velocity is made horizontal and set so the *opposite* apsis is one of the plan's. Circular plan:
-  the ship's own apsides (a ship orbit with e < 0.002 counts as an apsis everywhere). Ellipse plan: the plan's periapsis and
-  apoapsis *directions*, which also puts the periapsis where the plan has it.
-- The opposite apsis is always one of the plan's, so no burn takes the orbit below the plan. A burn is skipped if what it would
-  fix is already within the guidance tolerances (deadband). Events are crossings between two updates, so a burn is up to a
-  frame late; what is left is fixed at the next event.
-- **Time cap** in burn mode: a frame is at most 0.1 of the time to the next event that has something to fix (Kepler's
-  equation), but never less than period/360. The distance-to-body cap (`ap_time_cap`) is off. Between events 10000x holds.
-- Otherwise (open orbit, low periapsis) the continuous guidance flies it as before (status GUIDING; burn mode shows COASTING).
-  `GLF_MAP_LOG=1` prints a `BURN n KIND ...` line per burn.
-
-Tested (script, Merlin, 10000x pressed every 3 s): circular 1000 km retrograde -> 300x300 inc 30: CIRC, PLANE (3.1 km/s,
-the retrograde flip), a 36 m/s plane touch-up, AT PE -> IN ORBIT. Circular 2000 km -> 300x6000 argpe 90: AT PLAN AP,
-AT PLAN PE -> IN ORBIT (2 burns). Not tested: entry straight from the flyby, Kerbin/gas giants, the user's save.
