@@ -29,6 +29,8 @@
 
 bool cockpit_map_live = true;
 bool cockpit_ship_live = true;
+bool ship_page_ships = false;
+bool ship_page_debug = false;
 
 #define IDLE_FPS  2
 #define MAP_IDLE_FPS 10 /* the maps move: the orrery turns, the galaxy map scrolls */
@@ -1434,6 +1436,28 @@ static void orbit_fmt_time(char *dst, size_t n, double sec)
 
 /* The ORBIT page, in the map screen's colours: its dark green ground, the light green of its orbit lines for the
  * text and the outlines, a dimmer green for what is not set */
+/* the player's ship has the Automatic Pilot (bit 5 of the equipment long, 158): the orbit page is shown only then */
+static bool has_autopilot(void)
+{
+	const uint32_t own = game_player_ship();
+	return own && (rdlong(own + 158) & 0x20);
+}
+
+/* an extra SHIP screen page is shown: its setting is on (the orbit page needs the Automatic Pilot) */
+static bool extra_on(int e)
+{
+	return e == EXTRA_SHIPS ? ship_page_ships : e == EXTRA_DEBUG ? ship_page_debug : e == EXTRA_ORBIT ? has_autopilot() : true;
+}
+
+/* the extra page after e that is on, in the order ship log, orbit page, debug page; EXTRA_NONE after the last */
+static int next_extra(int e)
+{
+	do
+		e = e == EXTRA_NONE ? EXTRA_SHIPS : e == EXTRA_SHIPS ? EXTRA_ORBIT : e == EXTRA_ORBIT ? EXTRA_DEBUG : EXTRA_NONE;
+	while (e != EXTRA_NONE && !extra_on(e));
+	return e;
+}
+
 static void draw_orbit_page(MapPage *out)
 {
 	enum { DARK = 1, BRIGHT = 2, MID = 3 };
@@ -1594,17 +1618,22 @@ bool mapscreen_page(int group, MapPage *out)
 			dbg_before[i] = (uint8_t)rdbyte(a6 + (uint32_t)i);
 	if (is_ship && input.turn)
 	{
-		/* one turn past the game's last page (its next is the first) shows the
-		 * ship log, one more the orbit page, then the debug page, and one more the first */
-		if (ship.extra == EXTRA_DEBUG)
-			ship.extra = EXTRA_NONE;
-		else if (ship.extra == EXTRA_ORBIT)
-			ship.extra = EXTRA_DEBUG, input.turn = false;
-		else if (ship.extra == EXTRA_SHIPS)
-			ship.extra = EXTRA_ORBIT, orbit_ui.sel = -1, input.turn = false;
-		else if (ship.held && ship.state[4 + 1] == 0) /* (11959, the next page) */
-			ship.extra = EXTRA_SHIPS, input.turn = false;
+		/* one turn past the game's last page (its next is the first) shows the ship log, one more
+		 * the orbit page, then the debug page, and one more the first; pages that are off are skipped */
+		if (ship.extra != EXTRA_NONE || (ship.held && ship.state[4 + 1] == 0)) /* (11959, the next page) */
+		{
+			const int next = next_extra(ship.extra);
+			if (next != EXTRA_NONE)
+			{
+				if (next == EXTRA_ORBIT && ship.extra != EXTRA_ORBIT)
+					orbit_ui.sel = -1;
+				input.turn = false;
+			}
+			ship.extra = next; /* (back to none: the turn goes on to the game's first page) */
+		}
 	}
+	if (is_ship && ship.extra != EXTRA_NONE && !extra_on(ship.extra))
+		ship.extra = next_extra(ship.extra); /* (switched off, the Automatic Pilot sold, or another ship) */
 	bool ok = call(FE2_Clear3DView) && (step = 1, is_ship ? enter_ship(input.turn) : enter_map());
 	if (ok)
 	{

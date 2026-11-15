@@ -52,6 +52,9 @@ extern "C"
 /* Settings: the map and the ship screens live in flight */
 extern bool cockpit_map_live;
 extern bool cockpit_ship_live;
+/* Settings: the host's extra SHIP screen pages (ship list, debug page); off by default */
+extern bool ship_page_ships;
+extern bool ship_page_debug;
 
 typedef struct
 {

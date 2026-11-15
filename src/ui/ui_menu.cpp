@@ -283,6 +283,8 @@ void page_settings()
 	wrapped_checkbox("Maps, station and ship screens on a screen in the cockpit", &cockpit_screen);
 	wrapped_checkbox("Map screen live in flight", &cockpit_map_live);
 	wrapped_checkbox("Ship screen live in flight", &cockpit_ship_live);
+	wrapped_checkbox("SHIP screen: list of the ships in the system (a page after the game's own)", &ship_page_ships);
+	wrapped_checkbox("SHIP screen: debug page (a page after the game's own)", &ship_page_debug);
 	wrapped_checkbox("Camera screen in high resolution (native scene, no shadows; off: the original game's own picture)", &camera_hires);
 	ImGui::TextWrapped("Move the cockpit's screens with the mouse: pick one by pointing at it; W move, E turn, R size, Delete puts it back, Esc leaves");
 	if (ui_button(screen_edit_on() ? "Stop editing screens (Ctrl-G)" : "Edit the cockpit screens (Ctrl-G)"))

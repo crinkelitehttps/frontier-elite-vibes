@@ -56,6 +56,8 @@ typedef struct
 	int cockpit_screen;
 	int cockpit_map_live;
 	int cockpit_ship_live;
+	int ship_page_ships;
+	int ship_page_debug;
 	int cockpit_fov;
 	int own_hud;
 	int planet_earth_outlines;
@@ -118,6 +120,8 @@ static const struct
 	{"cockpit_screen", offsetof(Settings, cockpit_screen)},
 	{"cockpit_map_live", offsetof(Settings, cockpit_map_live)},
 	{"cockpit_ship_live", offsetof(Settings, cockpit_ship_live)},
+	{"ship_page_ships", offsetof(Settings, ship_page_ships)},
+	{"ship_page_debug", offsetof(Settings, ship_page_debug)},
 	{"cockpit_fov", offsetof(Settings, cockpit_fov)},
 	{"own_hud", offsetof(Settings, own_hud)},
 	{"planet_earth_outlines", offsetof(Settings, planet_earth_outlines)},
@@ -278,6 +282,8 @@ static Settings current(void)
 	s.cockpit_screen = cockpit_screen;
 	s.cockpit_map_live = cockpit_map_live;
 	s.cockpit_ship_live = cockpit_ship_live;
+	s.ship_page_ships = ship_page_ships;
+	s.ship_page_debug = ship_page_debug;
 	s.cockpit_fov = cockpit_fov;
 	s.own_hud = own_hud;
 	s.planet_earth_outlines = planet_earth_outlines;
@@ -344,6 +350,8 @@ static void apply(const Settings *s)
 	cockpit_screen = s->cockpit_screen != 0;
 	cockpit_map_live = s->cockpit_map_live != 0;
 	cockpit_ship_live = s->cockpit_ship_live != 0;
+	ship_page_ships = s->ship_page_ships != 0;
+	ship_page_debug = s->ship_page_debug != 0;
 	if (s->cockpit_fov >= 30 && s->cockpit_fov <= 120)
 		cockpit_fov = s->cockpit_fov;
 	own_hud = s->own_hud != 0;
