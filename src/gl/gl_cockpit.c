@@ -123,6 +123,7 @@ static int host_shown_mask(void)
 }
 static GLuint blank_tex; /* the COMS screen with nothing yet on it */
 static bool flat_saved;  /* active, while cockpit_draw_flat */
+static volatile bool flat_now; /* cockpit_draw_flat is on (active is briefly false; other threads see through it) */
 static bool game_active; /* the game's frames are (game thread) */
 static float aspect = 16.0f / 9.0f;
 static HeadPose pose;
@@ -719,15 +720,25 @@ bool cockpit_active(void)
 	return active;
 }
 
+/* cockpit_active, seen through cockpit_draw_flat (for the focus, read from the main thread) */
+bool cockpit_focus_active(void)
+{
+	return active || flat_now;
+}
+
 void cockpit_draw_flat(bool flat)
 {
 	if (flat)
 	{
 		flat_saved = active;
+		flat_now = active;
 		active = false;
 	}
 	else
+	{
 		active = flat_saved;
+		flat_now = false;
+	}
 }
 
 /* =========================================================================
@@ -995,7 +1006,7 @@ int cockpit_focus_mode(int group)
 
 bool cockpit_focus_camera(void)
 {
-	return active && cam_on;
+	return (active || flat_now) && cam_on;
 }
 
 /* The quad of the focus's `quad` (see cockpit_focus_point) and the page rows it shows */

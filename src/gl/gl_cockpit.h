@@ -159,6 +159,7 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen);
 /* Draws what follows as not the cockpit (the cockpit's screen's picture),
  * until called with false */
 void cockpit_draw_flat(bool flat);
+bool cockpit_focus_active(void);
 /* What the last cockpit_begin_frame was told */
 bool cockpit_active(void);
 /* Whether the frame last shown is the cockpit; any thread */

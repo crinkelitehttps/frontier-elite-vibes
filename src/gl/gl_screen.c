@@ -580,6 +580,8 @@ static void draw_orbit_button(void)
 	}
 }
 
+static bool drawing_sub, drawing_page_text; /* (below) */
+
 void gl_screen_upload(void)
 {
 	const uint8_t *src = scr_show.screen;
@@ -610,7 +612,8 @@ void gl_screen_upload(void)
 	}
 	/* the flight panel: the view's name gives way to the ORBIT button */
 	bool orbit_btn = scr_show.cockpit && !scr_show.sub;
-	hud_orbit_button_show(orbit_btn);
+	if (!drawing_sub && !drawing_page_text) /* the screens' own uploads leave the dashboard's button alone */
+		hud_orbit_button_show(orbit_btn);
 	if (orbit_btn)
 		draw_orbit_button();
 	MapButton ph;

@@ -85,7 +85,7 @@ static int quad_of(int s)
 
 bool focus_enabled(void)
 {
-	return cockpit_active() && !freecam_active();
+	return cockpit_focus_active() && !freecam_active();
 }
 
 static int add(Btn *b, int n, int x, int y, int w, int h, int id, int ax, int ay)
