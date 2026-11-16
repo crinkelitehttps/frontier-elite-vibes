@@ -4,6 +4,7 @@
  * the controllers through SDL2 and carries out the game's actions.
  */
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -270,6 +271,9 @@ in map-nopointer right-thumbstick-y+ key down
 namespace
 {
 
+std::string gamepad_file(const char *suffix = "");
+void log_bindings_text(const std::string &text);
+
 vibe::Bindings bindings;
 /* the actions and modes the file names (registered in gamepad_init) */
 int steer_x, steer_y, roll_axis, yaw_axis, strafe_x, strafe_y, pointer_x, pointer_y;
@@ -311,7 +315,17 @@ vibe::BindingEditor *the_editor()
 	{
 		editor = new vibe::BindingEditor(clipboard(), bindings);
 		editor->source = GAMEPAD_FILE;
-		editor->save = [](const std::string &text) { return vibe::save_bindings(text, "", GAMEPAD_FILE); };
+		editor->save = [](const std::string &text) {
+			std::string path = gamepad_file();
+			bool ok = vibe::save_bindings(text, "", path);
+			if (ok)
+				log_printf("Gamepad: rebinding saved to %s, now:\n", path.c_str());
+			else
+				log_printf("Gamepad: rebinding NOT saved, can't write %s (%s); in use until the game ends:\n",
+						   path.c_str(), std::strerror(errno));
+			log_bindings_text(text);
+			return ok;
+		};
 		editor->set_hint("Change these bindings: Enter, Start+Back, or X (VR: left X, or trigger at a row)");
 	}
 	return editor;
@@ -394,6 +408,18 @@ std::string key_label(int code)
 }
 
 /* ---- the file ----------------------------------------------------------- */
+/* gamepad.cfg (and its .old) beside the saves. On Android the working
+ * directory is "/", so it is the app's files folder, like glfrontier.cfg. */
+std::string gamepad_file(const char *suffix)
+{
+#ifdef ANDROID
+	const char *dir = SDL_AndroidGetInternalStoragePath();
+	if (dir)
+		return std::string(dir) + "/" + GAMEPAD_FILE + suffix;
+#endif
+	return std::string(GAMEPAD_FILE) + suffix;
+}
+
 bool read_file(const char *path, std::string *text)
 {
 	std::ifstream f(path, std::ios::binary);
@@ -412,33 +438,56 @@ bool write_file(const char *path, const std::string &text)
 	return (bool)f;
 }
 
+/* The bindings in use into the log, without comments and blank lines, so a
+ * diagnostics upload shows what the player had */
+void log_bindings_text(const std::string &text)
+{
+	std::istringstream in(text);
+	std::string line;
+	while (std::getline(in, line))
+	{
+		size_t a = line.find_first_not_of(" \t\r");
+		if (a == std::string::npos || line[a] == '#')
+			continue;
+		size_t b = line.find_last_not_of(" \t\r");
+		log_printf("Gamepad:   %s\n", line.substr(a, b - a + 1).c_str());
+	}
+}
+
 void load_bindings()
 {
-	std::string text;
-	if (!read_file(GAMEPAD_FILE, &text))
+	std::string text, path = gamepad_file();
+	if (!read_file(path.c_str(), &text))
 	{
+		log_printf("Gamepad: can't read %s (%s): the built-in bindings\n", path.c_str(), std::strerror(errno));
 		bindings.set_defaults(DEFAULT_CFG);
 		bindings.load(DEFAULT_CFG, "built-in gamepad bindings");
-		if (write_file(GAMEPAD_FILE, DEFAULT_CFG))
-			log_printf("Gamepad: wrote the default bindings to %s\n", GAMEPAD_FILE);
+		if (write_file(path.c_str(), DEFAULT_CFG))
+			log_printf("Gamepad: wrote the default bindings to %s\n", path.c_str());
+		else
+			log_printf("Gamepad: can't write %s (%s): rebinding won't be kept\n", path.c_str(), std::strerror(errno));
+		log_bindings_text(DEFAULT_CFG);
 		return;
 	}
 	if (gamepad_text_is_legacy(text))
 	{
 		/* keep the old file beside it, once */
-		std::string old = std::string(GAMEPAD_FILE) + ".old";
+		std::string old = gamepad_file(".old");
 		std::string existing;
 		if (!read_file(old.c_str(), &existing))
 			write_file(old.c_str(), text);
 		text = gamepad_convert_legacy(text);
-		if (write_file(GAMEPAD_FILE, text))
-			log_printf("Gamepad: %s converted to the new format (the old one is %s)\n", GAMEPAD_FILE, old.c_str());
+		if (write_file(path.c_str(), text))
+			log_printf("Gamepad: %s converted to the new format (the old one is %s)\n", path.c_str(), old.c_str());
+		else
+			log_printf("Gamepad: converted %s, but can't write it (%s)\n", path.c_str(), std::strerror(errno));
 	}
 	bindings.set_defaults(DEFAULT_CFG); /* the editor's reset */
 	if (!bindings.load(text, GAMEPAD_FILE))
-		log_printf("Gamepad: some lines of %s were skipped\n", GAMEPAD_FILE);
+		log_printf("Gamepad: some lines of %s were skipped\n", path.c_str());
 	else
-		log_printf("Gamepad: %d bindings from %s\n", (int)bindings.help().size(), GAMEPAD_FILE);
+		log_printf("Gamepad: %d bindings from %s\n", (int)bindings.help().size(), path.c_str());
+	log_bindings_text(text);
 }
 
 /* ---- the game's end ------------------------------------------------------ */
