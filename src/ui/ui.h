@@ -42,6 +42,17 @@ void ui_set_vr_menu(bool shown);
 /* Drawing it there now (the menu leaves out what is no use in VR) */
 bool ui_in_vr_menu(void);
 
+/* Keyboard / pad focus in the menu (gl_focus.c routes its keys and pad actions here while
+ * the menu is open): a green box on one of its widgets, arrows move it, Enter (F, pad A)
+ * presses it, Tab / Shift-Tab (pad Y / X) switch to the menu's other window (the side window:
+ * console, more cheats, ship log). These feed ImGui's own keyboard navigation; ui_button draws
+ * the box itself. */
+void ui_nav_move(int dx, int dy); /* dx, dy one of -1, 0, 1 */
+void ui_nav_activate(void);
+void ui_nav_tab(bool back);
+/* Once a frame, main thread: lets go of the keys pressed above */
+void ui_nav_tick(void);
+
 #ifdef __cplusplus
 }
 #endif

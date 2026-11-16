@@ -134,7 +134,7 @@ void build_style(int px)
 	c[ImGuiCol_Separator] = rgb444(COL_ORANGE);
 	c[ImGuiCol_SeparatorHovered] = rgb444(COL_ORANGE);
 	c[ImGuiCol_SeparatorActive] = rgb444(COL_ORANGE);
-	c[ImGuiCol_NavHighlight] = rgb444(COL_ORANGE);
+	c[ImGuiCol_NavHighlight] = rgb444(0x1f2); /* the cockpit focus box's green */
 	/* the rest ImGui would draw in its own blue (tabs, tables, selections:
 	 * the galaxy atlas uses them) */
 	c[ImGuiCol_Tab] = rgb444(COL_PANEL_DARK);
@@ -196,9 +196,11 @@ bool ui_button(const char *label, float width)
 	ImVec2 a = ImGui::GetCursorScreenPos();
 	ImVec2 b(a.x + size.x, a.y + size.y);
 
-	bool pressed = ImGui::InvisibleButton(label, size);
+	/* EnableNav: an invisible button is left out of keyboard / pad navigation otherwise */
+	bool pressed = ImGui::InvisibleButton(label, size, ImGuiButtonFlags_EnableNav);
 	bool held = ImGui::IsItemActive();
 	bool hover = ImGui::IsItemHovered();
+	const bool nav = ImGui::IsItemFocused() && ImGui::GetIO().NavVisible;
 
 	/* grey face with a one pixel bevel: light top/left, dark bottom/right,
 	 * swapped while pressed, like the game's control panel buttons */
@@ -219,6 +221,12 @@ bool ui_button(const char *label, float width)
 			  (float)(int)(a.y + (size.y - ts.y) * 0.5f + off));
 	dl->AddText(ImVec2(tp.x + p, tp.y + p), IM_COL32(0, 0, 0, 255), label, end);
 	dl->AddText(tp, IM_COL32_WHITE, label, end);
+	if (nav) /* the keyboard / pad focus: a green box, two pixels thick, over the edge */
+	{
+		const ImU32 green = ImGui::GetColorU32(ImGuiCol_NavHighlight);
+		const ImVec2 a2(a.x - p, a.y - p), b2(b.x + p, b.y + p);
+		dl->AddRect(a2, b2, green, 0.0f, 0, 2.0f * p);
+	}
 	return pressed;
 }
 

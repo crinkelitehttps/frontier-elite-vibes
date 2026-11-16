@@ -33,6 +33,9 @@ static void init_common(void)
 	ImGuiIO &io = ImGui::GetIO();
 	io.IniFilename = nullptr; /* nothing worth persisting */
 	io.LogFilename = nullptr;
+	/* arrows / Tab / Enter move about the menu (the green box); keys the game still gets (ui_handle_event) */
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigNavCaptureKeyboard = false;
 	/* font and style are built on the first frame (ui_style.cpp) */
 }
 
@@ -92,6 +95,15 @@ extern "C" bool ui_handle_event(const SDL_Event *event)
 	/* ImGui works in drawable pixels, like the rest of the game (see
 	   ui_render): mouse events come in window units, which are bigger on
 	   high DPI screens (phone browsers, Retina) */
+	/* Tab switches the menu's windows (arrows only move inside one); not while typing */
+	if ((event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) && event->key.keysym.sym == SDLK_TAB && ui_menu_open() &&
+		!ImGui::GetIO().WantTextInput)
+	{
+		if (event->type == SDL_KEYDOWN && !event->key.repeat)
+			ui_menu_switch_window();
+		return true;
+	}
+
 	SDL_Event scaled = *event;
 	Screen_MouseToPixels(&scaled);
 	ImGui_ImplSDL2_ProcessEvent(&scaled);
@@ -116,6 +128,19 @@ extern "C" bool ui_handle_event(const SDL_Event *event)
 		}
 
 	const ImGuiIO &io = ImGui::GetIO();
+	/* moving the box: the arrows and Tab are the menu's, F presses (as Enter) */
+	if ((event->type == SDL_KEYDOWN || event->type == SDL_KEYUP) && ui_menu_open() && !io.WantTextInput)
+	{
+		const SDL_Keycode k = event->key.keysym.sym;
+		const Uint16 mod = event->key.keysym.mod;
+		if (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT)
+			return true;
+		if (k == SDLK_f && !(mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)))
+		{
+			ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, event->type == SDL_KEYDOWN);
+			return true;
+		}
+	}
 	switch (event->type)
 	{
 	case SDL_MOUSEBUTTONDOWN:
@@ -268,4 +293,54 @@ extern "C" void ui_render(void)
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	touch_pinch_end_frame();
+}
+
+/* ---- pad / focus keys into the menu: a press now, let go a moment later ---- */
+static ImGuiKey nav_held[3];
+static Uint32 nav_until[3];
+
+static void nav_press(ImGuiKey key, ImGuiKey mod)
+{
+	if (!ui_menu_open())
+		return;
+	ImGuiIO &io = ImGui::GetIO();
+	if (mod != ImGuiKey_None)
+		io.AddKeyEvent(mod, true);
+	io.AddKeyEvent(key, true);
+	/* slot 0 the key, 1 the shift (Shift-Tab), 2 spare */
+	nav_held[0] = key;
+	nav_held[1] = mod;
+	nav_until[0] = SDL_GetTicks() + 80;
+}
+
+extern "C" void ui_nav_move(int dx, int dy)
+{
+	nav_press(dy < 0 ? ImGuiKey_UpArrow : dy > 0 ? ImGuiKey_DownArrow : dx < 0 ? ImGuiKey_LeftArrow : ImGuiKey_RightArrow,
+			  ImGuiKey_None);
+}
+
+extern "C" void ui_nav_activate(void)
+{
+	nav_press(ImGuiKey_Enter, ImGuiKey_None);
+}
+
+extern "C" void ui_nav_tab(bool back)
+{
+	(void)back; /* two windows at most: either way is the other one */
+	if (ui_menu_open())
+		ui_menu_switch_window();
+}
+
+extern "C" void ui_nav_tick(void)
+{
+	if (nav_held[0] == ImGuiKey_None || (Sint32)(SDL_GetTicks() - nav_until[0]) < 0)
+		return;
+	if (initialised)
+	{
+		ImGuiIO &io = ImGui::GetIO();
+		io.AddKeyEvent(nav_held[0], false);
+		if (nav_held[1] != ImGuiKey_None)
+			io.AddKeyEvent(nav_held[1], false);
+	}
+	nav_held[0] = nav_held[1] = ImGuiKey_None;
 }

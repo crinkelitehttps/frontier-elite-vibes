@@ -11,6 +11,7 @@
 
 #include "../audio.h"
 #include "imgui.h"
+#include "imgui_internal.h" /* NavInitWindow */
 #include "ui.h"
 #include "ui_menu.h"
 #include "ui_style.h"
@@ -226,7 +227,8 @@ void page_settings()
 	wrapped_checkbox("Show the help box (H)", &freecam_show_help);
 #endif
 	ui_heading("Aspect ratio");
-	if (ui_button(keep_aspect ? "Keep 4:3: ON" : "Keep 4:3: OFF"))
+	/* "###id": a label that changes keeps its ID, so the keyboard / pad box stays on it */
+	if (ui_button(keep_aspect ? "Keep 4:3: ON###aspect" : "Keep 4:3: OFF###aspect"))
 	{
 		Screen_SetLetterboxMode(!keep_aspect);
 	}
@@ -287,7 +289,7 @@ void page_settings()
 	wrapped_checkbox("SHIP screen: debug page (a page after the game's own)", &ship_page_debug);
 	wrapped_checkbox("Camera screen in high resolution (native scene, no shadows; off: the original game's own picture)", &camera_hires);
 	ImGui::TextWrapped("Move the cockpit's screens with the mouse: pick one by pointing at it; W move, E turn, R size, Delete puts it back, Esc leaves");
-	if (ui_button(screen_edit_on() ? "Stop editing screens (Ctrl-G)" : "Edit the cockpit screens (Ctrl-G)"))
+	if (ui_button(screen_edit_on() ? "Stop editing screens (Ctrl-G)###edit" : "Edit the cockpit screens (Ctrl-G)###edit"))
 		screen_edit_toggle();
 	ImGui::TextWrapped("Field of view (vertical)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
@@ -335,7 +337,7 @@ void page_settings()
 
 void page_cheats()
 {
-	if (ui_button(side == Side::MoreCheats ? "HIDE MORE CHEATS" : "MORE CHEATS"))
+	if (ui_button(side == Side::MoreCheats ? "HIDE MORE CHEATS###more" : "MORE CHEATS###more"))
 		side = (side == Side::MoreCheats) ? Side::None : Side::MoreCheats;
 
 	ImGui::TextWrapped("Cash: $%ld.%ld", cheat_cash() / 10, cheat_cash() % 10);
@@ -451,9 +453,9 @@ void page_debug()
 {
 	if (ui_button("OPTIONS"))
 		page = Page::DebugOptions;
-	if (ui_button(side == Side::Console ? "HIDE CONSOLE" : "SHOW CONSOLE"))
+	if (ui_button(side == Side::Console ? "HIDE CONSOLE###console" : "SHOW CONSOLE###console"))
 		side = (side == Side::Console) ? Side::None : Side::Console;
-	if (ui_button(side == Side::ShipLog ? "HIDE SHIP LOG" : "SHOW SHIP LOG"))
+	if (ui_button(side == Side::ShipLog ? "HIDE SHIP LOG###shiplog" : "SHOW SHIP LOG###shiplog"))
 		side = (side == Side::ShipLog) ? Side::None : Side::ShipLog;
 
 	/* Build tag from the end of fe2_modded.s (Lbuildtag_marker). Changes
@@ -533,7 +535,7 @@ void page_diagnostics()
 	int st = diag_upload_state();
 	if (st == DIAG_SENDING)
 		ImGui::TextWrapped("Sending...");
-	else if (ui_button(st == DIAG_SENT ? "Send again" : "Send"))
+	else if (ui_button(st == DIAG_SENT ? "Send again###send" : "Send###send"))
 		diag_upload_start();
 	if (st == DIAG_SENT)
 	{
@@ -927,7 +929,7 @@ void ship_cheats()
 void side_more_cheats()
 {
 	static bool ships = false;
-	if (ui_button(ships ? "Show Player Cheats" : "Show Ship Cheats"))
+	if (ui_button(ships ? "Show Player Cheats###who" : "Show Ship Cheats###who"))
 	{
 		ships = !ships;
 		cheat_message = nullptr;
@@ -946,15 +948,52 @@ void side_more_cheats()
 
 } // namespace
 
+/* Which window has the keyboard / pad focus, and a switch asked for */
+static bool side_focused, switch_window;
+
+void ui_menu_switch_window(void)
+{
+	switch_window = true;
+}
+
 void ui_menu_draw(void)
 {
 	if (Screen_GetGameWidth() <= 0 || Screen_GetGameHeight() <= 0)
 		return;
 
+	bool focus_main = false, focus_side = false;
+	if (switch_window)
+	{
+		switch_window = false;
+		if (side != Side::None)
+			(side_focused ? focus_main : focus_side) = true;
+	}
+
 	ImGui::SetNextWindowPos(game_pos(0, 0));
 	ImGui::SetNextWindowSize(game_size(120, 180));
+	if (focus_main)
+		ImGui::SetNextWindowFocus();
+	/* just opened: the menu has the keyboard / pad focus (arrows start the green box) */
+	static int last_frame = -10;
+	const bool fresh = ImGui::GetFrameCount() != last_frame + 1;
+	last_frame = ImGui::GetFrameCount();
 	if (ui_begin_window("EMULATOR MENU"))
 	{
+		if (fresh)
+			ImGui::SetWindowFocus();
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			side_focused = false;
+		/* a new page: the box goes to its first button (it would stay where the old page's was), and
+		 * stays shown if it was */
+		static Page last_page = Page::Home;
+		if (page != last_page && !fresh && ImGui::IsWindowFocused())
+		{
+			const bool shown = ImGui::GetIO().NavVisible;
+			ImGui::NavInitWindow(ImGui::GetCurrentWindow(), true);
+			if (shown)
+				ImGui::SetNavCursorVisible(true);
+		}
+		last_page = page;
 		if (page != Page::Home && ui_button("BACK"))
 		{
 			page = (page == Page::DebugOptions) ? Page::Debug : Page::Home;
@@ -997,8 +1036,12 @@ void ui_menu_draw(void)
 
 	ImGui::SetNextWindowPos(game_pos(120, 0));
 	ImGui::SetNextWindowSize(game_size(side == Side::ShipLog ? 200 : 170, 180));
+	if (focus_side)
+		ImGui::SetNextWindowFocus();
 	if (ui_begin_window(side == Side::Console ? "CONSOLE" : side == Side::ShipLog ? "SHIP LOG" : "MORE CHEATS"))
 	{
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			side_focused = true;
 		if (side == Side::Console)
 			side_console();
 		else if (side == Side::ShipLog)

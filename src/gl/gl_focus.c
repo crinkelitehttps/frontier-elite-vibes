@@ -12,6 +12,8 @@
 #include "gl_hud.h"
 #include "gl_mapscreen.h"
 
+#include "ui/ui.h"
+
 #include "freecam.h"
 #include "game_state.h"
 #include "host.h" /* rdword */
@@ -283,20 +285,36 @@ static void step(int dir)
 	refresh(b, &n, &mode);
 }
 
+/* The emulator menu (the cog) is up: the keys and pad actions move its own green box */
 void focus_next(void)
 {
+	if (ui_menu_open())
+	{
+		ui_nav_tab(false);
+		return;
+	}
 	if (focus_enabled())
 		step(1);
 }
 
 void focus_prev(void)
 {
+	if (ui_menu_open())
+	{
+		ui_nav_tab(true);
+		return;
+	}
 	if (focus_enabled())
 		step(-1);
 }
 
 void focus_move(int dx, int dy)
 {
+	if (ui_menu_open())
+	{
+		ui_nav_move(dx, dy);
+		return;
+	}
 	if (!focus_enabled())
 		return;
 	Btn b[MAX_BTNS];
@@ -330,6 +348,11 @@ void focus_move(int dx, int dy)
 
 void focus_activate(void)
 {
+	if (ui_menu_open())
+	{
+		ui_nav_activate();
+		return;
+	}
 	if (!focus_enabled())
 		return;
 	Btn b[MAX_BTNS];
@@ -375,6 +398,7 @@ void focus_activate(void)
 
 void focus_tick(void)
 {
+	ui_nav_tick();
 	if (press.phase && (Sint32)(SDL_GetTicks() - press.at) >= 0)
 	{
 		if (press.phase == 1)
@@ -389,7 +413,7 @@ void focus_tick(void)
 			press.phase = 0;
 		}
 	}
-	if (!focus_enabled())
+	if (!focus_enabled() || ui_menu_open()) /* the menu has its own box */
 	{
 		SDL_AtomicLock(&view_lock);
 		view_ok = false;
