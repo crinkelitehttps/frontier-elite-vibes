@@ -731,7 +731,8 @@ static int image_is_sea(const char *name, const float v[3])
 	int w = sea_images[i].w, h = sea_images[i].h;
 	float x, y;
 	to_tex(v, &x, &y);
-	int ix = (int)(x * (float)w / TEX_W) % w, iy = (int)(y * (float)h / TEX_H);
+	/* an image is a normal map, east to the right: mirrored against to_tex (atan2 in the game's axes runs westward) */
+	int ix = w - 1 - (int)(x * (float)w / TEX_W) % w, iy = (int)(y * (float)h / TEX_H);
 	if (ix < 0)
 		ix += w;
 	if (iy < 0)

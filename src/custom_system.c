@@ -1357,6 +1357,15 @@ static void own_port_setup(uint32_t port)
 	const CModel *c = own_port(port);
 	if (!c)
 		return;
+	/* L469ca's matrix (MakeRotXZMatrix(west longitude - 90, latitude), columns = the model's axes) has
+	 * the model's x pointing north and z west; a port of its own is made with x east and z north
+	 * (tools/ksc_model.py, "pads" in the file), so turn it about its up axis: x = -z, z = x */
+	for (int r = 0; r < 3; r++)
+	{
+		int16_t x = (int16_t)rdword(port + 6 * r), z = (int16_t)rdword(port + 6 * r + 4);
+		wrword(port + 6 * r, (uint16_t)(-z));
+		wrword(port + 6 * r + 4, (uint16_t)x);
+	}
 	wrbyte(port + 280, (uint8_t)rdbyte(port + 280) | 0x40);
 	wrword(port + 164, c->pads - 1);
 	wrword(port + 178, c->pads * 8);

@@ -1036,6 +1036,8 @@ static const char *FS_SPHERE =
 	 * coverage is about one pixel wide, whatever the zoom; the colour mixes
 	 * the eight palette entries by the coverages */
 		"    if (uTextured == 2) {\n"
+		/* an image is a normal map, east to the right; atan(x, z) in the game's axes runs westward */
+		"      uv.x = 1.0 - uv.x;\n"
 		/* the longitude wraps at the seam: undo the jump in its derivatives so the mip level stays right */
 		"      vec2 gx = dFdx(uv), gy = dFdy(uv);\n"
 		"      gx.x -= floor(gx.x + 0.5); gy.x -= floor(gy.x + 0.5);\n"

@@ -50,7 +50,8 @@ A body may have a `look`, an object or the name of one in the file's top-level `
 - `atmosphere`: the haze bands and the sky seen from the planet take this colour, each band keeping its own lightness.
 - `surface`: an image file name (PNG, JPEG, BMP or TGA, up to the GPU's texture size, e.g. 4096 x 2048) in the play folder's
   `systems/`, drawn on the sphere instead of the model's outlines (no colour table: `colours` and `tint` do not apply to it).
-  Equirectangular like a world map: north at the top, the image's middle column facing +z of the planet's own axes (the axes are
+  Equirectangular like a world map: north at the top, east to the right (longitude 0 in the middle; the shader mirrors
+  `atan2(x, z)`, which runs westward in the game's axes, as surface ports' west longitudes do), the image's middle column facing +z of the planet's own axes (the axes are
   the game's, turned by the planet's tilt and spin like any planet's: a planet with tilt 0 still has its poles wherever the
   model puts them, so check the first picture and shift the image if needed). `night` (0 to 1, default 0.25) is how much of the
   image shows on the night side; the terminator stays the game's hard one. A missing or bad file is logged once and the planet
@@ -135,6 +136,7 @@ with `--shift DEG` if a feature does not line up on the planet in the game.
 - The pads are in the model's hull, as in the game's own ground ports (model 48 -> 164 -> 209): a record with flag `$80 + n` and
   bits `$22` per pad, pointing at a hull-only model whose planes face in round the pad. A ship over pad n that touches down gently
   on the ground has landed on it (L620a4: bit 5 from the hull, bit 6 from the ground contact in L3f566).
+- The port is turned so its model's x axis points east and z north (`own_port_setup`; the game's own ports have x north, z west).
 - `pads` (up to 8) and `parking` (up to 4): metres east and north of the model's origin. The pads' count becomes the port's
   (`164(obj)`, with `280(obj)` bit 6 set, in `Call_CustomBase`: the game gives pads only to stock models $5a-$64). Their places
   replace the game's tables by pad count (hook `Lcsys_pad` in L5f18a, hcall `Call_CustomPad`): `pads` is where the station
