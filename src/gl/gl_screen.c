@@ -38,6 +38,7 @@
 #include "gl_planet.h"
 #include "gl_prims.h"
 #include "gl_scene.h"
+#include "gl_screen_place.h"
 #include "gl_shadow.h"
 #include "gl_text.h"
 
@@ -500,6 +501,44 @@ static void draw_pans(void)
 static bool sub_page; /* draw_sub draws the page beside the screen's frame */
 static bool page_phone; /* the picture is the station's services': the phone icon on it */
 static bool page_buttons; /* the picture is the MAP page: its panel's buttons are moved onto the view */
+static bool place_hint; /* the headset's cockpit, paused: the screens can be moved (draw_place_hint) */
+
+/* A line of the game's font centred on the view at row y, white on a dark band */
+static void draw_hint_line(int y, const char *s)
+{
+	int w = 0;
+	for (const char *c = s; *c; c++)
+	{
+		const unsigned char *g = screen_text_glyph((unsigned char)*c);
+		w += g ? g[9] : 0;
+	}
+	int x0 = (SCR_W - w) / 2;
+	if (x0 < 2)
+		x0 = 2;
+	for (int yy = y - 2; yy < y + 9; yy++)
+		for (int x = x0 - 4; x < x0 + w + 4 && x < SCR_W; x++)
+			if (x >= 0)
+				framebuf[yy * SCR_W + x] = 0xff201810; /* ABGR */
+	int x = x0;
+	for (const char *c = s; *c && x < SCR_W - 9; c++)
+	{
+		const unsigned char *g = screen_text_glyph((unsigned char)*c);
+		if (!g)
+			continue;
+		for (int row = 0; row < 8; row++)
+			for (int bit = 0; bit < 8; bit++)
+				if (g[row] & (0x80 >> bit))
+					framebuf[(y + row) * SCR_W + x + bit] = 0xff40e0ff;
+		x += g[9];
+	}
+}
+
+/* Paused in the headset's cockpit: how to move the screens, at the top of the view */
+static void draw_place_hint(void)
+{
+	draw_hint_line(6, "Screens can be moved: grip one to carry it");
+	draw_hint_line(18, "Grip it with both hands to resize it");
+}
 
 /* Over the caption (the buttons show the view): its rows are the stripes
  * left of it, then a frame and the word, lit while the orbit is shown */
@@ -588,6 +627,8 @@ void gl_screen_upload(void)
 	/* (not on a side page: the frame's own screen is the station's) */
 	if (scr_show.quiz && !sub_page)
 		quiz_buttons_draw(framebuf, scr_show.main_rgb);
+	if (place_hint && !sub_page)
+		draw_place_hint();
 	draw_pointer();
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, screen_tex);
@@ -1048,6 +1089,7 @@ static bool draw_vr(bool with_menu)
 	update_swap_interval(vr_running());
 	cockpit_set_menu_texture(0);
 	ui_set_vr_menu(false);
+	place_hint = false;
 	if (!vr_running())
 	{
 		laser_off();
@@ -1079,6 +1121,7 @@ static bool draw_vr(bool with_menu)
 		ui_set_vr_menu(menu != 0);
 	}
 	bool cockpit = cockpit_begin_frame(screen_w, screen_h, scr_show.cockpit, scr_show.sub ? scr_show.group : -1);
+	place_hint = cockpit && tracked && screen_place_adjustable();
 	laser_update(cockpit && tracked);
 
 	if (render)

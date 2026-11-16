@@ -359,6 +359,11 @@ bool map_on_screen(void)
 
 } /* namespace */
 
+bool screen_place_adjustable(void)
+{
+	return game_paused();
+}
+
 void screen_place_reset(void)
 {
 	reset_wanted = true;

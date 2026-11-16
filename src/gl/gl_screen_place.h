@@ -105,6 +105,10 @@ void screen_place_edit(int s, const ScreenPose *p, bool final);
  * screen (2) or turns a map (1): it touches nothing else. */
 void screen_place_hands(VrHand hands[2], bool cockpit, int held[2]);
 
+/* The screens can be grabbed now: the game is paused (the options screen or
+ * the emulator's menu) */
+bool screen_place_adjustable(void);
+
 #ifdef __cplusplus
 }
 #endif
