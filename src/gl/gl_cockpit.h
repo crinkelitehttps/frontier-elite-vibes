@@ -285,6 +285,24 @@ bool cockpit_side_map_shown(void);
 /* Game thread: a left click at screen pixel (sx, sy) went to the game (to
  * follow the map's select mode) */
 void cockpit_map_click(int sx, int sy);
+/* For the keyboard / pad focus (gl_focus.h), as the last frame was drawn: how the
+ * screen of `group` takes a press, one of COCKPIT_FOCUS_* */
+enum
+{
+	COCKPIT_FOCUS_NONE, /* not shown */
+	COCKPIT_FOCUS_LIVE, /* the game's own screen is up on it: its buttons, pressed as a click */
+	COCKPIT_FOCUS_SIDE, /* it runs on the side (gl_mapscreen.h): pointer source of its own */
+	COCKPIT_FOCUS_MENU, /* the flight comms menu on the COMS screen */
+	COCKPIT_FOCUS_HOST  /* dimmed, not the game's now: a tap brings it up */
+};
+int cockpit_focus_mode(int group);
+/* the camera screen is shown */
+bool cockpit_focus_camera(void);
+/* The panel and the screens' quads for it, page pixels -> view space: surface 0 the panel (rows
+ * COCKPIT_PANEL_ROW0 .. GL_SCREEN_H), 1 + group the screen's, 1 + COCKPIT_SCREENS the camera's
+ * (rows 0 .. 168); the point of page pixel (x, y) */
+bool cockpit_focus_point(int quad, float x, float y, float out[3]);
+
 /* Places the screens again, after one was moved (gl_screen_place.h) */
 void cockpit_place_screens(void);
 /* A ray in the play space, as cockpit_ray_to_screen: does it hit a host

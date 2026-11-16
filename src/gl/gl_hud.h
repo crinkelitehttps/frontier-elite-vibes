@@ -67,6 +67,7 @@ extern bool orbit_display;
 #define COG_BTN_X1   314
 #define ORBIT_BTN_Y1 186
 void hud_orbit_button_show(bool on);
+bool hud_orbit_button_shown(void);
 bool hud_orbit_button_press(int x, int y); /* true: it was the button's */
 
 /* The orbit's conic round the ship's parent in the parent's frame (position

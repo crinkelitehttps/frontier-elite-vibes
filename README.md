@@ -31,8 +31,8 @@ In the front flight view the game is shown from a seat in the ship: the world fi
   * Left stick - thrust sideways and up / down (strafing).
   * Right stick - pitch and roll; hold RB to yaw instead of roll.
   * LB / LT - speed up / down (or main / retro thrust when held, with the engines off).
-  * RT - fire. B - flight view (front, rear, turrets, external). Y - cockpit view on / off.
-  * D-pad up / down - zoom in / out. On the galaxy map the sticks scroll it (on the cockpit screen only the left one: the right one still flies). Start - pause. Right stick click - recentre head tracking / VR.
+  * RT - fire. B - flight view (front, rear, turrets, external).
+  * Y / X - focus the next / previous cockpit surface clockwise (dashboard, COMS, MAP, CAMERA, SHIP): a green outline marks it. The D-pad moves a green box between its buttons, A presses the one under the box. (The keyboard: Tab / Shift-Tab, the arrows and F. These keys always belong to this while the cockpit is shown, outside the free camera and the options screen, so the arrows no longer steer or scroll the map: the cockpit view is Ctrl-K, zoom `=` and `-`.) On the galaxy map the sticks scroll it (on the cockpit screen only the left one: the right one still flies). Start - pause. Right stick click - recentre head tracking / VR.
   * Left stick click - a mouse pointer for the control panel and menus: the right stick moves it (and stops steering meanwhile), click the left stick again to click there and put it away. Works in the cockpit, the classic view and VR. (A `gamepad.cfg` from before this change keeps its old bindings.)
   * Hold Back for the console's F1-F10: F1-F4 on the D-pad (left, up, right, down), F5 on left stick click, F6-F9 on X, Y, B, A, F10 on Start.
   * Hold RB for time acceleration: D-pad down is normal time, left / up / right faster, Y fastest.

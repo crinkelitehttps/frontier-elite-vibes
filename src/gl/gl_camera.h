@@ -102,6 +102,15 @@ void camera_capture(bool screen);
  * clicking it in the flight view does; else on to the next direction */
 void camera_tap(float u, float v);
 
+/* The picture's buttons (the directions, and the zoom ones in the target view),
+ * x, y, w, h in picture pixels; for the keyboard / pad focus (gl_focus.h) */
+#define CAMERA_BUTTONS 9
+typedef struct
+{
+	int x, y, w, h, id;
+} CameraButton;
+int camera_buttons(CameraButton out[CAMERA_BUTTONS]);
+
 /* Game thread, as the flight view starts drawing its objects
  * (Call_CockpitPass): notes the shots they are to show, which the drawing
  * clears, for the picture drawn after it */

@@ -75,7 +75,7 @@ typedef struct
  * right button drags the map with); the batch plays it back as the game's
  * vblank handler would have (UpdateMouse), once per press, and nothing of
  * it reaches the flight view. */
-#define MAPSCREEN_SOURCES 2 /* pointers: 0 the mouse (game thread), 1 the hands (render thread) */
+#define MAPSCREEN_SOURCES 3 /* pointers: 0 the mouse (game thread), 1 the hands (render thread), 2 the keyboard / pad focus (gl_focus.h) */
 void mapscreen_pointer(int source, int group, int x, int y, int buttons, int dx, int dy);
 /* A drag that turns the map (the right button with a mouse; a hand or a
  * controller's own): held now, and its motion since the last call in mouse
@@ -121,12 +121,17 @@ bool mapscreen_page(int group, MapPage *out);
  * lower right, from where the game has them (source: panel rows 168..199)
  * to (dx, dy), w x h. A pointer there is put back where the button was. */
 #define MAPSCREEN_BUTTONS 16
+#define MAPSCREEN_SHIP_BUTTONS 64
 typedef struct
 {
 	int sx, sy, w, h, dx, dy;
 	int id; /* the game's icon number */
 } MapButton;
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
+
+/* The SHIP screen's own buttons as the page last made set them (page pixels, x, y, w, h and the game's
+ * icon number); none on the host's extra pages */
+int mapscreen_ship_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS]);
 
 /* The maps' pan (galaxy) or turn (system) buttons, up, down, left, right from the top down, in a
  * stack above the rightmost button: x, y, w, h on the screen each, 0 of them

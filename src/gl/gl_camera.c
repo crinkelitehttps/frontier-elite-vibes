@@ -535,6 +535,20 @@ static int button_at(float x, float y)
 	return -1;
 }
 
+int camera_buttons(CameraButton out[CAMERA_BUTTONS])
+{
+	int n = 0;
+	for (int i = 0; i < BTN_COUNT && n < CAMERA_BUTTONS; i++)
+	{
+		if (i >= CAM_COUNT && SDL_AtomicGet(&cam_dir) != CAM_TARGET)
+			break;
+		int bx, by;
+		button_rect(i, &bx, &by);
+		out[n++] = (CameraButton){bx, by, BTN_SIZE, BTN_SIZE, i};
+	}
+	return n;
+}
+
 /* The map's pan buttons' look: a frame and a triangle; UP and DOWN have a
  * bar on the far side, FORWARD and BACK are plain */
 static void draw_buttons(int current)

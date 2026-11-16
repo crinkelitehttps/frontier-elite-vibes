@@ -31,6 +31,11 @@ void hud_orbit_button_show(bool on)
 	orbit_button_on = on;
 }
 
+bool hud_orbit_button_shown(void)
+{
+	return orbit_button_on;
+}
+
 bool hud_orbit_button_press(int x, int y)
 {
 	if (!orbit_button_on || x < ORBIT_BTN_X0 || x > COG_BTN_X1 || y < ORBIT_BTN_Y0 || y > ORBIT_BTN_Y1)

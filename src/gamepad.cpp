@@ -23,6 +23,7 @@ extern "C"
 #include "game_state.h"
 #include "gl/gl_clipboard.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_focus.h"
 #include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
 #include "headtrack.h"
@@ -95,6 +96,11 @@ static const char DEFAULT_CFG[] = R"cfg(# GLFrontier gamepad bindings (gamepad.c
 #   shift1, shift2             hold for that shift layer
 #   recenter                   head tracking: the current pose is ahead
 #   cockpit                    cockpit view on / off (also Ctrl-K)
+#   focus-next, focus-prev     the cockpit's next / previous screen (dashboard,
+#                              COMS, MAP, CAMERA, SHIP clockwise): a green outline
+#   nav-up, nav-down, nav-left, nav-right
+#                              move the green box between the focused screen's buttons
+#   activate                   press the button under the box
 #   orbit                      orbit display on / off: the orbit's conic on the HUD
 #                              with Ap, Pe and the time to the next apsis
 #   pointer                    a mouse pointer for the control panel and
@@ -145,14 +151,23 @@ leftshoulder      key return         # forward: set speed up, or main thrust (ho
 lefttrigger       key rshift         # back: set speed down, or retro thrust (hold)
 righttrigger      key space          # fire
 b                 key f1             # flight view: front, rear, turrets, external
-y                 cockpit            # cockpit view on / off
 start             key escape         # pause
 leftstick         pointer            # pointer for the panel: press, aim (right stick), press to click
 in pointer rightx pointer-x
 in pointer righty pointer-y
 rightstick        recenter           # head tracking / VR: this pose is straight ahead
-dpup              key =              # zoom in (maps, external view)
-dpdown            key -              # zoom out
+
+# ---- The cockpit's screens: Y / X pick the next / previous one (clockwise) and a
+# green box on a button, moved with the d-pad, is pressed with A. (The keyboard:
+# Tab / Shift-Tab, the arrows, F.) Zoom is =  and - on the keyboard; the cockpit view
+# is Ctrl-K.
+y                 focus-next         # next screen, clockwise
+x                 focus-prev         # previous screen
+a                 activate           # press the button under the green box
+dpup              nav-up             # move the green box
+dpdown            nav-down
+dpleft            nav-left
+dpright           nav-right
 
 # ---- Back held: the console's function keys, laid out like the panel
 # (F1-F4 on the left, F6-F10 on the right)
@@ -278,6 +293,7 @@ vibe::Bindings bindings;
 /* the actions and modes the file names (registered in gamepad_init) */
 int steer_x, steer_y, roll_axis, yaw_axis, strafe_x, strafe_y, pointer_x, pointer_y;
 int press_cockpit, press_orbit, press_menu, press_pointer;
+int press_focus_next, press_focus_prev, press_nav[4], press_activate; /* gl_focus.h: up, down, left, right */
 int mode_map, mode_map_nopointer, mode_pointer;
 int set_look_yaw, set_look_pitch, set_pointer_speed;
 
@@ -606,6 +622,13 @@ void gamepad_init(void)
 	press_orbit = bindings.add_press("orbit", "orbit display");
 	press_menu = bindings.add_press("menu");
 	press_pointer = bindings.add_press("pointer");
+	press_focus_next = bindings.add_press("focus-next", "next screen");
+	press_focus_prev = bindings.add_press("focus-prev", "previous screen");
+	press_nav[0] = bindings.add_press("nav-up", "select up");
+	press_nav[1] = bindings.add_press("nav-down", "select down");
+	press_nav[2] = bindings.add_press("nav-left", "select left");
+	press_nav[3] = bindings.add_press("nav-right", "select right");
+	press_activate = bindings.add_press("activate", "press button");
 	mode_map = bindings.add_mode("map");
 	mode_map_nopointer = bindings.add_mode("map-nopointer");
 	mode_pointer = bindings.add_mode("pointer");
@@ -735,6 +758,20 @@ void gamepad_update(void)
 		orbit_display = !orbit_display;
 	if (f.press[press_menu])
 		toggle_m68k_menu = !toggle_m68k_menu;
+	if (f.press[press_focus_next])
+		focus_next();
+	if (f.press[press_focus_prev])
+		focus_prev();
+	if (f.press[press_nav[0]])
+		focus_move(0, -1);
+	if (f.press[press_nav[1]])
+		focus_move(0, 1);
+	if (f.press[press_nav[2]])
+		focus_move(-1, 0);
+	if (f.press[press_nav[3]])
+		focus_move(1, 0);
+	if (f.press[press_activate])
+		focus_activate();
 	if (f.press[press_pointer] && !vr_active) /* the motion controllers point */
 	{
 		if (pointer_on)

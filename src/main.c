@@ -21,6 +21,7 @@
 #include "input.h"
 #include "gl/gl_mapscreen.h"
 #include "gl/gl_native.h"
+#include "gl/gl_focus.h"
 #include "gl/gl_screen_edit.h"
 #include "keymap.h"
 #include "manual.h"
@@ -336,6 +337,8 @@ void Main_EventHandler(void)
 			continue;
 		if (screen_edit_event(&event))
 			continue;
+		if (focus_key_event(&event))
+			continue;
 		if (freecam_handle_event(&event))
 			continue;
 		if (gamepad_handle_event(&event))
@@ -418,6 +421,7 @@ void Main_EventHandler(void)
 	if (toggle_touch_controls)
 		touch_input_tick();
 	gamepad_update();
+	focus_tick();
 	settings_poll(); /* writes glfrontier.cfg if a setting changed */
 }
 

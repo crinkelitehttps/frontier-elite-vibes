@@ -255,6 +255,22 @@ void mapscreen_phone_unmove(int *x, int *y)
 	SDL_AtomicUnlock(&btn_lock);
 }
 
+int mapscreen_ship_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS])
+{
+	int n = 0;
+	/* (read from another thread without a lock, as the picture's own tap test is: the lists are small ints) */
+	const int icons = ship.extra ? 0 : ship.icons;
+	for (int i = 0; i < icons && n < MAPSCREEN_SHIP_BUTTONS; i++)
+	{
+		const int *r = ship.rect[i];
+		if (r[0] < 0 || r[2] < r[0] || r[3] < r[1] || r[1] >= PANEL_ROW0 || r[3] >= PANEL_ROW0)
+			continue;
+		MapButton m = {r[0], r[1], r[2] - r[0] + 1, r[3] - r[1] + 1, r[0], r[1], ship.id[i]};
+		out[n++] = m;
+	}
+	return n;
+}
+
 int mapscreen_pans(int out[MAPSCREEN_PANS][4])
 {
 	SDL_AtomicLock(&btn_lock);

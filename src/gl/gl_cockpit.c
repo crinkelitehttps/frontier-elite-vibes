@@ -19,6 +19,7 @@
 
 #include "gl_api.h"
 #include "gl_camera.h"
+#include "gl_focus.h"
 #include "gl_mapscreen.h"
 #include "gl_clipboard.h"
 #include "gl_cockpit.h"
@@ -102,6 +103,7 @@ static int live = -1;    /* ... the live one's group (COCKPIT_SCREEN_*) */
 static bool side_beside; /* ... and the MAP and SHIP screens are live beside it (the station's) */
 static bool side_on[COCKPIT_SCREENS]; /* ... which of them are shown (they run on the side) */
 static GLuint sub_tex[COCKPIT_SCREENS]; /* their pictures, 0: none yet */
+static volatile int focus_modes[COCKPIT_SCREENS]; /* COCKPIT_FOCUS_*, for gl_focus.c */
 static bool cam_on;      /* ... with the camera screen */
 static GLuint cam_tex;
 /* The emulator menu's screen (gl_screen_place.h, PLACE_MENU), when the menu
@@ -680,6 +682,13 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	coms_menu = active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && coms_hold > 0;
 	cam_tex = active && cockpit_camera ? camera_texture() : 0;
 	cam_on = cam_tex != 0;
+	for (int g = 0; g < COCKPIT_SCREENS; g++)
+		focus_modes[g] = !active ? COCKPIT_FOCUS_NONE
+						 : side_on[g] ? COCKPIT_FOCUS_SIDE
+						 : sub_on && live == g ? COCKPIT_FOCUS_LIVE
+						 : g == COCKPIT_SCREEN_COMS && coms_menu ? COCKPIT_FOCUS_MENU
+						 : sub_tex[g] ? COCKPIT_FOCUS_HOST
+										: COCKPIT_FOCUS_NONE;
 	menu_tex = active ? menu_req : 0;
 	emu_menu_on = menu_tex != 0;
 	if (window_w > 0 && window_h > 0)
@@ -979,6 +988,106 @@ static void queue_tex_quad(const mat4 *m, const float corners[4][3], GLuint tex,
 	q->tint = tint;
 }
 
+int cockpit_focus_mode(int group)
+{
+	return group >= 0 && group < COCKPIT_SCREENS ? focus_modes[group] : COCKPIT_FOCUS_NONE;
+}
+
+bool cockpit_focus_camera(void)
+{
+	return active && cam_on;
+}
+
+/* The quad of the focus's `quad` (see cockpit_focus_point) and the page rows it shows */
+static const float (*focus_quad(int quad, int *row0, int *rows))[3]
+{
+	if (quad == 0)
+	{
+		*row0 = PANEL_ROW0, *rows = GL_SCREEN_H - PANEL_ROW0;
+		return (const float(*)[3])panel;
+	}
+	*row0 = 0, *rows = PANEL_ROW0;
+	if (quad == 1 + COCKPIT_SCREENS)
+		return (const float(*)[3])cam;
+	return (const float(*)[3])subs[quad - 1];
+}
+
+bool cockpit_focus_point(int quad, float x, float y, float out[3])
+{
+	if (quad < 0 || quad > 1 + COCKPIT_SCREENS)
+		return false;
+	int row0, rows;
+	const float(*q)[3] = focus_quad(quad, &row0, &rows);
+	float u = x / (float)GL_SCREEN_W, v = (y - (float)row0) / (float)rows;
+	for (int k = 0; k < 3; k++)
+	{
+		float top = q[0][k] + (q[1][k] - q[0][k]) * u, bot = q[2][k] + (q[3][k] - q[2][k]) * u;
+		out[k] = top + (bot - top) * v;
+	}
+	return true;
+}
+
+/* A line facing the eye, `half` wide in angle */
+static void focus_line(const float a[3], const float b[3], float half, const float eye[3], const float col[3])
+{
+	float d[3], m[3], e[3], s[3];
+	for (int k = 0; k < 3; k++)
+	{
+		d[k] = b[k] - a[k];
+		m[k] = (a[k] + b[k]) * 0.5f;
+		e[k] = eye[k] - m[k];
+	}
+	s[0] = d[1] * e[2] - d[2] * e[1];
+	s[1] = d[2] * e[0] - d[0] * e[2];
+	s[2] = d[0] * e[1] - d[1] * e[0];
+	float len = sqrtf(s[0] * s[0] + s[1] * s[1] + s[2] * s[2]);
+	if (len < 1e-9f)
+		return;
+	float dist = sqrtf(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
+	float w = half * dist / len;
+	float p[4][3];
+	for (int k = 0; k < 3; k++)
+	{
+		p[0][k] = a[k] - s[k] * w;
+		p[1][k] = a[k] + s[k] * w;
+		p[2][k] = b[k] - s[k] * w;
+		p[3][k] = b[k] + s[k] * w;
+	}
+	gd_tri_rgb(p[0], col, p[1], col, p[2], col);
+	gd_tri_rgb(p[1], col, p[3], col, p[2], col);
+}
+
+/* The rectangle x, y, w, h of page pixels (the corners lifted a little towards the eye) */
+static void focus_rect(int quad, float x, float y, float w, float h, float half, const float eye[3])
+{
+	static const float green[3] = {0.1f, 1.0f, 0.2f};
+	float c[4][3];
+	const float xs[4] = {x, x + w, x + w, x}, ys[4] = {y, y, y + h, y + h};
+	for (int i = 0; i < 4; i++)
+	{
+		if (!cockpit_focus_point(quad, xs[i], ys[i], c[i]))
+			return;
+		for (int k = 0; k < 3; k++)
+			c[i][k] += (eye[k] - c[i][k]) * 0.004f;
+	}
+	for (int i = 0; i < 4; i++)
+		focus_line(c[i], c[(i + 1) & 3], half, eye, green);
+}
+
+/* The keyboard / pad focus: the focused surface's outline and the box on its button */
+static void focus_draw(const float eye[3])
+{
+	FocusView fv;
+	if (!focus_view(&fv))
+		return;
+	int row0, rows;
+	focus_quad(fv.quad, &row0, &rows);
+	gd_set_cull(false);
+	focus_rect(fv.quad, 0, (float)row0, (float)GL_SCREEN_W, (float)rows, 0.0012f, eye);
+	if (fv.has_box)
+		focus_rect(fv.quad, (float)fv.x - 1, (float)fv.y - 1, (float)fv.w + 2, (float)fv.h + 2, 0.0018f, eye);
+}
+
 void cockpit_draw(void)
 {
 	if (!active)
@@ -1040,6 +1149,7 @@ void cockpit_draw(void)
 	gd_pop();
 
 	screen_edit_queue(&cp, eye);
+	focus_draw(eye);
 
 	/* the clipboard (gl_clipboard.h), nearer than the panel */
 	clipboard_queue_cockpit(&cp, eye);
