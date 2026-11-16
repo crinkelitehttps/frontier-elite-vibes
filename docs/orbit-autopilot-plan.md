@@ -429,3 +429,18 @@ in one update at the point where it changes only what it should (`burn_poll` in 
 Tested (script, Merlin, 10000x pressed every 3 s): circular 1000 km retrograde -> 300x300 inc 30: CIRC, PLANE (3.1 km/s,
 the retrograde flip), a 36 m/s plane touch-up, AT PE -> IN ORBIT. Circular 2000 km -> 300x6000 argpe 90: AT PLAN AP,
 AT PLAN PE -> IN ORBIT (2 burns). Not tested: entry straight from the flyby, Kerbin/gas giants, the user's save.
+
+## 16. Flyby crashes at Aster and Kerbin (2026-11-15)
+
+User's pathlog: with a low plan the periapsis stayed under the surface during the whole flyby (Aster -515 km, Kerbin -22 km).
+The same crash happens with burn mode reverted (the 2026-11-13 code: Kerbin after hyperspace, pe -22 to -31 km, hit), so
+it is older than burn mode. Two causes, both in the flyby:
+- The flyby aimed at `0.98 * rp`, 2% of the planned radius *from the centre*: 610 km at Aster, 120 km at Kerbin (radius 6,000 km),
+  under the surface for a plan below that. Now 2% of the planned *altitude*.
+- The periapsis burn fires with up to 5% of the speed still inward and scaled the whole velocity down, keeping the inward part:
+  at Aster (40 km/s) the orbit after it had pe -389 km. Now the burn makes the point an apsis (velocity horizontal) with the
+  opposite apsis the plan's, as burn mode does.
+Tested: Aster from rest at 200,000 km, plan 100x100, 10000x pressed: FLYBY, burn at 405 km, one PLANE burn, IN ORBIT (pe 100,
+ap 405). User in game, Kerbin after hyperspace (with both fixes): missed by a long way, came back slowly, crashed; not yet
+diagnosed. Still open: the done tolerance is 1% of the radius from the centre (306 km at Aster, so 100x405 passed as 100x100).
+The approach before the handover is the game's own autopilot (flight state 4), aimed 133,000 km off Kerbin at the handover.

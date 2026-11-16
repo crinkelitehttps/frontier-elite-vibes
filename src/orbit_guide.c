@@ -535,13 +535,17 @@ static void enter_flyby(const OrbitCtx *have)
  * height, on the side the plan's direction gives; at the periapsis the speed is brought down, along the ship's motion, to
  * what the planned apsides need (in one update: the burn has to be at the periapsis, and at any thrust the ships have it
  * would take a quarter of an orbit). Then it is a closed orbit and the guidance does the fine tuning. */
+static void apsis_velocity(const OrbitCtx *c, const double rh[3], double r, const double hh[3], double R, double u[3]);
+
 static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 {
 	OrbitFlyby fb;
 	unsigned int ship = game_player_ship();
 	double clock = game_clock(), steps = (clock - ap.last_clock) / REF_DT;
 	ap.last_clock = clock;
-	if (!orbit_flyby_step(have, pl, pl->el.rp * 0.98, &fb))
+	/* aimed a little under the planned periapsis (so the step stays valid down to it), by 2% of the ALTITUDE: 2% of the radius
+	 * from the centre was 610 km at Aster and 120 km at Kerbin, under the surface for a low plan, and the ship flew in */
+	if (!orbit_flyby_step(have, pl, have->radius + 0.98 * (pl->el.rp - have->radius), &fb))
 	{
 		ap.st = AP_GUIDE; /* no flyby possible any more (too slow, or inside the periapsis) */
 		ap.cap_frac = 0.1;
@@ -559,11 +563,21 @@ static void flyby_poll(const OrbitCtx *have, const OrbitPlan *pl)
 	}
 	if (fb.vr_frac >= -0.05)
 	{
-		double vs = sqrt(dot3(have->u, have->u)), vt = orbit_brake_speed(have, pl), u[3];
-		if (vt > 0 && vt < vs)
+		/* The burn makes this point an apsis (the velocity horizontal) and the opposite apsis the plan's one this point is not
+		 * nearer, as burn mode does. Scaling the whole velocity down kept the inward part: the test fires with up to 5% of the
+		 * speed still inward (2 km/s at Aster), and the orbit after it had its periapsis 400 km under the surface. */
+		double vs = sqrt(dot3(have->u, have->u)), vt = 0, u[3];
+		double r = sqrt(dot3(have->r, have->r)), rh[3] = {have->r[0] / r, have->r[1] / r, have->r[2] / r};
+		double hv[3] = {have->r[1] * have->u[2] - have->r[2] * have->u[1], have->r[2] * have->u[0] - have->r[0] * have->u[2],
+						have->r[0] * have->u[1] - have->r[1] * have->u[0]};
+		double hl = sqrt(dot3(hv, hv));
+		if (hl > 0)
 		{
 			for (int i = 0; i < 3; i++)
-				u[i] = have->u[i] / vs * vt;
+				hv[i] /= hl;
+			double R = fabs(r - pl->el.ra) < fabs(r - pl->el.rp) ? pl->el.rp : pl->el.ra;
+			apsis_velocity(have, rh, r, hv, R, u);
+			vt = sqrt(dot3(u, u));
 			set_velocity(ship, have, u);
 		}
 		if (getenv("GLF_MAP_LOG"))
