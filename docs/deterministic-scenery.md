@@ -68,8 +68,10 @@ uses, gave sea at London). [inferred] That code 0 is the liquid on every planet 
   come into range by themselves and the same game time gives the same sky. The ray is cast at the cell's present place;
   the copy is then turned back into the wind frame (position and matrix, `turn_obj`) and turned forward again each frame when
   it is handed to the object loop, so a cloud is a rigid turn about the planet's centre and keeps its height. Cloud shadows
-  follow (they are part of the field model). Which of the matrix's rows or columns are the axes is found from the first
-  objects made (`detect_mat`; `GLF_SCEN_LOG=1` prints it).
+  follow (they are part of the field model). The matrix's columns are the axes (column 1 up). This
+  used to be guessed from the first object made after each flush (`detect_mat`); when that object's up axis matched a
+  row too the guess failed, and that first cloud was kept unturned and drawn tipped over by the wind's angle (seen near
+  starports after a launch, 2026-11-16). Now fixed as columns.
 - Cloud fields the spawner makes near a starport (`l61f06`) from land cells are fixed in place: not kept (`Call_ScenMade` checks
   the model, `$c6`, of a land-layer object), so only the drifting layer makes clouds.
 - Not checked: how the axis looks to the eye (the wind stands still at the axis' two poles), and the cost of the second scan.

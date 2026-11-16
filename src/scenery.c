@@ -219,9 +219,10 @@ static void wturn(bool inv, const double v[3], double o[3])
 }
 
 /* An object's bytes (big endian, as in RAM): the 64 bit position (mm) and the 3 x 3 matrix of 16 bit words.
-   The matrix's rows or its columns are the object's axes in the planet's frame: found from the first objects made,
-   which stand on the surface so that one axis is the way up */
-static int mat_cols = -1; /* 0: rows are the axes, 1: columns */
+   The matrix's columns are the object's axes in the planet's frame (column 1 is up). This used to be guessed from
+   the first object made after each flush; when that object's up axis matched a row as well, the guess failed and
+   that first cloud was kept without its axes turned into the wind frame, so it was later drawn tipped over by the
+   wind's angle (seen near starports after a launch). */
 
 static uint32_t be32(const uint8_t *b)
 {
@@ -269,38 +270,6 @@ static void bmat_set(uint8_t *b, int i, int j, double v)
 	b[2 * (3 * i + j) + 1] = (uint8_t)w;
 }
 
-static void detect_mat(const uint8_t *b)
-{
-	double p[3], l;
-	bpos_get(b, p);
-	l = sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
-	if (l < 1)
-		return;
-	double best[2] = {0, 0};
-	for (int k = 0; k < 3; k++)
-	{
-		double r = 0, c = 0, rn = 0, cn = 0;
-		for (int j = 0; j < 3; j++)
-		{
-			r += bmat(b, k, j) * p[j] / l;
-			c += bmat(b, j, k) * p[j] / l;
-			rn += bmat(b, k, j) * bmat(b, k, j);
-			cn += bmat(b, j, k) * bmat(b, j, k);
-		}
-		if (rn > 0 && fabs(r) / sqrt(rn) > best[0])
-			best[0] = fabs(r) / sqrt(rn);
-		if (cn > 0 && fabs(c) / sqrt(cn) > best[1])
-			best[1] = fabs(c) / sqrt(cn);
-	}
-	if (best[0] > 0.98 && best[1] < 0.98)
-		mat_cols = 0;
-	else if (best[1] > 0.98 && best[0] < 0.98)
-		mat_cols = 1;
-	if (mat_cols >= 0 && getenv("GLF_SCEN_LOG"))
-		fprintf(stderr, "scenery: matrix %s are the axes (up scores %.3f rows, %.3f columns)\n", mat_cols ? "columns" : "rows",
-				best[0], best[1]);
-}
-
 /* the object turned by the wind's rotation (inv: back to the wind frame): its position and its axes */
 static void turn_obj(uint8_t *b, bool inv)
 {
@@ -308,19 +277,14 @@ static void turn_obj(uint8_t *b, bool inv)
 	bpos_get(b, p);
 	wturn(inv, p, q);
 	bpos_set(b, q);
-	if (mat_cols < 0)
-		return;
 	for (int k = 0; k < 3; k++)
 	{
 		double v[3], w[3];
 		for (int j = 0; j < 3; j++)
-			v[j] = mat_cols ? bmat(b, j, k) : bmat(b, k, j);
+			v[j] = bmat(b, j, k);
 		wturn(inv, v, w);
 		for (int j = 0; j < 3; j++)
-			if (mat_cols)
-				bmat_set(b, j, k, w[j]);
-			else
-				bmat_set(b, k, j, w[j]);
+			bmat_set(b, j, k, w[j]);
 	}
 }
 
@@ -382,7 +346,6 @@ static void flush(uint32_t seed, int slot)
 	scan_valid = false;
 	cache_seed = seed;
 	cache_slot = slot;
-	mat_cols = -1;
 }
 
 static int cmp_cell(const void *a, const void *b)
@@ -660,8 +623,6 @@ void Call_ScenMade(void)
 			tmpl[t].key = pending_key;
 			for (int b = 0; b < OBJ_BYTES; b++)
 				tmpl[t].obj[b] = (uint8_t)rdbyte(o + (uint32_t)b);
-			if (mat_cols < 0)
-				detect_mat(tmpl[t].obj);
 			tmpl[t].cloud = (uint8_t)pending_cloud;
 			if (pending_cloud)
 			{
