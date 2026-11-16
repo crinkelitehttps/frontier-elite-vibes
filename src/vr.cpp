@@ -213,6 +213,10 @@ struct Vr
 			 lower = XR_NULL_HANDLE, upper = XR_NULL_HANDLE, haptic = XR_NULL_HANDLE;
 	XrSpace aim_space[2] = {XR_NULL_HANDLE, XR_NULL_HANDLE};
 	VrHand hands[2] = {};
+	/* XR_EXT_performance_settings: ask for clocks that hold up (the Quest
+	 * otherwise settles on a low CPU level and the game misses frames) */
+	PFN_xrPerfSettingsSetPerformanceLevelEXT set_perf_level = nullptr;
+	void request_performance();
 	bool hand_announced[2] = {};
 	bool drew_overlay = false;
 
@@ -762,8 +766,7 @@ bool Vr::init(float resolution_scale)
 	ici.applicationInfo.applicationVersion = 1;
 	std::strcpy(ici.applicationInfo.engineName, "GLFrontier");
 	ici.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-	ici.enabledExtensionCount = uint32_t(std::size(exts));
-	ici.enabledExtensionNames = exts;
+	std::vector<const char *> ext_list(std::begin(exts), std::end(exts));
 #ifdef ANDROID
 	/* The loader needs the VM and the activity before anything else */
 	JNIEnv *env = static_cast<JNIEnv *>(SDL_AndroidGetJNIEnv());
@@ -795,8 +798,30 @@ bool Vr::init(float resolution_scale)
 	android_info.applicationActivity = activity;
 	ici.next = &android_info;
 #endif
+	/* Optional extensions: only the ones the runtime has (asked after the
+	 * Android loader is initialised) */
+	bool has_perf = false;
+	{
+		uint32_t n = 0;
+		if (XR_SUCCEEDED(xrEnumerateInstanceExtensionProperties(nullptr, 0, &n, nullptr)) && n)
+		{
+			std::vector<XrExtensionProperties> props(n, {XR_TYPE_EXTENSION_PROPERTIES});
+			if (XR_SUCCEEDED(xrEnumerateInstanceExtensionProperties(nullptr, n, &n, props.data())))
+				for (uint32_t i = 0; i < n; i++)
+					if (!std::strcmp(props[i].extensionName, XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME))
+						has_perf = true;
+		}
+	}
+	if (has_perf)
+		ext_list.push_back(XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME);
+	ici.enabledExtensionCount = uint32_t(ext_list.size());
+	ici.enabledExtensionNames = ext_list.data();
 	if (!check(nullptr, xrCreateInstance(&ici, &instance), "xrCreateInstance (is an OpenXR runtime installed and active?)"))
 		return false;
+	if (has_perf)
+		xrGetInstanceProcAddr(instance, "xrPerfSettingsSetPerformanceLevelEXT",
+							  reinterpret_cast<PFN_xrVoidFunction *>(&set_perf_level));
+	log_printf("openxr: performance settings %s\n", set_perf_level ? "available" : "not offered by the runtime");
 	XrSystemGetInfo sgi{XR_TYPE_SYSTEM_GET_INFO};
 	sgi.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
 	if (!check(instance, xrGetSystem(instance, &sgi, &system), "xrGetSystem (headset connected, VR runtime running?)"))
@@ -938,6 +963,19 @@ bool Vr::init(float resolution_scale)
 	return true;
 }
 
+void Vr::request_performance()
+{
+	if (!set_perf_level || !session)
+		return;
+	/* sustained high: the most the headset holds without throttling (boost
+	 * would be faster for a while, then hotter and slower) */
+	bool cpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_CPU_EXT, XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT),
+					 "xrPerfSettingsSetPerformanceLevelEXT cpu");
+	bool gpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_GPU_EXT, XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT),
+					 "xrPerfSettingsSetPerformanceLevelEXT gpu");
+	log_printf("PERF openxr level sustained high: cpu %s, gpu %s\n", cpu ? "set" : "refused", gpu ? "set" : "refused");
+}
+
 void Vr::poll()
 {
 	XrEventDataBuffer ev{XR_TYPE_EVENT_DATA_BUFFER};
@@ -955,6 +993,7 @@ void Vr::poll()
 					running = true;
 					recenter_pending = true;
 					log_printf("openxr: session running\n");
+					request_performance();
 					snprintf(status, sizeof status, "Running, %d x %d per eye", eyes[0].w, eyes[0].h);
 				}
 			}
@@ -974,6 +1013,22 @@ void Vr::poll()
 				running = false;
 				lost = true;
 			}
+		}
+		else if (ev.type == XR_TYPE_EVENT_DATA_PERF_SETTINGS_EXT)
+		{
+			/* the runtime warning about heat or missed frames: kept for diagnostics */
+			auto &e = *reinterpret_cast<XrEventDataPerfSettingsEXT *>(&ev);
+			static const char *const level[] = {"normal", "warning", "impaired"};
+			auto lv = [](XrPerfSettingsNotificationLevelEXT l) {
+				return l == XR_PERF_SETTINGS_NOTIF_LEVEL_NORMAL_EXT	 ? level[0]
+					   : l == XR_PERF_SETTINGS_NOTIF_LEVEL_WARNING_EXT ? level[1]
+																	   : level[2];
+			};
+			log_printf("PERF openxr %s %s: %s -> %s\n", e.domain == XR_PERF_SETTINGS_DOMAIN_CPU_EXT ? "cpu" : "gpu",
+					   e.subDomain == XR_PERF_SETTINGS_SUB_DOMAIN_COMPOSITING_EXT ? "compositing"
+					   : e.subDomain == XR_PERF_SETTINGS_SUB_DOMAIN_RENDERING_EXT ? "rendering"
+																					: "thermal",
+					   lv(e.fromLevel), lv(e.toLevel));
 		}
 		else if (ev.type == XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED && action_set)
 		{
