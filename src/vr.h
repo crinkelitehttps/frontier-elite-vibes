@@ -56,6 +56,7 @@ typedef struct
 /* Settings */
 extern bool vr_enabled;        /* use a headset (glfrontier.cfg "vr", --vr) */
 extern int vr_resolution;      /* percent of the runtime's recommended eye size */
+extern bool vr_boost;          /* ask the runtime for boost CPU/GPU clocks (else sustained high) */
 
 /* Once per frame with the GL context current: starts or stops VR to match
  * vr_enabled, handles the runtime's events */

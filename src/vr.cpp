@@ -53,6 +53,7 @@ extern "C" void log_printf(const char *fmt, ...);
 
 bool vr_enabled = false;
 int vr_resolution = 100;
+bool vr_boost = true;
 
 namespace
 {
@@ -217,6 +218,7 @@ struct Vr
 	 * otherwise settles on a low CPU level and the game misses frames) */
 	PFN_xrPerfSettingsSetPerformanceLevelEXT set_perf_level = nullptr;
 	void request_performance();
+	bool perf_boost = false; /* level last asked for */
 	bool hand_announced[2] = {};
 	bool drew_overlay = false;
 
@@ -965,15 +967,19 @@ bool Vr::init(float resolution_scale)
 
 void Vr::request_performance()
 {
+	perf_boost = vr_boost;
 	if (!set_perf_level || !session)
 		return;
-	/* sustained high: the most the headset holds without throttling (boost
-	 * would be faster for a while, then hotter and slower) */
-	bool cpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_CPU_EXT, XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT),
+	/* boost (vr_boost): highest clocks; the runtime may throttle when the
+	 * headset gets hot. Off: sustained high, the most it holds without
+	 * throttling. */
+	XrPerfSettingsLevelEXT level = perf_boost ? XR_PERF_SETTINGS_LEVEL_BOOST_EXT : XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT;
+	bool cpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_CPU_EXT, level),
 					 "xrPerfSettingsSetPerformanceLevelEXT cpu");
-	bool gpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_GPU_EXT, XR_PERF_SETTINGS_LEVEL_SUSTAINED_HIGH_EXT),
+	bool gpu = check(instance, set_perf_level(session, XR_PERF_SETTINGS_DOMAIN_GPU_EXT, level),
 					 "xrPerfSettingsSetPerformanceLevelEXT gpu");
-	log_printf("PERF openxr level sustained high: cpu %s, gpu %s\n", cpu ? "set" : "refused", gpu ? "set" : "refused");
+	log_printf("PERF openxr level %s: cpu %s, gpu %s\n", perf_boost ? "boost" : "sustained high", cpu ? "set" : "refused",
+			   gpu ? "set" : "refused");
 }
 
 void Vr::poll()
@@ -1257,7 +1263,11 @@ void vr_update(void)
 		}
 	}
 	if (vr)
+	{
 		vr->poll();
+		if (vr->running && vr->perf_boost != vr_boost) /* menu toggle */
+			vr->request_performance();
+	}
 }
 
 void vr_shutdown(void)
@@ -1392,6 +1402,7 @@ void vr_recenter(void)
 
 bool vr_enabled = false;
 int vr_resolution = 100;
+bool vr_boost = true;
 
 extern "C"
 {

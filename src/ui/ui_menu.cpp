@@ -312,6 +312,7 @@ void page_settings()
 	ImGui::TextWrapped("Resolution (from the next start)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##vrres", &vr_resolution, 50, 150, "%d%%");
+	wrapped_checkbox("Boost CPU and GPU clocks (faster; the headset may slow down when hot. Off: sustained high)", &vr_boost);
 	wrapped_checkbox("Hands that touch (else laser pointers)", &vr_hands);
 	if (vr_hands)
 	{

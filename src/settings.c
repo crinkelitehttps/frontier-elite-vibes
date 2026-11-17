@@ -65,6 +65,7 @@ typedef struct
 	int headtrack_port;
 	int vr;
 	int vr_resolution;
+	int vr_boost;
 	int vr_depth;
 	int vr_hands;
 	int vr_panel_distance;
@@ -129,6 +130,7 @@ static const struct
 	{"headtrack_port", offsetof(Settings, headtrack_port)},
 	{"vr", offsetof(Settings, vr)},
 	{"vr_resolution", offsetof(Settings, vr_resolution)},
+	{"vr_boost", offsetof(Settings, vr_boost)},
 	{"vr_depth", offsetof(Settings, vr_depth)},
 	{"vr_hands", offsetof(Settings, vr_hands)},
 	{"vr_panel_distance", offsetof(Settings, vr_panel_distance)},
@@ -291,6 +293,7 @@ static Settings current(void)
 	s.headtrack_port = headtrack_port;
 	s.vr = settings_vr_arg >= 0 ? file_vr : vr_enabled;
 	s.vr_resolution = vr_resolution;
+	s.vr_boost = vr_boost;
 	s.vr_depth = vr_depth;
 	s.vr_hands = vr_hands;
 	s.vr_panel_distance = vr_panel_distance;
@@ -363,6 +366,7 @@ static void apply(const Settings *s)
 	vr_enabled = settings_vr_arg >= 0 ? settings_vr_arg != 0 : s->vr != 0;
 	if (s->vr_resolution >= 25 && s->vr_resolution <= 200)
 		vr_resolution = s->vr_resolution;
+	vr_boost = s->vr_boost != 0;
 	if (s->vr_depth >= 0 && s->vr_depth <= 1000)
 		vr_depth = s->vr_depth;
 	vr_hands = s->vr_hands != 0;
