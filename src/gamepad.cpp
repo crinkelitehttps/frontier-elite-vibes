@@ -85,7 +85,8 @@ static const char DEFAULT_CFG[] = R"cfg(# GLFrontier gamepad bindings (gamepad.c
 #   steer-x, steer-y [invert]  the ship's steering (axes):
 #                              x turns (rolls with Elite controls), y pitches
 #   roll, yaw [invert]         steer-x, but rolling / yawing whatever the
-#                              game's Elite controls option
+#                              game's Elite controls option (roll yaws flat
+#                              below 40 km, where the game's roll also yaws)
 #   look-x, look-y [invert]    look around in the cockpit (springs back)
 #   strafe-x, strafe-y [invert] sideways / vertical thrust (x right +, y up +,
 #                              so lefty wants invert); a button gives full
@@ -512,6 +513,15 @@ void load_bindings()
  * Elite controls option says (rolling also yaws close to a planet). While
  * a roll or yaw binding steers, the option is set to match and put back
  * afterwards. mode: 0 leave it, 1 roll, 2 yaw. */
+/* Below 40 km (away from the port) the game's Elite controls turn the ship
+ * with roll and yaw together (L626ea), an arc: there a roll binding yaws
+ * flat instead. A6+692 is the altitude in mm (0 landed or docked, $ffffffff
+ * when there is no planet near). */
+bool roll_low()
+{
+	return (u32)rdlong(GAME_A6 + 692) <= 40000000u;
+}
+
 void force_elite_controls(int mode)
 {
 	u32 opt = GAME_A6 + A6_OPT_ELITE_CONTROLS;
@@ -526,6 +536,81 @@ void force_elite_controls(int mode)
 		wrbyte(opt, elite_saved);
 		elite_saved = -1;
 	}
+}
+
+/* Steering diagnosis (GLF_STEER_LOG=1; glfrontier.log, lines "STEER"): the game's state
+ * around the pad's steering whenever it changes, and twice a second while
+ * the pad steers. turned = degrees the ship turned since the last line and
+ * the axis, in the ship's own axes (right, up, forward): yaw is about up,
+ * roll about forward, pitch about right. */
+void log_steering(float sx, float sy, float roll, float yaw)
+{
+	static int last_key = -1;
+	static Uint64 last_ticks;
+	static double prev[9];
+	static bool have_prev;
+	static int enabled = -1;
+	if (enabled < 0)
+	{
+		const char *e = SDL_getenv("GLF_STEER_LOG");
+		enabled = e && *e && *e != '0';
+	}
+	if (!enabled)
+		return;
+	u32 ship = game_player_ship();
+	if (!ship)
+	{
+		have_prev = false;
+		return;
+	}
+	int state = rdbyte(GAME_A6 + A6_FLIGHT_STATE) & 0xff;
+	int flags = rdbyte(GAME_A6 + A6_FLIGHT_FLAGS) & 0xff;
+	int near = rdbyte(GAME_A6 + 893) & 0xff;
+	int elite = rdbyte(GAME_A6 + A6_OPT_ELITE_CONTROLS) & 0xff;
+	bool on = sx != 0.0f || sy != 0.0f;
+	int key = state | (flags & 1) << 8 | (near & 0x20) << 4 | (elite ? 1 << 10 : 0) | (on ? 1 << 11 : 0) |
+		(roll != 0.0f) << 12 | (yaw != 0.0f) << 13;
+	Uint64 now = SDL_GetTicks64();
+	if (key == last_key && !(on && now - last_ticks >= 500))
+		return;
+	double m[9];
+	for (int k = 0; k < 9; k++)
+		m[k] = (int16_t)rdword(ship + 2 * k) / 32768.0;
+	/* the game's axes are not quite unit length: a turn of nothing would read as ~14 degrees */
+	for (int j = 0; j < 3; j++)
+	{
+		double l = std::sqrt(m[j] * m[j] + m[3 + j] * m[3 + j] + m[6 + j] * m[6 + j]);
+		if (l > 1e-9)
+			for (int i = 0; i < 3; i++)
+				m[3 * i + j] /= l;
+	}
+	char turned[96] = "";
+	if (have_prev)
+	{
+		/* R = prev^T m: the turn in the ship's axes */
+		double r[3][3];
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				r[i][j] = prev[0 + i] * m[0 + j] + prev[3 + i] * m[3 + j] + prev[6 + i] * m[6 + j];
+		double c = std::max(-1.0, std::min(1.0, (r[0][0] + r[1][1] + r[2][2] - 1.0) / 2.0));
+		double ax[3] = {r[2][1] - r[1][2], r[0][2] - r[2][0], r[1][0] - r[0][1]};
+		double l = std::sqrt(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]);
+		if (l < 1e-9)
+			l = 1.0;
+		snprintf(turned, sizeof turned, " turned %.1f deg about (r %+.2f u %+.2f f %+.2f)",
+				 std::acos(c) * 180.0 / M_PI, ax[0] / l, ax[1] / l, ax[2] / l);
+	}
+	memcpy(prev, m, sizeof prev);
+	have_prev = true;
+	log_printf("STEER state $%02x engines %s near $%02x alt %.2f km speed %d set %d elite %s | pad x %+.2f y %+.2f roll %+.2f "
+			   "yaw %+.2f | word x %d y %d | queue pitch %d roll %d yaw %d | align %d %d %d | 3d %d%s\n",
+			   state, flags & 1 ? "off" : "on", near, (int)rdlong(GAME_A6 + 692) / 1e6, (int)rdlong(GAME_A6 + 688),
+			   (int)rdlong(GAME_A6 + 848), elite ? "on" : "off", sx, sy, roll, yaw, (int16_t)rdword(GAME_A6 + 14508),
+			   (int16_t)rdword(GAME_A6 + 14510), (int16_t)rdword(ship + 134), (int16_t)rdword(ship + 136),
+			   (int16_t)rdword(ship + 138), (int16_t)rdword(ship + 228), (int16_t)rdword(ship + 230),
+			   (int16_t)rdword(ship + 232), rdbyte(GAME_A6 + A6_3DVIEW_MODE) & 0xff, turned);
+	last_key = key;
+	last_ticks = now;
 }
 
 void write_steering(float x, float y)
@@ -791,12 +876,13 @@ void gamepad_update(void)
 
 	float roll = f.axis[roll_axis], yaw = f.axis[yaw_axis];
 	float steer[2] = {f.axis[steer_x] + roll + yaw, f.axis[steer_y]};
-	force_elite_controls(yaw != 0.0f ? 2 : roll != 0.0f ? 1 : 0);
+	force_elite_controls(yaw != 0.0f ? 2 : roll != 0.0f ? (roll_low() ? 2 : 1) : 0);
 	for (float &s : steer)
 		s = std::max(-1.0f, std::min(1.0f, s));
 	look[0] = f.look_x;
 	look[1] = -f.look_y; /* y down + */
 	write_steering(steer[0], steer[1]);
+	log_steering(steer[0], steer[1], roll, yaw);
 	strafe_set_pad(f.axis[strafe_x], f.axis[strafe_y]);
 }
 

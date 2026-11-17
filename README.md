@@ -29,7 +29,7 @@ In the front flight view the game is shown from a seat in the ship: the world fi
 * **Head tracking:** OpenTrack with the output set to "UDP over network", host 127.0.0.1, port 4242. Rotation turns the view, position moves your head in the cockpit. Recentre with Ctrl-C (or OpenTrack's own centre key).
 * **Gamepads:** any controller SDL knows (buttons named by their Xbox positions). The defaults:
   * Left stick - thrust sideways and up / down (strafing).
-  * Right stick - pitch and roll; hold RB to yaw instead of roll.
+  * Right stick - pitch and roll (below 40 km the stick yaws flat instead: the game's own roll there turns in an arc, rolling and yawing at once).
   * LB / LT - speed up / down (or main / retro thrust when held, with the engines off).
   * RT - fire. B - flight view (front, rear, turrets, external).
   * Y / X - focus the next / previous cockpit surface clockwise (dashboard, COMS, MAP, CAMERA, SHIP): a green outline marks it. The D-pad moves a green box between its buttons, A presses the one under the box. (The keyboard: Tab / Shift-Tab, the arrows and F. These keys always belong to this while the cockpit is shown, outside the free camera and the options screen, so the arrows no longer steer or scroll the map: the cockpit view is Ctrl-K, zoom `=` and `-`.) On the galaxy map the sticks scroll it (on the cockpit screen only the left one: the right one still flies). Start - pause. Right stick click - recentre head tracking / VR.
