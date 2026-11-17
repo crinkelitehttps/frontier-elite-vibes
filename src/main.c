@@ -12,6 +12,7 @@
 #include "audio.h"
 #include "freecam.h"
 #include "gamepad.h"
+#include "headlook.h"
 #include "game_state.h"
 #include "host.h"
 #include "gl/gl_clipboard.h"
@@ -329,6 +330,9 @@ void Main_EventHandler(void)
 			toggle_m68k_menu = !toggle_m68k_menu;
 			continue;
 		}
+		/* Right Alt held: the mouse turns the cockpit's head (headlook.h) */
+		if (headlook_event(&event))
+			continue;
 		if (ui_handle_event(&event))
 			continue;
 		/* ImGui wants window units; everything below lays out in pixels */

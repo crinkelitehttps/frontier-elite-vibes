@@ -118,6 +118,8 @@ vibe::Section keyboard_section()
 		"",
 		row("Ctrl+K", "cockpit view on / off", ""),
 		row("Ctrl+C", "recentre head tracking / VR", ""),
+		row("Right Alt + mouse", "turn the head in the cockpit", "stays put"),
+		row("Right Alt twice", "head straight ahead", ""),
 		row("Ctrl+F", "menu", ""),
 		row("Ctrl+F11", "fullscreen", ""),
 		row("Ctrl+M", "mouse grab", ""),

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <sstream>
+#include <set>
 #include <string>
 
 #include "gamepad.h"
@@ -27,6 +28,7 @@ extern "C"
 #include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
 #include "headtrack.h"
+#include "headlook.h"
 #include "host.h"
 #include "input.h"
 #include "keymap.h"
@@ -88,6 +90,10 @@ static const char DEFAULT_CFG[] = R"cfg(# GLFrontier gamepad bindings (gamepad.c
 #                              game's Elite controls option (roll yaws flat
 #                              below 40 km, where the game's roll also yaws)
 #   look-x, look-y [invert]    look around in the cockpit (springs back)
+#   head-x, head-y [invert]    turn the head in the cockpit; it stays where it
+#                              is left (y: push up to look up)
+#   head-hold                  double-tap: the head straight ahead again
+#                              (give it the control held for head-x / head-y)
 #   strafe-x, strafe-y [invert] sideways / vertical thrust (x right +, y up +,
 #                              so lefty wants invert); a button gives full
 #                              thrust while held
@@ -133,6 +139,7 @@ static const char DEFAULT_CFG[] = R"cfg(# GLFrontier gamepad bindings (gamepad.c
 #   repeat off                 held keys don't repeat (on: like a PC keyboard)
 #   look-yaw 100               look-around range, degrees
 #   look-pitch 60
+#   head-speed 150             head-x / head-y turn rate, degrees a second
 #   pointer-speed 200          pointer speed, screen pixels (of 320) a second
 
 repeat     off
@@ -140,6 +147,7 @@ deadzone   0.15
 threshold  0.5
 look-yaw   100
 look-pitch 60
+head-speed 150
 pointer-speed 200
 
 # ---- Flying
@@ -147,7 +155,6 @@ leftx             strafe-x           # thrust left / right
 lefty             strafe-y invert    # thrust up / down
 rightx            roll
 righty            steer-y invert     # pitch: push forward to dive (drop invert to climb)
-shift2 rightx     yaw                # right shoulder held: yaw instead of roll
 leftshoulder      key return         # forward: set speed up, or main thrust (hold)
 lefttrigger       key rshift         # back: set speed down, or retro thrust (hold)
 righttrigger      key space          # fire
@@ -161,7 +168,7 @@ rightstick        recenter           # head tracking / VR: this pose is straight
 # ---- The cockpit's screens: Y / X pick the next / previous one (clockwise) and a
 # green box on a button, moved with the d-pad, is pressed with A. (The keyboard:
 # Tab / Shift-Tab, the arrows, F.) Zoom is =  and - on the keyboard; the cockpit view
-# is Ctrl-K.
+# is Right shoulder + Y or Ctrl-K.
 y                 focus-next         # next screen, clockwise
 x                 focus-prev         # previous screen
 a                 activate           # press the button under the green box
@@ -185,13 +192,18 @@ shift1 a          key f9
 shift1 start      key f10
 shift1 rightstick menu               # the menu (VR: left menu button + right stick click)
 
-# ---- Right shoulder held: yaw (above) and time acceleration
+# ---- Right shoulder held: the right stick turns the head (it stays put; a
+# double tap of the shoulder looks ahead again), time acceleration on the
+# d-pad and Y the cockpit view
 rightshoulder     shift2
+rightshoulder     head-hold          # double-tap: head straight ahead
+shift2 rightx     head-x             # turn the head
+shift2 righty     head-y
 shift2 dpdown     key shift+f1       # normal time
 shift2 dpleft     key shift+f2
 shift2 dpup       key shift+f3
 shift2 dpright    key shift+f4
-shift2 y          key shift+f5       # fastest
+shift2 y          cockpit            # cockpit view on / off (also Ctrl-K)
 
 # ---- The clipboard: Right shoulder + A (VR: right grip + right trackpad
 # down), or grab it with a VR hand. While it is out the d-pad (VR: left
@@ -296,7 +308,9 @@ int steer_x, steer_y, roll_axis, yaw_axis, strafe_x, strafe_y, pointer_x, pointe
 int press_cockpit, press_orbit, press_menu, press_pointer;
 int press_focus_next, press_focus_prev, press_nav[4], press_activate; /* gl_focus.h: up, down, left, right */
 int mode_map, mode_map_nopointer, mode_pointer;
-int set_look_yaw, set_look_pitch, set_pointer_speed;
+int set_look_yaw, set_look_pitch, set_pointer_speed, set_head_speed;
+int head_x, head_y, button_head_hold;
+HeadlookTap head_tap;
 
 SDL_GameController *pad;
 /* The VR controllers: as set, and as this update reads them */
@@ -471,6 +485,153 @@ void log_bindings_text(const std::string &text)
 	}
 }
 
+/* A line's words before any comment */
+std::vector<std::string> line_words(const std::string &line)
+{
+	std::istringstream in(line.substr(0, line.find('#')));
+	std::vector<std::string> w;
+	std::string t;
+	while (in >> t)
+		w.push_back(t);
+	return w;
+}
+
+/* Files from before the held head get its bindings on the right shoulder
+ * (when that is shift2), in place of the old right-shoulder yaw. False if
+ * nothing changed. */
+bool add_head_bindings(std::string *text)
+{
+	if (text->find("head-") != std::string::npos)
+		return false;
+	std::istringstream in(*text);
+	std::string line, out;
+	bool added = false;
+	while (std::getline(in, line))
+	{
+		std::vector<std::string> w = line_words(line);
+		if (w == std::vector<std::string>{"shift2", "rightx", "yaw"})
+			continue;
+		out += line + "\n";
+		if (!added && w == std::vector<std::string>{"rightshoulder", "shift2"})
+		{
+			out += "rightshoulder     head-hold          # double-tap: head straight ahead\n"
+				   "shift2 rightx     head-x             # turn the head (it stays put)\n"
+				   "shift2 righty     head-y\n";
+			added = true;
+		}
+	}
+	if (!added)
+		return false;
+	*text = out;
+	return true;
+}
+
+/* Files from before the cockpit focus navigation: the old default pad Y
+ * cockpit and d-pad zoom lines make way for focus-next / focus-prev, nav-*
+ * and activate, on whichever of Y, X, A and the d-pad the player hasn't
+ * bound to something else. False if nothing changed. */
+bool add_focus_bindings(std::string *text)
+{
+	if (text->find("focus-next") != std::string::npos || text->find("nav-up") != std::string::npos)
+		return false;
+	typedef std::vector<std::string> Words;
+	static const Words old_lines[] = {{"y", "cockpit"}, {"dpup", "key", "="}, {"dpdown", "key", "-"}};
+	static const char *const new_lines[][2] = {
+		{"y", "y                 focus-next         # next screen, clockwise\n"},
+		{"x", "x                 focus-prev         # previous screen\n"},
+		{"a", "a                 activate           # press the button under the green box\n"},
+		{"dpup", "dpup              nav-up             # move the green box\n"},
+		{"dpdown", "dpdown            nav-down\n"},
+		{"dpleft", "dpleft            nav-left\n"},
+		{"dpright", "dpright           nav-right\n"},
+	};
+	/* the controls still bound outside any shift or mode, once the old lines go */
+	std::istringstream in(*text);
+	std::string line;
+	std::vector<std::string> kept;
+	std::set<std::string> bound;
+	size_t insert_at = std::string::npos;
+	while (std::getline(in, line))
+	{
+		Words w = line_words(line);
+		bool old = false;
+		for (const Words &o : old_lines)
+			old = old || w == o;
+		if (old)
+		{
+			if (insert_at == std::string::npos)
+				insert_at = kept.size();
+			continue;
+		}
+		if (!w.empty())
+			bound.insert(w[0]);
+		kept.push_back(line);
+	}
+	std::string block;
+	for (const auto &n : new_lines)
+		if (!bound.count(n[0]))
+			block += n[1];
+	if (block.empty())
+		return false;
+	block = "# cockpit screens: Y / X next / previous, d-pad moves the green box, A presses it\n" + block;
+	if (insert_at == std::string::npos)
+		insert_at = kept.size();
+	std::string out;
+	for (size_t i = 0; i < kept.size(); i++)
+	{
+		if (i == insert_at)
+			out += block;
+		out += kept[i] + "\n";
+	}
+	if (insert_at == kept.size())
+		out += block;
+	*text = out;
+	return true;
+}
+
+/* Files without a pad button for the cockpit view (pad Y became focus-next):
+ * Right shoulder + Y takes it, in place of the old fastest time there. VR
+ * controls (left-, right-) don't count. False if nothing changed. */
+bool add_cockpit_binding(std::string *text)
+{
+	typedef std::vector<std::string> Words;
+	std::istringstream in(*text);
+	std::string line, out;
+	bool shift2_y = false, replaced = false;
+	size_t shoulder_end = std::string::npos;
+	while (std::getline(in, line))
+	{
+		Words w = line_words(line);
+		if (!w.empty() && w.back() == "cockpit")
+		{
+			const std::string &c = w.size() >= 3 ? w[w.size() - 2] : w[0];
+			if (c.compare(0, 5, "left-") != 0 && c.compare(0, 6, "right-") != 0)
+				return false;
+		}
+		if (w.size() >= 2 && w[0] == "shift2" && w[1] == "y")
+		{
+			shift2_y = true;
+			if (w == Words{"shift2", "y", "key", "shift+f5"})
+			{
+				out += "shift2 y          cockpit            # cockpit view on / off (also Ctrl-K)\n";
+				replaced = true;
+				continue;
+			}
+		}
+		out += line + "\n";
+		if (w.size() >= 2 && (w[0] == "rightshoulder" || w[0] == "shift2"))
+			shoulder_end = out.size();
+	}
+	if (!replaced)
+	{
+		if (shift2_y || shoulder_end == std::string::npos)
+			return false; /* Y taken by the player, or no right-shoulder layer */
+		out.insert(shoulder_end, "shift2 y          cockpit            # cockpit view on / off (also Ctrl-K)\n");
+	}
+	*text = out;
+	return true;
+}
+
 void load_bindings()
 {
 	std::string text, path = gamepad_file();
@@ -498,6 +659,27 @@ void load_bindings()
 			log_printf("Gamepad: %s converted to the new format (the old one is %s)\n", path.c_str(), old.c_str());
 		else
 			log_printf("Gamepad: converted %s, but can't write it (%s)\n", path.c_str(), std::strerror(errno));
+	}
+	if (add_head_bindings(&text))
+	{
+		if (write_file(path.c_str(), text))
+			log_printf("Gamepad: added the head look (right shoulder + right stick) to %s\n", path.c_str());
+		else
+			log_printf("Gamepad: added the head look, but can't write %s (%s)\n", path.c_str(), std::strerror(errno));
+	}
+	if (add_focus_bindings(&text))
+	{
+		if (write_file(path.c_str(), text))
+			log_printf("Gamepad: added the cockpit focus keys (Y / X, d-pad, A) to %s\n", path.c_str());
+		else
+			log_printf("Gamepad: added the cockpit focus keys, but can't write %s (%s)\n", path.c_str(), std::strerror(errno));
+	}
+	if (add_cockpit_binding(&text))
+	{
+		if (write_file(path.c_str(), text))
+			log_printf("Gamepad: the cockpit view on Right shoulder + Y in %s\n", path.c_str());
+		else
+			log_printf("Gamepad: the cockpit view on Right shoulder + Y, but can't write %s (%s)\n", path.c_str(), std::strerror(errno));
 	}
 	bindings.set_defaults(DEFAULT_CFG); /* the editor's reset */
 	if (!bindings.load(text, GAMEPAD_FILE))
@@ -703,6 +885,9 @@ void gamepad_init(void)
 	strafe_y = bindings.add_axis("strafe-y", "strafe y");
 	pointer_x = bindings.add_axis("pointer-x", "pointer x");
 	pointer_y = bindings.add_axis("pointer-y", "pointer y");
+	head_x = bindings.add_axis("head-x", "head x");
+	head_y = bindings.add_axis("head-y", "head y");
+	button_head_hold = bindings.add_button("head-hold", "head ahead (double-tap)");
 	press_cockpit = bindings.add_press("cockpit", "cockpit view");
 	press_orbit = bindings.add_press("orbit", "orbit display");
 	press_menu = bindings.add_press("menu");
@@ -720,6 +905,7 @@ void gamepad_init(void)
 	set_look_yaw = bindings.add_setting("look-yaw", 100.0f, 0.0f, 360.0f);
 	set_look_pitch = bindings.add_setting("look-pitch", 60.0f, 0.0f, 180.0f);
 	set_pointer_speed = bindings.add_setting("pointer-speed", 200.0f, 0.0f, 5000.0f);
+	set_head_speed = bindings.add_setting("head-speed", 150.0f, 0.0f, 1000.0f);
 	load_bindings();
 }
 
@@ -881,6 +1067,15 @@ void gamepad_update(void)
 		s = std::max(-1.0f, std::min(1.0f, s));
 	look[0] = f.look_x;
 	look[1] = -f.look_y; /* y down + */
+
+	/* the held head: squared like the pointer; a double tap of its hold
+	 * control looks ahead */
+	if (headlook_tap(&head_tap, f.button[button_head_hold], now))
+		headlook_center();
+	float hx = f.axis[head_x], hy = f.axis[head_y];
+	float hs = bindings.setting(set_head_speed) * dt;
+	if (hx != 0.0f || hy != 0.0f)
+		headlook_turn(hx * fabsf(hx) * hs, -hy * fabsf(hy) * hs);
 	write_steering(steer[0], steer[1]);
 	log_steering(steer[0], steer[1], roll, yaw);
 	strafe_set_pad(f.axis[strafe_x], f.axis[strafe_y]);

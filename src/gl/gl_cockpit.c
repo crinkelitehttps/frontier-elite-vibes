@@ -38,6 +38,7 @@
 #include "game_state.h"
 #include "gl_shadow.h"
 #include "headtrack.h"
+#include "headlook.h"
 #include "input.h"
 #include "host.h" /* rdword, wrword */
 #include "m68000.h"
@@ -264,8 +265,12 @@ static void update_tracker(void)
 	/* the controller's look-around adds on */
 	float look_x, look_y;
 	gamepad_look(&look_x, &look_y);
-	look_yaw = look_x * GLM_PI / 180.0f;
-	look_pitch = -look_y * GLM_PI / 180.0f;
+	/* and the held look-around (mouse with Right Alt, right shoulder +
+	 * right stick) */
+	float held_yaw, held_pitch;
+	headlook_get(&held_yaw, &held_pitch);
+	look_yaw = (look_x + held_yaw) * GLM_PI / 180.0f;
+	look_pitch = (held_pitch - look_y) * GLM_PI / 180.0f;
 }
 
 /* V = Rz(roll) Rx(-pitch) Ry(yaw): the inverse of the head's orientation
