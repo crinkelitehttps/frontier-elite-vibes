@@ -238,6 +238,23 @@ void camera_tap(float u, float v)
 		camera_next();
 }
 
+int camera_targets(int out[][3], int max)
+{
+	if (!lock)
+		return 0;
+	int n = 0;
+	SDL_LockMutex(lock);
+	for (int i = 0; i < pub_nhits && n < max; i++)
+	{
+		out[n][0] = (int)lroundf(pub_hits[i].x);
+		out[n][1] = (int)lroundf(pub_hits[i].y);
+		out[n][2] = pub_hits[i].slot;
+		n++;
+	}
+	SDL_UnlockMutex(lock);
+	return n;
+}
+
 /* Game thread: the tap's pick becomes the target, as clicking it in the
  * flight view does (L62f1e) */
 static void take_target(void)

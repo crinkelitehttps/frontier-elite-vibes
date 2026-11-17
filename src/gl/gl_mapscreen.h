@@ -130,7 +130,7 @@ typedef struct
 int mapscreen_buttons(MapButton out[MAPSCREEN_BUTTONS]);
 
 /* The SHIP screen's own buttons as the page last made set them (page pixels, x, y, w, h and the game's
- * icon number); none on the host's extra pages */
+ * icon number); on the host's ORBIT page and ship log, their keys, fields and rows (ids from 0x1000) */
 int mapscreen_ship_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS]);
 
 /* The maps' pan (galaxy) or turn (system) buttons, up, down, left, right from the top down, in a
@@ -139,6 +139,14 @@ int mapscreen_ship_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS]);
  * drag that way (system). */
 #define MAPSCREEN_PANS 4
 int mapscreen_pans(int out[MAPSCREEN_PANS][4]);
+
+/* The system map's bodies a click picks, at their screen points (x, y) and their object slots, as its last frame
+ * drew them: the side map's (live false), or the game's own system map screen's (live true; 0 when it isn't up) */
+#define MAPSCREEN_PICKS 64
+int mapscreen_picks(bool live, int out[MAPSCREEN_PICKS][3]);
+/* Any thread: the object in `slot` becomes the ship's target (with the game's sound), at the game thread's next
+ * mouse poll */
+void mapscreen_target(int slot);
 
 /* The game's own map screen is up and its buttons are moved too (the picture
  * is drawn with them); a point on the screen, put back where the game has it */

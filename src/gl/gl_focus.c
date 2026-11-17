@@ -24,17 +24,17 @@
 #define PRESS_MS 150
 #define LET_GO_MS 100
 
-/* Clockwise as they sit */
+/* The surfaces (Tab / Y goes round them clockwise as they are placed now, step) */
 enum
 {
 	S_DASH,
 	S_COMS,
 	S_MAP,
-	S_CAMERA,
 	S_SHIP,
+	S_CAMERA,
 	S_COUNT
 };
-static const int GROUP_OF[S_COUNT] = {-1, COCKPIT_SCREEN_COMS, COCKPIT_SCREEN_MAP, -1, COCKPIT_SCREEN_SHIP};
+static const int GROUP_OF[S_COUNT] = {-1, COCKPIT_SCREEN_COMS, COCKPIT_SCREEN_MAP, COCKPIT_SCREEN_SHIP, -1};
 
 /* ids of the host's own buttons */
 enum
@@ -43,8 +43,12 @@ enum
 	ID_COG = -2,
 	ID_WHOLE = -3, /* a dimmed screen, whole */
 	ID_PAGE = -4,  /* the SHIP screen's next page */
-	ID_PAN = -10   /* - the pan button's number */
+	ID_PAN = -10,  /* - the pan button's number */
+	ID_PICK = -100 /* - the object slot of a body on the system map or a thing in the camera's picture */
 };
+#define PICK_MAX 128
+
+#define PICK_R 4 /* the box round a body's point */
 
 #define GROUP_KEY_SHIP 0x3d /* F3 */
 
@@ -67,9 +71,12 @@ static bool view_ok;
 static struct
 {
 	int phase; /* 0 none, 1 held, 2 let go, pointer to be taken off */
+	bool held; /* the key / button is still down: phase 1 lasts till it isn't */
 	int group, x, y;
 	Uint32 at;
 } press;
+/* The game's own pointer held (Input_HoldAt) */
+static bool game_held;
 
 static bool surface_shown(int s)
 {
@@ -105,6 +112,31 @@ static int game_icons(int rects[][4], int ids[], int max)
 	return n;
 }
 
+/* Things to make the target (x, y, slot): the box round each, by its slot, so it stays on one as it moves */
+static int add_targets(Btn *b, int n, int picks[][3], int c)
+{
+	for (int i = 0; i < c; i++)
+		n = add(b, n, picks[i][0] - PICK_R, picks[i][1] - PICK_R, 2 * PICK_R + 1, 2 * PICK_R + 1, ID_PICK - picks[i][2],
+				picks[i][0], picks[i][1]);
+	return n;
+}
+
+static int add_picks(Btn *b, int n, bool live)
+{
+	int picks[MAPSCREEN_PICKS][3];
+	return add_targets(b, n, picks, mapscreen_picks(live, picks));
+}
+
+static int add_pans(Btn *b, int n)
+{
+	int pans[MAPSCREEN_PANS][4];
+	int c = mapscreen_pans(pans);
+	for (int i = 0; i < c; i++)
+		n = add(b, n, pans[i][0], pans[i][1], pans[i][2], pans[i][3], ID_PAN - i, pans[i][0] + pans[i][2] / 2,
+				pans[i][1] + pans[i][3] / 2);
+	return n;
+}
+
 static int collect(int s, Btn *b, int *mode_out)
 {
 	int n = 0, rects[64][4], ids[64];
@@ -133,6 +165,8 @@ static int collect(int s, Btn *b, int *mode_out)
 		int c = camera_buttons(cb);
 		for (int i = 0; i < c; i++)
 			n = add(b, n, cb[i].x, cb[i].y, cb[i].w, cb[i].h, cb[i].id, cb[i].x + cb[i].w / 2, cb[i].y + cb[i].h / 2);
+		int picks[PICK_MAX][3];
+		n = add_targets(b, n, picks, camera_targets(picks, PICK_MAX));
 		*mode_out = COCKPIT_FOCUS_LIVE;
 		return n;
 	}
@@ -149,11 +183,8 @@ static int collect(int s, Btn *b, int *mode_out)
 			int c = mapscreen_buttons(mb);
 			for (int i = 0; i < c; i++)
 				n = add(b, n, mb[i].dx, mb[i].dy, mb[i].w, mb[i].h, mb[i].id, mb[i].dx + mb[i].w / 2, mb[i].dy + mb[i].h / 2);
-			int pans[MAPSCREEN_PANS][4];
-			c = mapscreen_pans(pans);
-			for (int i = 0; i < c; i++)
-				n = add(b, n, pans[i][0], pans[i][1], pans[i][2], pans[i][3], ID_PAN - i, pans[i][0] + pans[i][2] / 2,
-						pans[i][1] + pans[i][3] / 2);
+			n = add_pans(b, n);
+			n = add_picks(b, n, false);
 		}
 		else
 		{
@@ -196,6 +227,11 @@ static int collect(int s, Btn *b, int *mode_out)
 	}
 	if (mode == COCKPIT_FOCUS_LIVE && g == COCKPIT_SCREEN_SHIP)
 		n = add(b, n, 148, 2, 24, 12, ID_PAGE, 160, 8);
+	if (mode == COCKPIT_FOCUS_LIVE && g == COCKPIT_SCREEN_MAP && nm)
+	{
+		n = add_pans(b, n);
+		n = add_picks(b, n, true);
+	}
 	return n;
 }
 
@@ -269,20 +305,89 @@ static int refresh(Btn *b, int *n, int *mode)
 	return pick;
 }
 
+/* Where a surface's middle is seen from the eye (view space, the eye at the origin) */
+static bool surface_centre(int s, float out[3])
+{
+	return cockpit_focus_point(quad_of(s), 160.0f, s == S_DASH ? (ROW0 + 200) * 0.5f : ROW0 * 0.5f, out);
+}
+
+/* The next shown surface clockwise as the eye sees them (dir 1), or anticlockwise (-1): their directions from the
+ * eye put on a plane facing the middle of them all, and taken in turn by the angle round that middle. Worked out
+ * at each step, so it follows the screens wherever they are placed. */
 static void step(int dir)
 {
-	for (int i = 1; i <= S_COUNT; i++)
+	int ss[S_COUNT], n = 0;
+	float d[S_COUNT][3], m[3] = {0, 0, 0};
+	for (int s = 0; s < S_COUNT; s++)
 	{
-		int s = (cur + dir * i + S_COUNT * 2) % S_COUNT;
-		if (surface_shown(s))
+		float c[3];
+		if (!surface_shown(s) || !surface_centre(s, c))
+			continue;
+		float len = sqrtf(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
+		if (len < 1e-6f)
+			continue;
+		for (int k = 0; k < 3; k++)
+			d[n][k] = c[k] / len, m[k] += d[n][k];
+		ss[n++] = s;
+	}
+	if (n == 0)
+	{
+		cur = S_DASH;
+	}
+	else
+	{
+		float ml = sqrtf(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+		if (ml < 1e-6f)
+			m[0] = 0, m[1] = 0, m[2] = -1, ml = 1;
+		for (int k = 0; k < 3; k++)
+			m[k] /= ml;
+		/* right = m x up, up' = right x m (y up, looking down -z) */
+		float r[3] = {-m[2], 0.0f, m[0]};
+		float rl = sqrtf(r[0] * r[0] + r[2] * r[2]);
+		if (rl < 1e-6f)
+			r[0] = 1, r[2] = 0, rl = 1;
+		r[0] /= rl, r[2] /= rl;
+		float u[3] = {r[1] * m[2] - r[2] * m[1], r[2] * m[0] - r[0] * m[2], r[0] * m[1] - r[1] * m[0]};
+		float ang[S_COUNT], cu = 0, cv = 0, pu[S_COUNT], pv[S_COUNT];
+		for (int i = 0; i < n; i++)
 		{
-			cur = s;
-			break;
+			float z = d[i][0] * m[0] + d[i][1] * m[1] + d[i][2] * m[2];
+			if (z < 0.05f)
+				z = 0.05f; /* (behind: kept on its side) */
+			pu[i] = (d[i][0] * r[0] + d[i][1] * r[1] + d[i][2] * r[2]) / z;
+			pv[i] = (d[i][0] * u[0] + d[i][1] * u[1] + d[i][2] * u[2]) / z;
+			cu += pu[i] / (float)n, cv += pv[i] / (float)n;
+		}
+		/* clockwise to the eye (right and up): the angle going down */
+		for (int i = 0; i < n; i++)
+			ang[i] = -atan2f(pv[i] - cv, pu[i] - cu);
+		int at = -1;
+		for (int i = 0; i < n; i++)
+			if (ss[i] == cur)
+				at = i;
+		if (at < 0)
+			cur = ss[0];
+		else
+		{
+			/* the nearest angle on that way round */
+			int best = at;
+			float best_a = 0;
+			for (int i = 0; i < n; i++)
+			{
+				if (i == at)
+					continue;
+				float a = (ang[i] - ang[at]) * (float)dir;
+				while (a <= 0)
+					a += 6.2831853f;
+				if (best == at || a < best_a)
+					best = i, best_a = a;
+			}
+			cur = ss[best];
 		}
 	}
 	Btn b[MAX_BTNS];
-	int n, mode;
-	refresh(b, &n, &mode);
+	int nb, mode;
+	refresh(b, &nb, &mode);
 }
 
 /* The emulator menu (the cog) is up: the keys and pad actions move its own green box */
@@ -346,14 +451,22 @@ void focus_move(int dx, int dy)
 	publish(cur, b, n, best);
 }
 
-void focus_activate(void)
+void focus_press(bool down)
 {
+	if (!down)
+	{
+		if (game_held)
+			Input_HoldAt(0, 0, false);
+		game_held = false;
+		press.held = false;
+		return;
+	}
 	if (ui_menu_open())
 	{
 		ui_nav_activate();
 		return;
 	}
-	if (!focus_enabled())
+	if (!focus_enabled() || game_held || press.phase)
 		return;
 	Btn b[MAX_BTNS];
 	int n, mode;
@@ -361,6 +474,13 @@ void focus_activate(void)
 	if (pick < 0)
 		return;
 	const Btn *p = &b[pick];
+	/* a body on the system map, a thing in the camera's picture: the target (the map's own click would only pick
+	 * it in its F10 mode) */
+	if (p->id <= ID_PICK)
+	{
+		mapscreen_target(ID_PICK - p->id);
+		return;
+	}
 	if (cur == S_CAMERA)
 	{
 		camera_tap((float)p->ax / 320.0f, (float)p->ay / (float)ROW0);
@@ -368,7 +488,7 @@ void focus_activate(void)
 	}
 	if (cur == S_DASH)
 	{
-		Input_ClickAt(p->ax, p->ay);
+		game_held = Input_HoldAt(p->ax, p->ay, true);
 		return;
 	}
 	const int g = GROUP_OF[cur];
@@ -380,10 +500,10 @@ void focus_activate(void)
 	case COCKPIT_FOCUS_SIDE:
 		if (p->id == ID_PAGE)
 			mapscreen_key(g, GROUP_KEY_SHIP);
-		else if (press.phase == 0)
+		else
 		{
 			mapscreen_pointer(2, g, p->ax, p->ay, 2, 0, 0);
-			press.phase = 1, press.group = g, press.x = p->ax, press.y = p->ay;
+			press.phase = 1, press.held = true, press.group = g, press.x = p->ax, press.y = p->ay;
 			press.at = SDL_GetTicks() + PRESS_MS;
 		}
 		break;
@@ -391,7 +511,7 @@ void focus_activate(void)
 		if (p->id == ID_PAGE)
 			Input_TapSTKey(GROUP_KEY_SHIP);
 		else
-			Input_ClickAt(p->ax, p->ay);
+			game_held = Input_HoldAt(p->ax, p->ay, true);
 		break;
 	}
 }
@@ -399,7 +519,7 @@ void focus_activate(void)
 void focus_tick(void)
 {
 	ui_nav_tick();
-	if (press.phase && (Sint32)(SDL_GetTicks() - press.at) >= 0)
+	if (press.phase && !(press.phase == 1 && press.held) && (Sint32)(SDL_GetTicks() - press.at) >= 0)
 	{
 		if (press.phase == 1)
 		{
@@ -442,6 +562,8 @@ bool focus_key_event(const SDL_Event *event)
 	{
 		bool was = held[k];
 		held[k] = false;
+		if (was && k == 5)
+			focus_press(false);
 		return was;
 	}
 	const Uint16 mod = event->key.keysym.mod;
@@ -476,7 +598,7 @@ bool focus_key_event(const SDL_Event *event)
 		focus_move(1, 0);
 		break;
 	case 5:
-		focus_activate();
+		focus_press(true);
 		break;
 	}
 	return true;

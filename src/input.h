@@ -36,6 +36,9 @@ void Input_PadPointerMove(float dx, float dy);
 void Input_PadPointerClick(void); /* clicks the left button there, then ends */
 /* Clicks the left button at screen pixel (x, y) (any thread) */
 void Input_ClickAt(int x, int y);
+/* The left button held down at (x, y) till called again with down false (a click's few polls at least); false
+ * if a click or hold is going on already (down), or none is held (up) */
+bool Input_HoldAt(int x, int y, bool down);
 /* The game's pointer put at (x, y), as the pad's is, without a click */
 void Input_PadPointerAt(int x, int y);
 bool Input_PadPointer(int *x, int *y); /* on: where it is */

@@ -12,6 +12,8 @@
 #include "gl_mapscreen.h"
 #include "gl_camera.h"
 
+#include "audio.h" /* Call_PlaySFX */
+
 #include "galaxy/fe2vm.h"
 #include "game_state.h"
 #include "gl_cockpit.h"
@@ -62,6 +64,7 @@ bool ship_page_debug = false;
 #define PICKED      708 /* A6: the object picked (708), and the flag that it was (709) */
 #define SCREEN_MODE 704 /* A6: 4 in flight */
 #define OBJS_FIRST  17348
+#define SFX_PICKED  28 /* L62f1e's effect, a target picked */
 #define OBJS_LEN    0x8030
 #define MAP_TIME    1188 /* A6: the system map's time (2 longs), the flight's when it opens */
 #define TIME_OF_DAY 524	 /* A6_time_of_day */
@@ -231,6 +234,7 @@ static MapButton btns[MAPSCREEN_BUTTONS];
 static int nbtns;
 /* the maps' pan (galaxy) or turn (system) buttons (up, down, left, right), on the screen */
 static int pans[MAPSCREEN_PANS][4], npans;
+static int picks[MAPSCREEN_PICKS][3], npicks; /* the side system map's bodies as its last page drew them */
 /* the station's services' own: the phone icon alone, apart from the map's */
 static MapButton phone;
 static bool has_phone;
@@ -255,9 +259,79 @@ void mapscreen_phone_unmove(int *x, int *y)
 	SDL_AtomicUnlock(&btn_lock);
 }
 
+/* The system map's bodies a click can pick: the objects it drew this frame (bit 3 of the flag table at the start
+ * of the objects, bit 5 clear), at their screen point (110, 112 of the object), on the view as L4477c tests it;
+ * L4b872 picks the one within 8 pixels. `buf`: a copy of the objects, or NULL for the game's own. */
+static int obj_byte(const uint8_t *buf, int i)
+{
+	return buf ? buf[i] : (int)(uint8_t)rdbyte(GAME_A6 + OBJS_FIRST + (uint32_t)i);
+}
+
+static int picks_from(const uint8_t *buf, int out[MAPSCREEN_PICKS][3])
+{
+	int n = 0;
+	for (int slot = 1; slot <= 0x72 && n < MAPSCREEN_PICKS; slot++)
+	{
+		int f = obj_byte(buf, slot);
+		if (!(f & 0x08) || (f & 0x20))
+			continue;
+		int off = (int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)slot);
+		if (off < 0 || off + 114 > OBJS_LEN)
+			continue;
+		int x = (int16_t)(obj_byte(buf, off + 110) << 8 | obj_byte(buf, off + 111));
+		int y = (int16_t)(obj_byte(buf, off + 112) << 8 | obj_byte(buf, off + 113));
+		if (x + 3 < 0 || x + 3 >= 0x13c || y - 4 < 0 || y - 4 >= 0x9f)
+			continue;
+		out[n][0] = x, out[n][1] = y, out[n][2] = slot;
+		n++;
+	}
+	return n;
+}
+
+int mapscreen_picks(bool live, int out[MAPSCREEN_PICKS][3])
+{
+	if (live)
+		return game_screen() == SCREEN_SYSTEM_MAP && game_screen_owner() == OWNER_SYSTEM ? picks_from(NULL, out) : 0;
+	SDL_AtomicLock(&btn_lock);
+	int n = kept.held && kept.owner == OWNER_SYSTEM ? npicks : 0;
+	memcpy(out, picks, sizeof picks);
+	SDL_AtomicUnlock(&btn_lock);
+	return n;
+}
+
+/* A body picked with the keyboard / pad focus, for the game thread (mapscreen_poll): 0 none */
+static SDL_atomic_t want_target;
+
+void mapscreen_target(int slot)
+{
+	SDL_AtomicSet(&want_target, slot);
+}
+
+/* Game thread: it becomes the target, as a click on it in the flight view makes it (L62f1e: the target, effect 28) */
+static void take_target(void)
+{
+	int slot = SDL_AtomicSet(&want_target, 0);
+	if (slot <= 0 || cheat_target() == slot || cheat_set_target(slot))
+		return;
+	kept.picked[0] = (uint8_t)slot; /* (the side map's own copy, for its label) */
+	uint32_t d0 = (uint32_t)GetReg(REG_D0), d1 = (uint32_t)GetReg(REG_D1);
+	SetReg(REG_D0, SFX_PICKED);
+	SetReg(REG_D1, 0);
+	Call_PlaySFX();
+	SetReg(REG_D0, d0);
+	SetReg(REG_D1, d1);
+}
+
+static int orbit_page_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS]);
+static int ship_log_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS]);
+
 int mapscreen_ship_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS])
 {
 	int n = 0;
+	if (ship.extra == EXTRA_ORBIT)
+		return orbit_page_buttons(out);
+	if (ship.extra == EXTRA_SHIPS)
+		return ship_log_buttons(out);
 	/* (read from another thread without a lock, as the picture's own tap test is: the lists are small ints) */
 	const int icons = ship.extra ? 0 : ship.icons;
 	for (int i = 0; i < icons && n < MAPSCREEN_SHIP_BUTTONS; i++)
@@ -633,6 +707,7 @@ static void real_layout(void)
 
 void mapscreen_poll(void)
 {
+	take_target();
 	if (getenv("GLF_MAP_LOG"))
 		log_real_screen();
 	real_layout();
@@ -1085,6 +1160,50 @@ static bool orbit_page_input(const Pointer *p)
 		}
 	}
 	return false;
+}
+
+/* The host pages' buttons for the keyboard / pad focus (ids from 0x1000, not the game's) */
+static int page_btn(MapButton *out, int n, int x0, int y0, int x1, int y1, int id)
+{
+	if (n >= MAPSCREEN_SHIP_BUTTONS)
+		return n;
+	MapButton m = {x0, y0, x1 - x0 + 1, y1 - y0 + 1, x0, y0, id};
+	out[n] = m;
+	return n + 1;
+}
+
+static int orbit_page_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS])
+{
+	int n = 0;
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 3; c++)
+		{
+			int x0 = OP_KEY_X0 + c * OP_KEY_DX, y0 = OP_KEY_Y0 + r * OP_KEY_DY;
+			n = page_btn(out, n, x0, y0, x0 + OP_KEY_W - 1, y0 + OP_KEY_H - 1, 0x1000 + r * 3 + c);
+		}
+	for (int f = 0; f < OP_FIELDS; f++)
+	{
+		int y0 = OP_FIELD_Y0 + f * OP_FIELD_DY;
+		n = page_btn(out, n, OP_FIELD_X0, y0, OP_FIELD_X1, y0 + OP_FIELD_H - 1, 0x1010 + f);
+	}
+	n = page_btn(out, n, OP_ENGAGE_X0, OP_BTN_Y0, OP_ENGAGE_X1, OP_BTN_Y1, 0x1020);
+	n = page_btn(out, n, OP_CLEAR_X0, OP_BTN_Y0, OP_CLEAR_X1, OP_BTN_Y1, 0x1021);
+	return n;
+}
+
+static int ship_log_buttons(MapButton out[MAPSCREEN_SHIP_BUTTONS])
+{
+	int n = 0;
+	for (int r = 0; r < LOG_ROWS; r++)
+		if (ship.log_ids[r])
+		{
+			int y = LOG_TOP + r * LOG_ROW_H;
+			n = page_btn(out, n, 0, y, LOG_LIST_W - 1, y + LOG_ROW_H - 2, 0x1100 + r);
+		}
+	const int bottom = LOG_TOP + LOG_ROWS * LOG_ROW_H;
+	n = page_btn(out, n, LOG_ARROW_X, LOG_TOP, LOG_ARROW_X + LOG_ARROW_W - 1, LOG_TOP + LOG_ARROW_H - 1, 0x1200);
+	n = page_btn(out, n, LOG_ARROW_X, bottom - LOG_ARROW_H, LOG_ARROW_X + LOG_ARROW_W - 1, bottom - 1, 0x1201);
+	return n;
 }
 
 static void take_input(int group, Batch *b)
@@ -1748,6 +1867,14 @@ bool mapscreen_page(int group, MapPage *out)
 				kept.picked[i] = (uint8_t)rdbyte(a6 + PICKED + (uint32_t)i);
 			for (int i = 0; i < OBJS_LEN; i++)
 				kept.objs[i] = (uint8_t)rdbyte(a6 + OBJS_FIRST + (uint32_t)i);
+			{
+				int p[MAPSCREEN_PICKS][3];
+				int np = owner == OWNER_SYSTEM ? picks_from(kept.objs, p) : 0;
+				SDL_AtomicLock(&btn_lock);
+				memcpy(picks, p, sizeof p);
+				npicks = np;
+				SDL_AtomicUnlock(&btn_lock);
+			}
 			kept.now = rdlong(a6 + MAP_TIME) == rdlong(a6 + TIME_OF_DAY) &&
 					   rdlong(a6 + MAP_TIME + 4) == rdlong(a6 + TIME_OF_DAY + 4);
 			kept.held = true;

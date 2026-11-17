@@ -102,6 +102,10 @@ void camera_capture(bool screen);
  * clicking it in the flight view does; else on to the next direction */
 void camera_tap(float u, float v);
 
+/* The things in the shown picture a tap picks (planets, ships, stations, cargo...): x, y in picture pixels and
+ * the object slot; for the keyboard / pad focus */
+int camera_targets(int out[][3], int max);
+
 /* The picture's buttons (the directions, and the zoom ones in the target view),
  * x, y, w, h in picture pixels; for the keyboard / pad focus (gl_focus.h) */
 #define CAMERA_BUTTONS 9

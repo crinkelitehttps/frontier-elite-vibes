@@ -18,6 +18,7 @@
 #include "manual.h"
 #include "vibe/binding_editor.h"
 #include "vibe/bindings.h"
+#include "vibe/input.h"
 
 extern "C"
 {
@@ -306,6 +307,9 @@ vibe::Bindings bindings;
 /* the actions and modes the file names (registered in gamepad_init) */
 int steer_x, steer_y, roll_axis, yaw_axis, strafe_x, strafe_y, pointer_x, pointer_y;
 int press_cockpit, press_orbit, press_menu, press_pointer;
+/* the green box's d-pad repeat when held: first after, then every */
+#define NAV_REPEAT_DELAY_NS 400000000ull
+#define NAV_REPEAT_NS       120000000ull
 int press_focus_next, press_focus_prev, press_nav[4], press_activate; /* gl_focus.h: up, down, left, right */
 int mode_map, mode_map_nopointer, mode_pointer;
 int set_look_yaw, set_look_pitch, set_pointer_speed, set_head_speed;
@@ -1033,16 +1037,24 @@ void gamepad_update(void)
 		focus_next();
 	if (f.press[press_focus_prev])
 		focus_prev();
-	if (f.press[press_nav[0]])
-		focus_move(0, -1);
-	if (f.press[press_nav[1]])
-		focus_move(0, 1);
-	if (f.press[press_nav[2]])
-		focus_move(-1, 0);
-	if (f.press[press_nav[3]])
-		focus_move(1, 0);
-	if (f.press[press_activate])
-		focus_activate();
+	/* the green box: a held d-pad moves it again after a moment, like a key held on a keyboard; activate holds
+	 * the button under it down as long as it is held */
+	{
+		static const int DIR[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+		static vibe::Repeater nav_repeat[4];
+		static bool activate_held;
+		for (int i = 0; i < 4; i++)
+		{
+			nav_repeat[i].delay_ns = NAV_REPEAT_DELAY_NS;
+			nav_repeat[i].period_ns = NAV_REPEAT_NS;
+			if (nav_repeat[i].update(f.press_held[press_nav[i]] || f.press[press_nav[i]], ctx.now_ns))
+				focus_move(DIR[i][0], DIR[i][1]);
+		}
+		const bool act = f.press_held[press_activate] || f.press[press_activate];
+		if (act != activate_held)
+			focus_press(act);
+		activate_held = act;
+	}
 	if (f.press[press_pointer] && !vr_active) /* the motion controllers point */
 	{
 		if (pointer_on)

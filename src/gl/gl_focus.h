@@ -6,11 +6,13 @@
  * HOW IT WORKS
  *   Five surfaces take presses: the DASHBOARD (the control panel), COMS, MAP,
  *   CAMERA and SHIP (the screens, gl_cockpit.h). Tab goes clockwise round them
- *   as they sit in the cockpit (dashboard at the bottom, COMS on the left, MAP
- *   on the top, CAMERA and SHIP on the right), skipping the ones not shown. The
+ *   as the eye sees them where they are placed now (worked out at each press,
+ *   so it follows screens that were moved), Shift-Tab anticlockwise, skipping
+ *   the ones not shown. The
  *   focused surface has a green outline; a green box sits on one of its
- *   buttons and the arrows move it to the nearest button that way. F presses
- *   the button under it, by the path a click on it takes:
+ *   buttons and the arrows move it to the nearest button that way (the system
+ *   map's bodies are buttons too). F presses the button under it, held as long
+ *   as F is, by the path a click on it takes:
  *     - the dashboard, a screen the game has up, the flight comms menu:
  *       Input_ClickAt, the game's own mouse (with the dashboard's host buttons
  *       taken in Call_GetMouseInput);
@@ -53,8 +55,9 @@ void focus_next(void);
 void focus_prev(void);
 /* Move the box: dx, dy one of -1, 0, 1 (x right, y down) */
 void focus_move(int dx, int dy);
-/* Press the button under the box */
-void focus_activate(void);
+/* The button under the box pressed (down) and let go: held as long as the key or pad button is (the map's zoom
+ * and turn buttons go on while held) */
+void focus_press(bool down);
 
 /* Main thread, once a frame: keeps the box on its button as the lists change,
  * lets go of presses */

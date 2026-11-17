@@ -21,6 +21,8 @@ CINPUT input;
 static bool pad_on;
 static float pad_x, pad_y;
 static int click_polls; /* clicking: polls left with the button down, then released */
+static bool hold_on;    /* Input_HoldAt: held till let go (click_polls kept while it is) */
+static int hold_polls;  /* ... polls it has been held */
 static bool have_last;
 static int last_x, last_y;
 
@@ -88,6 +90,29 @@ void Input_ClickAt(int x, int y)
 	pad_on = true;
 	click_polls = CLICK_POLLS;
 	input.cur_mousebut_state |= 0x2;
+}
+
+bool Input_HoldAt(int x, int y, bool down)
+{
+	if (down)
+	{
+		if (click_polls || hold_on)
+			return false;
+		pad_x = (float)x;
+		pad_y = (float)y;
+		pad_on = true;
+		hold_on = true;
+		hold_polls = 0;
+		click_polls = CLICK_POLLS;
+		input.cur_mousebut_state |= 0x2;
+		return true;
+	}
+	if (!hold_on)
+		return false;
+	/* let go: a click's few polls down at least */
+	click_polls = hold_polls < CLICK_POLLS ? CLICK_POLLS - hold_polls : 1;
+	hold_on = false;
+	return true;
 }
 
 bool Input_PadPointer(int *x, int *y)
@@ -277,7 +302,9 @@ void Call_GetMouseInput(void)
 
 	/* the gamepad's click: the button held for a few polls, then released
 	 * and the pointer put away */
-	if (click_polls && --click_polls == 0)
+	if (hold_on)
+		hold_polls++;
+	else if (click_polls && --click_polls == 0)
 	{
 		input.cur_mousebut_state &= ~0x2;
 		pad_on = false;
