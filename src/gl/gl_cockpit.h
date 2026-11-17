@@ -89,6 +89,8 @@ GLuint gl_screen_sub_texture(int group);
  * and not the station's page it last had) */
 GLuint gl_screen_coms_menu(void);
 bool gl_screen_coms_clear(void);
+/* The picture (gl_screen_coms_menu) has the flight view's speed line on it */
+bool gl_screen_coms_speed(void);
 /* A saved game or a new one was loaded: no station's services are on the COMS screen */
 void gl_screen_coms_forget(void);
 /* Game thread, in the camera's high-res batch (gl_camera.h): its frame is
@@ -250,6 +252,10 @@ bool cockpit_ray_to_screen(const float origin[3], const float dir[3], int *sx, i
  * right, bottom left, bottom right), as the cockpit is being drawn; it
  * shows screen rows COCKPIT_PANEL_ROW0 .. GL_SCREEN_H */
 #define COCKPIT_PANEL_ROW0 168
+/* The game's speed line over the 3D view ("Actual: .. Set: .. Relative to:",
+ * L63880: y 158), its rows COCKPIT_SPEED_ROW0 .. COCKPIT_PANEL_ROW0: never a
+ * comms menu's, and on the COMS screen instead of the view while that is up */
+#define COCKPIT_SPEED_ROW0 158
 bool cockpit_panel_play(float corners[4][3]);
 /* The same for the cockpit's live screen while it is shown (screen rows
  * 0 .. COCKPIT_PANEL_ROW0) */

@@ -680,7 +680,9 @@ GLuint gl_screen_labels_texture(void)
 
 /* The comms menu of the flight view: its check boxes are icon rectangles
  * (above the panel) with something drawn in them. The rows they take with
- * the text beside them. */
+ * the text beside them. Not the speed line's rows: a rectangle left over
+ * there from an earlier menu found its text "drawn" now and then, and the
+ * line went to the COMS screen and back (flashing in the view). */
 bool gl_screen_menu_rows(int *y0, int *y1)
 {
 	int rects[64][4], n = game_icon_rects(rects, 64);
@@ -688,10 +690,11 @@ bool gl_screen_menu_rows(int *y0, int *y1)
 	for (int i = 0; i < n; i++)
 	{
 		int *r = rects[i];
-		if (r[1] < 0 || r[3] >= COCKPIT_PANEL_ROW0 || r[0] < 0 || r[2] >= SCR_W || r[1] > r[3] || r[0] > r[2])
+		if (r[1] < 0 || r[3] >= COCKPIT_PANEL_ROW0 || r[0] < 0 || r[2] >= SCR_W || r[1] > r[3] || r[0] > r[2] ||
+			r[1] >= COCKPIT_SPEED_ROW0)
 			continue;
 		bool drawn = false;
-		for (int y = r[1]; y <= r[3] && !drawn; y++)
+		for (int y = r[1]; y <= r[3] && y < COCKPIT_SPEED_ROW0 && !drawn; y++)
 			for (int x = r[0]; x <= r[2]; x++)
 				if (scr_show.screen[y * SCR_W + x] != 255)
 				{
@@ -707,7 +710,7 @@ bool gl_screen_menu_rows(int *y0, int *y1)
 	if (bottom < 0)
 		return false;
 	*y0 = top > 4 ? top - 4 : 0;
-	*y1 = bottom + 10 < COCKPIT_PANEL_ROW0 ? bottom + 10 : COCKPIT_PANEL_ROW0;
+	*y1 = bottom + 10 < COCKPIT_SPEED_ROW0 ? bottom + 10 : COCKPIT_SPEED_ROW0;
 	return true;
 }
 
@@ -1577,6 +1580,23 @@ enum
 	COMS_MENU   /* the comms menu's text */
 };
 static int coms_state;
+/* the flight view's speed line is on the texture, as these rows of the screen */
+static bool coms_speed;
+static uint8_t coms_speed_rows[(COCKPIT_PANEL_ROW0 - COCKPIT_SPEED_ROW0) * SCR_W];
+
+/* Rows y0 .. y1 of the flight frame's 2D layer blitted onto the COMS texture, at their place */
+static void coms_blit_rows(const int rects[GD_VP_COUNT][4], int y0, int y1)
+{
+	BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
+	if (!blit)
+		return;
+	const int *g = rects[GD_VP_GAME];
+	blit->transparent = 1;
+	blit->scissor[0] = g[0];
+	blit->scissor[1] = g[1] + g[3] * (SCR_H - y1) / SCR_H;
+	blit->scissor[2] = g[2];
+	blit->scissor[3] = g[3] * (y1 - y0) / SCR_H + 1;
+}
 
 static void draw_coms_flight(bool new_frame)
 {
@@ -1592,14 +1612,19 @@ static void draw_coms_flight(bool new_frame)
 		(scr_show.sub && scr_show.group == COCKPIT_SCREEN_COMS))
 	{
 		coms_state = COMS_KEPT;
+		coms_speed = false;
 		return;
 	}
+	bool flight = !station && scr_show.cockpit && !scr_show.sub;
 	int y0, y1;
-	bool menu = !station && scr_show.cockpit && !scr_show.sub && gl_screen_menu_rows(&y0, &y1);
+	bool menu = flight && gl_screen_menu_rows(&y0, &y1);
+	/* the speed line (the cockpit leaves it out of the view while the COMS
+	 * screen is up), redrawn when it changes */
+	const uint8_t *speed_src = scr_show.screen + COCKPIT_SPEED_ROW0 * SCR_W;
+	bool speed_new = flight && new_frame && (!coms_speed || memcmp(coms_speed_rows, speed_src, sizeof coms_speed_rows));
 	/* the last menu's text stays up after the game's own has gone */
-	if (!menu && coms_state != COMS_KEPT)
-		return;
-	if (menu && !new_frame && coms_state == COMS_MENU)
+	bool redraw_menu = menu ? new_frame || coms_state != COMS_MENU : coms_state == COMS_KEPT;
+	if (!redraw_menu && !speed_new)
 		return;
 	GLuint tex;
 	GLuint fbo = sub_target(COCKPIT_SCREEN_COMS, &tex);
@@ -1608,23 +1633,28 @@ static void draw_coms_flight(bool new_frame)
 	glClearColor(0, 0, 0, 0);
 	glStencilMask(0xff);
 	glDepthMask(GL_TRUE);
-	glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	if (menu)
+	int rects[GD_VP_COUNT][4];
+	layout_rects(SUB_W, SUB_H, rects);
+	if (redraw_menu)
+		glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	else
 	{
-		int rects[GD_VP_COUNT][4];
-		layout_rects(SUB_W, SUB_H, rects);
+		/* only the speed line's rows: a kept menu's text stays */
+		const int *g = rects[GD_VP_GAME];
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(g[0], g[1] + g[3] * (SCR_H - COCKPIT_PANEL_ROW0) / SCR_H, g[2],
+				  g[3] * (COCKPIT_PANEL_ROW0 - COCKPIT_SPEED_ROW0) / SCR_H + 1);
+		glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
+	}
+	if (menu || flight)
+	{
 		gd_begin_frame(rects);
 		gd_set_viewport(GD_VP_GAME);
-		BlitPass *blit = gd_custom(screen_blit_pass, sizeof *blit);
-		if (blit)
-		{
-			const int *g = rects[GD_VP_GAME];
-			blit->transparent = 1;
-			blit->scissor[0] = g[0];
-			blit->scissor[1] = g[1] + g[3] * (SCR_H - y1) / SCR_H;
-			blit->scissor[2] = g[2];
-			blit->scissor[3] = g[3] * (y1 - y0) / SCR_H + 1;
-		}
+		if (menu && redraw_menu)
+			coms_blit_rows((const int(*)[4])rects, y0, y1);
+		if (flight)
+			coms_blit_rows((const int(*)[4])rects, COCKPIT_SPEED_ROW0, COCKPIT_PANEL_ROW0);
 		gd_flush();
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1632,17 +1662,26 @@ static void draw_coms_flight(bool new_frame)
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	sub_drawn[COCKPIT_SCREEN_COMS] = true;
-	coms_state = menu ? COMS_MENU : COMS_CLEAR;
+	if (redraw_menu)
+		coms_state = menu ? COMS_MENU : COMS_CLEAR;
+	coms_speed = flight;
+	if (flight)
+		memcpy(coms_speed_rows, speed_src, sizeof coms_speed_rows);
 }
 
 GLuint gl_screen_coms_menu(void)
 {
-	return coms_state == COMS_MENU ? sub_texs[COCKPIT_SCREEN_COMS] : 0;
+	return coms_state == COMS_MENU || (coms_state == COMS_CLEAR && coms_speed) ? sub_texs[COCKPIT_SCREEN_COMS] : 0;
 }
 
 bool gl_screen_coms_clear(void)
 {
 	return coms_state != COMS_KEPT;
+}
+
+bool gl_screen_coms_speed(void)
+{
+	return coms_speed && coms_state != COMS_KEPT;
 }
 
 /* The MAP or SHIP screen's new page: the frame's picture and scene for the time of

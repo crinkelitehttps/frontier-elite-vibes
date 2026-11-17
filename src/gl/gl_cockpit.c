@@ -443,6 +443,8 @@ static int menu_y0, menu_y1;
  * in the view: its rows are left out of the view */
 static volatile bool coms_menu;
 static int cut_y0, cut_y1;
+/* The speed line is on the COMS screen (gl_screen_coms_speed): its rows are left out of the view */
+static bool speed_on_coms;
 
 static void build_planes(void)
 {
@@ -686,6 +688,8 @@ bool cockpit_begin_frame(int window_w, int window_h, bool cockpit, int screen)
 	else if (coms_hold > 0)
 		coms_hold--;
 	coms_menu = active && !sub_on && sub_tex[COCKPIT_SCREEN_COMS] && coms_hold > 0;
+	speed_on_coms = active && !sub_on && !coms_hidden && sub_tex[COCKPIT_SCREEN_COMS] &&
+					sub_tex[COCKPIT_SCREEN_COMS] == gl_screen_coms_menu() && gl_screen_coms_speed();
 	cam_tex = active && cockpit_camera ? camera_texture() : 0;
 	cam_on = cam_tex != 0;
 	for (int g = 0; g < COCKPIT_SCREENS; g++)
@@ -1117,7 +1121,8 @@ void cockpit_draw(void)
 	bool upload = true;
 	const bool cut = menu_on || coms_menu;
 	const int c0 = menu_on ? menu_y0 : cut_y0, c1 = menu_on ? menu_y1 : cut_y1;
-	const int bands[2][2] = {{0, cut ? c0 : PANEL_ROW0}, {cut ? c1 : PANEL_ROW0, PANEL_ROW0}};
+	const int bottom = speed_on_coms ? COCKPIT_SPEED_ROW0 : PANEL_ROW0;
+	const int bands[2][2] = {{0, cut && c0 < bottom ? c0 : bottom}, {cut ? c1 : bottom, bottom}};
 	for (int i = 0; i < 2 && !sub_on; i++)
 	{
 		int a = bands[i][0], b = bands[i][1];
