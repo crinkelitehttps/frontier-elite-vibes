@@ -147,6 +147,8 @@ int mapscreen_picks(bool live, int out[MAPSCREEN_PICKS][3]);
 /* Any thread: the object in `slot` becomes the ship's target (with the game's sound), at the game thread's next
  * mouse poll */
 void mapscreen_target(int slot);
+/* ... and the system map centred on it (a body on the map picked with the focus) */
+void mapscreen_centre(int slot);
 
 /* The game's own map screen is up and its buttons are moved too (the picture
  * is drawn with them); a point on the screen, put back where the game has it */

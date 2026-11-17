@@ -145,9 +145,14 @@ static int collect(int s, Btn *b, int *mode_out)
 	{
 		int c = game_icons(rects, ids, 64);
 		for (int i = 0; i < c; i++)
+		{
+			/* (the weapons panel's buttons, FIRE among them (L6194e), end at row 200, one past the screen) */
+			if (rects[i][3] == 200)
+				rects[i][3] = 199;
 			if (rects[i][1] >= ROW0 && rects[i][3] < 200 && rects[i][2] >= rects[i][0])
 				n = add(b, n, rects[i][0], rects[i][1], rects[i][2] - rects[i][0] + 1, rects[i][3] - rects[i][1] + 1, ids[i],
 						(rects[i][0] + rects[i][2]) / 2, (rects[i][1] + rects[i][3]) / 2);
+		}
 		if (hud_orbit_button_shown())
 		{
 			int h = ORBIT_BTN_Y1 - ORBIT_BTN_Y0 + 1;
@@ -478,6 +483,8 @@ void focus_press(bool down)
 	 * it in its F10 mode) */
 	if (p->id <= ID_PICK)
 	{
+		if (cur != S_CAMERA)
+			mapscreen_centre(ID_PICK - p->id);
 		mapscreen_target(ID_PICK - p->id);
 		return;
 	}

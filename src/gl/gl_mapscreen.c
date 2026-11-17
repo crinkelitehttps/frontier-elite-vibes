@@ -19,6 +19,7 @@
 #include "gl_cockpit.h"
 #include "gl_scene.h"
 #include "cheats.h"
+#include "custom_ships.h"
 #include "debug_screen.h"
 #include "host.h" /* rdword, wrword, hcalls_count */
 #include "hostcall.h"
@@ -62,6 +63,8 @@ bool ship_page_debug = false;
 #define KEEP2_FIRST 14488
 #define KEEP2_LEN   4
 #define PICKED      708 /* A6: the object picked (708), and the flag that it was (709) */
+#define MAP_CENTRE  1150 /* A6: the system map's centre object (slot; $72 the whole system) */
+#define MAP_ZOOM_MIN 1186 /* A6: word, the system map's nearest zoom (L4b8f2 raises it to the centre's size) */
 #define SCREEN_MODE 704 /* A6: 4 in flight */
 #define OBJS_FIRST  17348
 #define SFX_PICKED  28 /* L62f1e's effect, a target picked */
@@ -282,6 +285,22 @@ static int picks_from(const uint8_t *buf, int out[MAPSCREEN_PICKS][3])
 		int y = (int16_t)(obj_byte(buf, off + 112) << 8 | obj_byte(buf, off + 113));
 		if (x + 3 < 0 || x + 3 >= 0x13c || y - 4 < 0 || y - 4 >= 0x9f)
 			continue;
+		/* things on one point (ships at a moon's station, zoomed out) are one pick, the body's if there is one
+		 * there, and of bodies the one the other flies round (the moon, not its station): the focus's boxes for
+		 * them would be the same box, and the body is the one wanted */
+		const bool body = off + 95 <= OBJS_LEN && obj_byte(buf, off + 94) == 1;
+		int same = -1;
+		for (int i = 0; i < n && same < 0; i++)
+			if (abs(out[i][0] - x) + abs(out[i][1] - y) <= 2)
+				same = i;
+		if (same >= 0)
+		{
+			int o = (int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)out[same][2]);
+			bool was_body = o >= 0 && o + 95 <= OBJS_LEN && obj_byte(buf, o + 94) == 1;
+			if (body && (!was_body || obj_byte(buf, o + 68) == slot))
+				out[same][2] = slot;
+			continue;
+		}
 		out[n][0] = x, out[n][1] = y, out[n][2] = slot;
 		n++;
 	}
@@ -305,6 +324,78 @@ static SDL_atomic_t want_target;
 void mapscreen_target(int slot)
 {
 	SDL_AtomicSet(&want_target, slot);
+}
+
+/* A body picked with the focus on the system map, for the game thread: the map is centred on it too */
+static SDL_atomic_t want_centre;
+
+void mapscreen_centre(int slot)
+{
+	SDL_AtomicSet(&want_centre, slot);
+}
+
+/* Game thread: the system map (the real one if it is up, else the side screen's, whose state is kept in the real
+ * machine's 912..1200 between its batches) centred on the body, as the map's own click does (L4b872 outside its
+ * select mode: only an object of kind 1 without bit 5 at +280; then L4b8f2 for the zoom) */
+static void take_centre(void)
+{
+	int slot = SDL_AtomicSet(&want_centre, 0);
+	if (slot <= 0 || slot > 0x72)
+		return;
+	const bool dbg = getenv("GLF_MAP_LOG") != NULL;
+	const bool live = game_screen() == SCREEN_SYSTEM_MAP && game_screen_owner() == OWNER_SYSTEM;
+	if (!live && !(kept.held && kept.owner == OWNER_SYSTEM))
+	{
+		if (dbg)
+			log_printf("map centre %d: no system map (held %d owner %d)\n", slot, kept.held, kept.owner);
+		return;
+	}
+	const uint8_t *buf = live ? NULL : kept.objs;
+	int off = (int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)slot);
+	/* a ship (the game's click centres only bodies): the body it flies round, its frame parent's chain (+68) */
+	for (int up = 0; up < 8 && off >= 0 && off + 281 <= OBJS_LEN &&
+					 (obj_byte(buf, off + 94) != 1 || (obj_byte(buf, off + 280) & 0x20));
+		 up++)
+	{
+		int parent = obj_byte(buf, off + 68);
+		if (parent <= 0 || parent > 0x72)
+			break;
+		slot = parent;
+		off = (int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)slot);
+	}
+	if (dbg)
+		log_printf("map centre %d: live %d off %d kind %d +280 %02x +93 %d centre was %d zoom min %d at %d,%d\n", slot, live, off,
+				   off >= 0 && off + 281 <= OBJS_LEN ? obj_byte(buf, off + 94) : -1,
+				   off >= 0 && off + 281 <= OBJS_LEN ? obj_byte(buf, off + 280) : -1,
+				   off >= 0 && off + 281 <= OBJS_LEN ? obj_byte(buf, off + 93) : -1, rdbyte(GAME_A6 + MAP_CENTRE),
+				   (int16_t)rdword(GAME_A6 + MAP_ZOOM_MIN),
+				   off >= 0 && off + 281 <= OBJS_LEN ? (int16_t)(obj_byte(buf, off + 110) << 8 | obj_byte(buf, off + 111)) : 0,
+				   off >= 0 && off + 281 <= OBJS_LEN ? (int16_t)(obj_byte(buf, off + 112) << 8 | obj_byte(buf, off + 113)) : 0);
+	if (off < 0 || off + 281 > OBJS_LEN || obj_byte(buf, off + 94) != 1 || (obj_byte(buf, off + 280) & 0x20))
+		return;
+	wrbyte(GAME_A6 + MAP_CENTRE, (uint8_t)obj_byte(buf, off + 93));
+	int model = obj_byte(buf, off + 90) << 8 | obj_byte(buf, off + 91);
+	uint32_t data = (uint32_t)rdlong(GAME_A6 + A6_GAME_DATA);
+	uint32_t m = custom_ships_model_addr(model / 2);
+	if (!m)
+		m = data + (uint16_t)rdword(data + (uint32_t)model);
+	int16_t size = (int16_t)((int16_t)rdword(m + 10) + (int16_t)rdword(m + 12) + 10);
+	if (size >= (int16_t)rdword(GAME_A6 + MAP_ZOOM_MIN))
+		wrword(GAME_A6 + MAP_ZOOM_MIN, (uint16_t)size);
+	/* L44750 (the click's jsr 630(a5)): every object's physics countdown (+97) cleared, so the next frame works
+	 * them all out again round the new centre; without it the map stays laid out round the old one */
+	wrword(GAME_A6 + 574, 0);
+	for (int s = 1; s <= 0x72; s++)
+	{
+		int f = obj_byte(buf, s);
+		int o = (int)(int16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)s);
+		if (!f || (f & 0x20) || o < 0 || o + 98 > OBJS_LEN)
+			continue;
+		if (live)
+			wrbyte(GAME_A6 + OBJS_FIRST + (uint32_t)(o + 97), 0);
+		else
+			kept.objs[o + 97] = 0;
+	}
 }
 
 /* Game thread: it becomes the target, as a click on it in the flight view makes it (L62f1e: the target, effect 28) */
@@ -707,6 +798,7 @@ static void real_layout(void)
 
 void mapscreen_poll(void)
 {
+	take_centre();
 	take_target();
 	if (getenv("GLF_MAP_LOG"))
 		log_real_screen();

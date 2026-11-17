@@ -42,6 +42,8 @@
  *                        wanted orbit ("-" leaves INC, NODE or ARGPE, in degrees, to the program) and check it
  *                        (orbit_plan.c)
  *     target NAME        make the body NAME the ship's target
+ *     icons              the game's clickable rectangles (x0,y0-x1,y1 and id)
+ *     mapcentre NAME     as the cockpit focus's pick of NAME on the system map: target, and the map centred on it
  *     orbitplan HP HA [INC NODE ARGPE]  the planned orbit as the ORBIT page makes it (round the target if it is a
  *                        body, else the frame's body)
  *     engage, disengage, apstatus  the ORBIT page's ENGAGE (orbit autopilot): on, off, what it says
@@ -70,6 +72,7 @@
 
 #include "cheats.h"
 #include "game_state.h"
+#include "gl/gl_mapscreen.h"
 #include "host.h"
 #include "input.h"
 #include "orbit_guide.h"
@@ -499,6 +502,29 @@ static void run(char *line)
 		if (found)
 			cheat_set_target(found);
 		say("target %s: %s", args, found ? "set" : "no such body");
+	}
+	else if (!strcmp(line, "icons"))
+	{
+		/* the game's clickable rectangles (L422d0_UISetIconPositions' list): x0 y0 x1 y1 id */
+		int rects[64][4], n = game_icon_rects(rects, 64);
+		for (int i = 0; i < n; i++)
+			say("icon %d: %d,%d-%d,%d id %d", i, rects[i][0], rects[i][1], rects[i][2], rects[i][3],
+				(uint16_t)rdword(GAME_A6 + A6_ICON_POSITIONS + (uint32_t)i * 10 + 8));
+		say("%d icons", n);
+	}
+	else if (!strcmp(line, "mapcentre"))
+	{
+		/* as the focus's pick of a body on the system map does (gl_mapscreen.h) */
+		CheatBody bodies[64];
+		int count = cheat_bodies(bodies, 64), found = 0;
+		for (int i = 0; i < count && !found; i++)
+			if (!strcasecmp(bodies[i].name, args))
+				found = bodies[i].slot;
+		if (!found)
+			found = atoi(args); /* or a slot (a ship) */
+		if (found)
+			mapscreen_centre(found), mapscreen_target(found);
+		say("mapcentre %s: %s (slot %d)", args, found ? "asked" : "no such body", found);
 	}
 	else if (!strcmp(line, "orbitplan"))
 	{
