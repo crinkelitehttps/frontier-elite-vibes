@@ -1383,12 +1383,18 @@ bool cockpit_own_ship_added(void)
 	return own_added;
 }
 
+bool cockpit_in_pass(void)
+{
+	return drawing_pass >= 0;
+}
+
 void Call_CockpitBackground(void)
 {
 	/* the front view leaves the player's ship out (the slot at A6+608 the object loop
-	 * skips); with ship shadows on, the loop gets it too, as a caster */
+	 * skips); with ship shadows on, the loop gets it too, as a caster, and with the
+	 * native scene filled for its exhausts (the hull itself is not drawn) */
 	own_added = false;
-	if (drawing_pass >= 0 && gl_shadow_wanted() && rdbyte(GAME_A6 + 608))
+	if (drawing_pass >= 0 && (gl_shadow_wanted() || native_mode() == 2) && rdbyte(GAME_A6 + 608))
 	{
 		wrbyte(GAME_A6 + 608, 0);
 		own_added = true;

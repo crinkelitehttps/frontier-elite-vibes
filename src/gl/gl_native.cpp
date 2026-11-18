@@ -475,7 +475,8 @@ struct Object
 	/* The temporaries the model starts with (-64(a6)): t0 is cleared, the
 	 * others are what is left there, which models like the cities use */
 	uint16_t t[8];
-	bool own_added = false; /* the player's ship, put in for the ship shadows only (cockpit_own_ship_added) */
+	bool own_added = false; /* the player's ship, put in for its shadow and exhausts only (cockpit_own_ship_added) */
+	bool round = false;     /* captured in a cockpit pass: seen with the head turned any way (cockpit_in_pass) */
 };
 
 /* A body too far away for its model, which L390f2 draws as a disc instead
@@ -683,6 +684,7 @@ static void capture(Object &o, uint32_t a6, uint32_t addr, uint32_t table, int m
 	}
 	capture_light(a6, o.light, o.tint);
 	o.own_added = cockpit_own_ship_added() && addr == game_player_ship();
+	o.round = cockpit_in_pass();
 	for (int j = 0; j < NUM_VARS; j++)
 		o.vars[j] = (uint16_t)rdword(addr + 114 + 2 * (uint32_t)j);
 	for (int j = 0; j < 8; j++)
@@ -1681,12 +1683,22 @@ struct CTear
 	int c;
 };
 
-/* An exhaust from view points head to tail into node nd (L3bc46_ProjectThrust) */
-void tear_eval(const P3 &head, const P3 &tail, float width, int c, Node &nd)
+/* Colour bit 14 of an exhaust's triangles (Tri.colour; set_colour ignores it): the player's own ship's hull
+ * is hidden in the cockpit, its exhausts are drawn (own_flames) */
+constexpr uint16_t TEAR_BIT = 0x4000;
+
+/* An exhaust from view points head to tail into node nd (L3bc46_ProjectThrust). The game shapes it flat
+ * across its own camera and drops it unless both ends are 512 ahead of it. round (the cockpit, where the
+ * head turns any way, the player's own engines behind it): by distance from the eye instead, and solid,
+ * the game's outline turned about the exhaust's axis, so it has the same bulk from wherever it is seen
+ * (a flat one seen along its axis, as the rear engines' from the seat, is a sliver). */
+void tear_eval(const P3 &head, const P3 &tail, float width, int c, Node &nd, bool round = false)
 {
-	if (-head[2] <= 512 || -tail[2] <= 512)
+	float zh = round ? std::sqrt(dot(head, head)) : -head[2];
+	float zt = round ? std::sqrt(dot(tail, tail)) : -tail[2];
+	if (zh <= 512 || zt <= 512)
 		return;
-	int px = (int)(width * 256 / -head[2]);
+	int px = (int)(width * 256 / (round ? std::min(zh, zt) : zh));
 	if (px == 0)
 		return;
 	Seg line = {head, tail, (uint16_t)c};
@@ -1699,6 +1711,43 @@ void tear_eval(const P3 &head, const P3 &tail, float width, int c, Node &nd)
 	const int STEPS = 24;
 	const P3 &b = tail;
 	P3 dir = {head[0] - b[0], head[1] - b[1], head[2] - b[2]};
+	if (round)
+	{
+		/* The game's curve, b + 3ut (STRETCH dir +- (u - t) BROADEN side) with |side| = |dir| seen square on:
+		 * for t 0..1/2 a point 3ut STRETCH along dir (b to head) at 3ut (u - t) BROADEN |dir| from the axis.
+		 * Rings of that radius round the axis, joined. */
+		float len = std::sqrt(dot(dir, dir));
+		if (len <= 0)
+			return;
+		P3 a = {dir[0] / len, dir[1] / len, dir[2] / len};
+		P3 ref = std::fabs(a[0]) < 0.9f ? P3{1, 0, 0} : P3{0, 1, 0};
+		P3 v1 = {a[1] * ref[2] - a[2] * ref[1], a[2] * ref[0] - a[0] * ref[2], a[0] * ref[1] - a[1] * ref[0]};
+		float l1 = std::sqrt(dot(v1, v1));
+		v1 = {v1[0] / l1, v1[1] / l1, v1[2] / l1};
+		P3 v2 = {a[1] * v1[2] - a[2] * v1[1], a[2] * v1[0] - a[0] * v1[2], a[0] * v1[1] - a[1] * v1[0]};
+		const int RINGS = 12, SIDES = 10;
+		P3 ring[RINGS + 1][SIDES];
+		for (int i = 0; i <= RINGS; i++)
+		{
+			float t = 0.5f * (float)i / RINGS, u = 1 - t;
+			float d = 3 * u * t * STRETCH * len, r = 3 * u * t * (u - t) * BROADEN * len;
+			for (int k = 0; k < SIDES; k++)
+			{
+				float ang = 6.2831853f * (float)k / SIDES, cs = std::cos(ang) * r, sn = std::sin(ang) * r;
+				for (int j = 0; j < 3; j++)
+					ring[i][k][j] = b[j] + a[j] * d + v1[j] * cs + v2[j] * sn;
+			}
+		}
+		uint16_t col = (uint16_t)(c | TEAR_BIT);
+		for (int i = 0; i < RINGS; i++)
+			for (int k = 0; k < SIDES; k++)
+			{
+				int k2 = (k + 1) % SIDES;
+				nd.tris.push_back({{ring[i][k], ring[i + 1][k], ring[i + 1][k2]}, col});
+				nd.tris.push_back({{ring[i][k], ring[i + 1][k2], ring[i][k2]}, col});
+			}
+		return;
+	}
 	P3 cp[4] = {b,
 				{b[0] + STRETCH * dir[0] - BROADEN * dir[1], b[1] + STRETCH * dir[1] + BROADEN * dir[0], b[2] + dir[2]},
 				{b[0] + STRETCH * dir[0] + BROADEN * dir[1], b[1] + STRETCH * dir[1] - BROADEN * dir[0], b[2] + dir[2]},
@@ -1714,7 +1763,7 @@ void tear_eval(const P3 &head, const P3 &tail, float width, int c, Node &nd)
 	for (int i = 1; i <= STEPS; i++)
 	{
 		P3 cur = at((float)i / STEPS);
-		nd.tris.push_back({{b, prev, cur}, (uint16_t)c});
+		nd.tris.push_back({{b, prev, cur}, (uint16_t)(c | TEAR_BIT)});
 		prev = cur;
 	}
 }
@@ -2499,9 +2548,7 @@ struct Runner
 				out.wire.push_back({*head, *tail, (uint16_t)c});
 			return;
 		}
-		if (-(*head)[2] <= 512 || -(*tail)[2] <= 512 || (int)(width * 256 / -(*head)[2]) == 0)
-			return;
-		tear_eval(*head, *tail, width, c, node(*head));
+		tear_eval(*head, *tail, width, c, node(*head), o.round);
 	}
 
 	/* Axes swapped by `code` and negated by bits 13, 12, 11 of `w`
@@ -3600,7 +3647,7 @@ void cache_place(const Object &o, const Place &pl, const Cached &e, Drawn &d, bo
 		}
 	}
 	for (const CTear &t : e.rec.tears)
-		tear_eval(pl.at(t.head), pl.at(t.tail), t.width, t.c, d.nodes[t.node]);
+		tear_eval(pl.at(t.head), pl.at(t.tail), t.width, t.c, d.nodes[t.node], o.round);
 	if (e.rec.live.empty())
 		return;
 	const Code *top = code_for(o.table, o.model);
@@ -4066,8 +4113,13 @@ void cache_trim()
 
 int prof_ran, prof_reused;
 
+/* The player's own ship's exhausts in the cockpit (its hull is hidden: Drawn.hide): its nodes with only their
+ * exhaust triangles, drawn as an object of its own */
+Drawn own_flames;
+
 void run_objects(bool wire)
 {
+	own_flames = Drawn();
 	frame_seed++;
 	cache_trim();
 	face_rgba.clear();
@@ -4088,6 +4140,29 @@ void run_objects(bool wire)
 			cached_run(o, drawn[(size_t)i], false, prof_ran, prof_reused);
 		drawn[(size_t)i].shrink = o.shrink;
 		drawn[(size_t)i].hide = o.own_added;
+		if (o.own_added && !wire)
+		{
+			own_flames.shrink = o.shrink;
+			for (const Node &n : drawn[(size_t)i].nodes)
+			{
+				std::vector<Tri> tears;
+				for (const Tri &t : n.tris)
+					if (t.colour & TEAR_BIT)
+						tears.push_back(t);
+				if (tears.empty())
+					continue;
+				Node copy = n; /* its keys, not the hull */
+				copy.tris = std::move(tears);
+				copy.segs.clear();
+				copy.dots.clear();
+				copy.g = nullptr;
+				copy.gcount = 0;
+				copy.gnode = -1;
+				copy.under = false;
+				copy.planet = false;
+				own_flames.nodes.push_back(std::move(copy));
+			}
+		}
 	}
 }
 
@@ -4288,8 +4363,9 @@ void setup_shadows(bool wire)
 				if (n.g && n.gcount)
 					gpu_corners(n, add);
 				for (const Tri &t : n.tris)
-					for (const P3 &p : t.p)
-						add(p);
+					if (!(t.colour & TEAR_BIT)) /* exhausts cast no shadow */
+						for (const P3 &p : t.p)
+							add(p);
 			}
 		if (!any)
 			continue;
@@ -4515,6 +4591,8 @@ void setup_shadows(bool wire)
 						}
 						for (const Tri &t : n.tris)
 						{
+							if (t.colour & TEAR_BIT)
+								continue; /* an engine's exhaust is a glow: no shadow */
 							/* a ground base is a town: only what lies within 2.5 km of the eye casts, so the map is
 							 * fitted to the hangars round the ship, not to the whole base */
 							if (c.base)
@@ -5320,6 +5398,23 @@ extern "C" void native_draw(void)
 	for (Drawn &d : drawn)
 		if (d.far > 1.0f && !d.back && !d.hide)
 			placed.push_back(&d);
+	if (!own_flames.nodes.empty())
+	{
+		/* the hidden own ship's exhausts, with their own span */
+		mat4 fm = gd_mvp();
+		own_flames.near = 1e30f;
+		own_flames.far = 0;
+		for (const Node &n : own_flames.nodes)
+			for (const Tri &t : n.tris)
+				for (const P3 &p : t.p)
+				{
+					float w = fm.m[3] * p[0] + fm.m[7] * p[1] + fm.m[11] * p[2] + fm.m[15];
+					own_flames.near = std::min(own_flames.near, w);
+					own_flames.far = std::max(own_flames.far, w);
+				}
+		if (own_flames.far > 1.0f)
+			placed.push_back(&own_flames);
+	}
 	std::sort(placed.begin(), placed.end(),
 			  [](const Drawn *a, const Drawn *b) { return a->near * a->shrink < b->near * b->shrink; });
 	std::vector<std::pair<size_t, size_t>> groups; /* [first, last) in placed */
@@ -5355,7 +5450,9 @@ extern "C" void native_draw(void)
 	/* the map layers an object looks up (-1: none of that cascade), all -1 if it receives none */
 	static const ShadowLayers no_layers = {{-1, -1, -1}};
 	auto receives = [&](const Drawn *d) {
-		return shadow_on && d->shrink == 1.0f ? shadow_layer[(size_t)(d - drawn.data())] : no_layers;
+		return shadow_on && d->shrink == 1.0f && d >= drawn.data() && d < drawn.data() + drawn.size()
+				   ? shadow_layer[(size_t)(d - drawn.data())]
+				   : no_layers;
 	};
 	auto set_shadow = [&](const ShadowLayers &sl) {
 		gd_set_shadow(shadow_m0, shadow_m0 ? sl.l[0] : -1, shadow_m1, shadow_m1 ? sl.l[1] : -1, shadow_m2,

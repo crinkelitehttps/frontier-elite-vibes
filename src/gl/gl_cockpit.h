@@ -231,9 +231,13 @@ void Call_CockpitVertexD(void);
 /* True while the game draws a pass other than straight ahead */
 bool cockpit_turned_pass(void);
 /* Whether the pass being drawn put the player's own ship in the scene, which the
- * cockpit's front view leaves out (the game skips it): only for the ship shadows
- * (gl_shadow.h), which need it as a caster; the native scene doesn't draw it */
+ * cockpit's front view leaves out (the game skips it): for the ship shadows
+ * (gl_shadow.h), which need it as a caster, and for its engines' exhausts, the
+ * only part of it the native scene draws */
 bool cockpit_own_ship_added(void);
+/* True while the game draws one of the cockpit's passes (straight ahead too):
+ * what it draws is seen with the head turned any way */
+bool cockpit_in_pass(void);
 /* A direction in the view space of the pass the game is drawing -> view
  * space (unchanged outside the passes) */
 void cockpit_pass_to_view(const float v[3], float out[3]);
