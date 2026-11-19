@@ -265,7 +265,7 @@ static void update_tracker(void)
 	/* the controller's look-around adds on */
 	float look_x, look_y;
 	gamepad_look(&look_x, &look_y);
-	/* and the held look-around (mouse with Right Alt, right shoulder +
+	/* and the held look-around (mouse with Left Alt, right shoulder +
 	 * right stick) */
 	float held_yaw, held_pitch;
 	headlook_get(&held_yaw, &held_pitch);

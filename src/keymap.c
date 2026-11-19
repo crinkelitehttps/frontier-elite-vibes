@@ -1,13 +1,141 @@
 /*
  * keymap.c - maps SDL key presses to Atari ST scancodes for the game.
  * Ctrl+key combinations are passed to the shortcuts instead.
+ *
+ * In flight some letters are the port's flight keys instead of the game's
+ * (see FlightKeys below).
  */
 #include <SDL_keyboard.h>
 
+#include "freecam.h"
+#include "game_state.h"
+#include "gl/gl_cockpit.h"
 #include "input.h"
 #include "keymap.h"
 #include "main.h"
 #include "shortcut.h"
+
+/*-----------------------------------------------------------------------*/
+/* The flight keys: while flying, these letters press the game's own
+ * flight keys (or the port's strafe) instead of their letters, which the
+ * game would otherwise see. Taken from the game this way:
+ *   E  was ECM (game key e)        -> accelerate
+ *   D  was the photo of a military reconnaissance job (game key d, L64184)
+ *                                  -> thrust right
+ *   A  was pitch (game key A, nose down) -> thrust left
+ * The game's other steering and speed keys still work: Z (pitch, nose up),
+ * , and . (roll or yaw as the Elite controls option says), Return and
+ * Right Shift (speed up / down), and the keypad's strafe. */
+enum
+{
+	STEER_NONE,
+	STEER_ROLL, /* the Elite controls option is set to roll while held */
+	STEER_YAW,  /* ... to yaw */
+};
+
+typedef struct
+{
+	SDL_Keycode sym;
+	uint8_t st;    /* game key it presses, 0xFF: none (strafe, read by strafe.c) */
+	uint8_t steer; /* STEER_* */
+	int8_t sx, sy; /* strafe: x right +, y up + */
+} FlightKey;
+
+static const FlightKey FlightKeys[] = {
+	{SDLK_q, 0x36, STEER_NONE, 0, 0},  /* decelerate: Right Shift */
+	{SDLK_e, 0x1C, STEER_NONE, 0, 0},  /* accelerate: Return */
+	{SDLK_w, 0xFF, STEER_NONE, 0, 1},  /* thrust up */
+	{SDLK_s, 0xFF, STEER_NONE, 0, -1}, /* thrust down */
+	{SDLK_a, 0xFF, STEER_NONE, -1, 0}, /* thrust left */
+	{SDLK_d, 0xFF, STEER_NONE, 1, 0},  /* thrust right */
+	{SDLK_u, 0x33, STEER_YAW, 0, 0},   /* yaw left: , */
+	{SDLK_o, 0x34, STEER_YAW, 0, 0},   /* yaw right: . */
+	{SDLK_i, 0x1E, STEER_NONE, 0, 0},  /* pitch down (nose down): A */
+	{SDLK_k, 0x2C, STEER_NONE, 0, 0},  /* pitch up (nose up): Z */
+	{SDLK_j, 0x33, STEER_ROLL, 0, 0},  /* roll left: , */
+	{SDLK_l, 0x34, STEER_ROLL, 0, 0},  /* roll right: . */
+};
+#define N_FLIGHT_KEYS (int)(sizeof FlightKeys / sizeof FlightKeys[0])
+
+static volatile uint8_t flight_held[N_FLIGHT_KEYS];
+
+static int flight_key_index(SDL_Keycode sym)
+{
+	for (int i = 0; i < N_FLIGHT_KEYS; i++)
+		if (FlightKeys[i].sym == sym)
+			return i;
+	return -1;
+}
+
+/* Flying: the flight view, or a map / ship page on a cockpit screen while
+ * the ship flies on. Not the station's or the options screen (the quiz's
+ * letter, save names), the free camera (its own WASD) or the title. */
+static bool flight_keys_on(void)
+{
+	if (freecam_active() || !game_player_ship())
+		return false;
+	GameScreen s = game_screen();
+	if (s == SCREEN_FLIGHT)
+		return true;
+	return cockpit_screen_frame() && (s == SCREEN_GALAXY_MAP || s == SCREEN_SYSTEM_MAP || s == SCREEN_SHIP);
+}
+
+/* Presses or lets go a game key that several flight keys share: it is down
+ * while any of them is held */
+static void flight_update_st(uint8_t st)
+{
+	if (st == 0xFF)
+		return;
+	bool down = false;
+	for (int i = 0; i < N_FLIGHT_KEYS; i++)
+		if (FlightKeys[i].st == st && flight_held[i])
+			down = true;
+	Input_PressSTKey(st, down);
+}
+
+/* True if the key was taken as a flight key */
+static bool flight_key(SDL_Keycode sym, bool down)
+{
+	int i = flight_key_index(sym);
+	if (i < 0)
+		return false;
+	if (down)
+	{
+		if (!flight_held[i] && !flight_keys_on())
+			return false;
+		flight_held[i] = 1;
+	}
+	else
+	{
+		if (!flight_held[i])
+			return false; /* pressed as a letter: let it go as one */
+		flight_held[i] = 0;
+	}
+	flight_update_st(FlightKeys[i].st);
+	return true;
+}
+
+int Keymap_SteerMode(void)
+{
+	int mode = STEER_NONE;
+	for (int i = 0; i < N_FLIGHT_KEYS; i++)
+		if (flight_held[i] && FlightKeys[i].steer > mode)
+			mode = FlightKeys[i].steer;
+	return mode;
+}
+
+void Keymap_Strafe(float *x, float *y)
+{
+	int sx = 0, sy = 0;
+	for (int i = 0; i < N_FLIGHT_KEYS; i++)
+		if (flight_held[i])
+		{
+			sx += FlightKeys[i].sx;
+			sy += FlightKeys[i].sy;
+		}
+	*x = (float)sx;
+	*y = (float)sy;
+}
 
 /*-----------------------------------------------------------------------*/
 /* SDL Keycode to ST scancode mapping table */
@@ -215,6 +343,9 @@ void Keymap_KeyDown(SDL_Keysym *sdlkey)
 		return;
 	}
 
+	if (flight_key(symkey, true))
+		return;
+
 	/* Get ST scancode */
 	st_code = Keymap_GetSTScanCode(sdlkey);
 	if (st_code != 0xFF)
@@ -245,6 +376,9 @@ void Keymap_KeyUp(SDL_Keysym *sdlkey)
 	{
 		return;
 	}
+
+	if (flight_key(symkey, false))
+		return;
 
 	/* Get ST scancode */
 	st_code = Keymap_GetSTScanCode(sdlkey);

@@ -59,10 +59,10 @@ bool headlook_tap(HeadlookTap *t, bool down, Uint64 now_ms)
 static bool is_alt(const SDL_Event *e)
 {
 	SDL_Keycode k = e->key.keysym.sym;
-	return k == SDLK_RALT || k == SDLK_MODE; /* AltGr on some layouts */
+	return k == SDLK_LALT;
 }
 
-/* Right Alt lets go: the mouse is the game's again (captured while its
+/* Left Alt lets go: the mouse is the game's again (captured while its
  * right button steers, input.c) */
 static void release_alt(void)
 {

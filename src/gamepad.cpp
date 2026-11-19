@@ -726,6 +726,23 @@ void force_elite_controls(int mode)
 	}
 }
 
+/* The keyboard's yaw (U / O) and roll (J / L) keys press the game's own
+ * sideways steering keys (, and .; keymap.c), so the option is set the same
+ * way for them while they are held, and until the turn they ramped up has
+ * died away (A6+14508 back to 0). Returns a force_elite_controls mode. */
+int keyboard_elite_mode()
+{
+	static int last;
+	int m = Keymap_SteerMode();
+	if (m == 1 && roll_low())
+		m = 2;
+	if (m)
+		last = m;
+	else if (!game_player_ship() || rdword(GAME_A6 + 14508) == 0)
+		last = 0;
+	return last;
+}
+
 /* Steering diagnosis (GLF_STEER_LOG=1; glfrontier.log, lines "STEER"): the game's state
  * around the pad's steering whenever it changes, and twice a second while
  * the pad steers. turned = degrees the ship turned since the last line and
@@ -994,7 +1011,7 @@ void gamepad_update(void)
 			ed->update(vibe::ControllerReading(), now_ns());
 		bindings.release_all();
 		write_steering(0, 0);
-		force_elite_controls(0);
+		force_elite_controls(keyboard_elite_mode());
 		strafe_set_pad(0, 0);
 		return;
 	}
@@ -1076,7 +1093,7 @@ void gamepad_update(void)
 
 	float roll = f.axis[roll_axis], yaw = f.axis[yaw_axis];
 	float steer[2] = {f.axis[steer_x] + roll + yaw, f.axis[steer_y]};
-	force_elite_controls(yaw != 0.0f ? 2 : roll != 0.0f ? (roll_low() ? 2 : 1) : 0);
+	force_elite_controls(yaw != 0.0f ? 2 : roll != 0.0f ? (roll_low() ? 2 : 1) : keyboard_elite_mode());
 	for (float &s : steer)
 		s = std::max(-1.0f, std::min(1.0f, s));
 	look[0] = f.look_x;

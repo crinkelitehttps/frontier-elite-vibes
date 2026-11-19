@@ -8,7 +8,7 @@
  * speed mode it overrides the flight computer on the axes being strafed
  * along (which takes the drift out again once they are let go).
  *
- * Input: the keypad (4 / 6 left / right, 8 / 2 up / down, whatever
+ * Input: W / A / S / D in flight (keymap.c), the keypad (4 / 6 left / right, 8 / 2 up / down, whatever
  * NumLock) and the gamepad's strafe bindings (gamepad.c). The amount is
  * a fraction of the ship's thrust on that axis.
  */

@@ -5,6 +5,7 @@
 #include <math.h>
 
 #include "host.h"
+#include "keymap.h"
 #include "main.h"
 #include "strafe.h"
 
@@ -34,8 +35,10 @@ static int thrust(float v, unsigned int limits)
 void Call_Strafe(void)
 {
 	const Uint8 *k = SDL_GetKeyboardState(NULL);
-	float x = clamp1(pad[0] + k[SDL_SCANCODE_KP_6] - k[SDL_SCANCODE_KP_4]);
-	float y = clamp1(pad[1] + k[SDL_SCANCODE_KP_8] - k[SDL_SCANCODE_KP_2]);
+	float kx, ky;
+	Keymap_Strafe(&kx, &ky); /* W / A / S / D in flight */
+	float x = clamp1(pad[0] + kx + k[SDL_SCANCODE_KP_6] - k[SDL_SCANCODE_KP_4]);
+	float y = clamp1(pad[1] + ky + k[SDL_SCANCODE_KP_8] - k[SDL_SCANCODE_KP_2]);
 	unsigned int ship = GetReg(REG_A0);
 	if (x != 0.0f)
 		SetReg(REG_D0, thrust(x, ship + SHIP_THRUST_LIMITS));

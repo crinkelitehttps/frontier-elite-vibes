@@ -17,6 +17,7 @@ A fork of GLFrontier (OpenGL Frontier Elite 2) that modernizes the build system,
 * Ctrl-F	- Toggle the in-game menu (settings, cheats, mods, debug).
 * Ctrl-V	- Toggle the free camera (in the flight view).
 * F	        - Toggles fps readout.
+* Flight keys (in flight, outside the free camera): E / Q accelerate / decelerate, W / S thrust up / down, A / D thrust left / right, I / K pitch down / up, U / O yaw left / right, J / L roll left / right. They replace the game's own E (ECM), D (reconnaissance photo) and A (pitch) in flight; Z, `,` / `.`, Return / Right Shift and the keypad strafe still work as before.
 * Ctrl-K	- Toggle the 3D cockpit view.
 * Ctrl-O	- Orbit display on / off: the orbit as a line on the HUD, with Pe/Ap markers and the readout (also L3 on a pad if bound to `orbit`).
 * Ctrl-C	- Recentre head tracking and the VR headset.

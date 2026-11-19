@@ -330,7 +330,7 @@ void Main_EventHandler(void)
 			toggle_m68k_menu = !toggle_m68k_menu;
 			continue;
 		}
-		/* Right Alt held: the mouse turns the cockpit's head (headlook.h) */
+		/* Left Alt held: the mouse turns the cockpit's head (headlook.h) */
 		if (headlook_event(&event))
 			continue;
 		if (ui_handle_event(&event))

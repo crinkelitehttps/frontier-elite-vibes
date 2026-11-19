@@ -1,6 +1,6 @@
 /*
  * headlook.h - a held look-around for the cockpit view, moved by the mouse
- * while Right Alt is held, or by the controller's right stick while the
+ * while Left Alt is held, or by the controller's right stick while the
  * right shoulder is held (gamepad.cpp: head-x / head-y / head-hold). The
  * pose stays where it is left; a double tap of the key or button puts it
  * back straight ahead. It adds to head tracking and the springing look-x /
@@ -17,7 +17,7 @@ extern "C"
 {
 #endif
 
-/* Right Alt and the mouse while it is held; true if the event was taken */
+/* Left Alt and the mouse while it is held; true if the event was taken */
 bool headlook_event(const SDL_Event *event);
 /* Turns the held pose: degrees, yaw right +, pitch up + */
 void headlook_turn(float yaw, float pitch);
