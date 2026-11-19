@@ -1,6 +1,6 @@
 /*
  * gl_focus.h - moving about the cockpit's input surfaces without the mouse:
- * the keyboard's Tab / Shift-Tab and arrows and F, the pad's Y / X and d-pad
+ * the keyboard's Tab / Shift-Tab and arrows (or Left Shift + I / K / J / L) and F, the pad's Y / X and d-pad
  * and A (gamepad.cfg: focus-next, focus-prev, nav-up ..., activate).
  *
  * HOW IT WORKS

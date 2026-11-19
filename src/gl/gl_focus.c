@@ -574,59 +574,88 @@ void focus_tick(void)
 	refresh(b, &n, &mode);
 }
 
-/* Keys the focus takes: held ones are tracked so a release never reaches the game unpaired */
+/* Keys the focus takes: held ones are tracked so a release never reaches the game unpaired. Left Shift with
+ * I / K / J / L moves the box as the arrows do (those letters alone are flight keys, keymap.c). */
 bool focus_key_event(const SDL_Event *event)
 {
-	static const SDL_Keycode KEYS[6] = {SDLK_TAB, SDLK_UP, SDLK_DOWN, SDLK_LEFT, SDLK_RIGHT, SDLK_f};
-	static bool held[6];
+	enum
+	{
+		A_TAB,
+		A_UP,
+		A_DOWN,
+		A_LEFT,
+		A_RIGHT,
+		A_PRESS
+	};
+	static const struct
+	{
+		SDL_Keycode sym;
+		int action;
+		bool lshift; /* only with Left Shift held */
+	} KEYS[] = {
+		{SDLK_TAB, A_TAB, false},  {SDLK_UP, A_UP, false}, {SDLK_DOWN, A_DOWN, false}, {SDLK_LEFT, A_LEFT, false},
+		{SDLK_RIGHT, A_RIGHT, false}, {SDLK_f, A_PRESS, false}, {SDLK_i, A_UP, true},   {SDLK_k, A_DOWN, true},
+		{SDLK_j, A_LEFT, true},   {SDLK_l, A_RIGHT, true},
+	};
+	enum
+	{
+		NKEYS = sizeof(KEYS) / sizeof(KEYS[0])
+	};
+	static bool held[NKEYS];
 	if (event->type != SDL_KEYDOWN && event->type != SDL_KEYUP)
 		return false;
 	int k = -1;
-	for (int i = 0; i < 6; i++)
-		if (event->key.keysym.sym == KEYS[i])
+	for (int i = 0; i < NKEYS; i++)
+		if (event->key.keysym.sym == KEYS[i].sym)
 			k = i;
 	if (k < 0)
 		return false;
+	const int action = KEYS[k].action;
 	if (event->type == SDL_KEYUP)
 	{
 		bool was = held[k];
 		held[k] = false;
-		if (was && k == 5)
+		if (was && action == A_PRESS)
 			focus_press(false);
 		return was;
 	}
 	const Uint16 mod = event->key.keysym.mod;
 	if (mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI))
 		return false;
-	if (k != 0 && (mod & KMOD_SHIFT))
+	if (KEYS[k].lshift)
+	{
+		if (!(mod & KMOD_LSHIFT) || (mod & KMOD_RSHIFT))
+			return false;
+	}
+	else if (action != A_TAB && (mod & KMOD_SHIFT))
 		return false;
 	/* the options screen types file names */
 	if (!focus_enabled() || game_screen() == SCREEN_OPTIONS)
 		return false;
 	held[k] = true;
-	if (event->key.repeat && (k == 0 || k == 5))
+	if (event->key.repeat && (action == A_TAB || action == A_PRESS))
 		return true;
-	switch (k)
+	switch (action)
 	{
-	case 0:
+	case A_TAB:
 		if (mod & KMOD_SHIFT)
 			focus_prev();
 		else
 			focus_next();
 		break;
-	case 1:
+	case A_UP:
 		focus_move(0, -1);
 		break;
-	case 2:
+	case A_DOWN:
 		focus_move(0, 1);
 		break;
-	case 3:
+	case A_LEFT:
 		focus_move(-1, 0);
 		break;
-	case 4:
+	case A_RIGHT:
 		focus_move(1, 0);
 		break;
-	case 5:
+	case A_PRESS:
 		focus_press(true);
 		break;
 	}
