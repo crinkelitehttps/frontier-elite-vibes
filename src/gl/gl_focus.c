@@ -63,6 +63,28 @@ static int cur = S_DASH;
 static int sel_id[S_COUNT], sel_cx[S_COUNT], sel_cy[S_COUNT];
 static bool sel_set[S_COUNT];
 
+int focus_highlight_seconds = 2;
+static Uint32 last_key_at; /* SDL_GetTicks of the last focus key: the highlight hides focus_highlight_seconds on */
+
+/* A focus key: the highlight shown again, its timeout started afresh */
+static void touched(void)
+{
+	last_key_at = SDL_GetTicks();
+}
+
+static bool highlight_timed_out(void)
+{
+	return focus_highlight_seconds > 0 && SDL_GetTicks() - last_key_at >= (Uint32)focus_highlight_seconds * 1000u;
+}
+
+/* A focus key: true if the highlight was hidden, so the key only brings it back and does nothing else */
+static bool woke(void)
+{
+	bool hidden = highlight_timed_out();
+	touched();
+	return hidden;
+}
+
 static SDL_SpinLock view_lock;
 static FocusView view;
 static bool view_ok;
@@ -291,7 +313,7 @@ static void publish(int s, const Btn *b, int n, int pick)
 bool focus_view(FocusView *out)
 {
 	SDL_AtomicLock(&view_lock);
-	bool ok = view_ok;
+	bool ok = view_ok && !highlight_timed_out();
 	*out = view;
 	SDL_AtomicUnlock(&view_lock);
 	return ok;
@@ -403,7 +425,7 @@ void focus_next(void)
 		ui_nav_tab(false);
 		return;
 	}
-	if (focus_enabled())
+	if (focus_enabled() && !woke())
 		step(1);
 }
 
@@ -414,7 +436,7 @@ void focus_prev(void)
 		ui_nav_tab(true);
 		return;
 	}
-	if (focus_enabled())
+	if (focus_enabled() && !woke())
 		step(-1);
 }
 
@@ -425,7 +447,7 @@ void focus_move(int dx, int dy)
 		ui_nav_move(dx, dy);
 		return;
 	}
-	if (!focus_enabled())
+	if (!focus_enabled() || woke())
 		return;
 	Btn b[MAX_BTNS];
 	int n, mode;
@@ -471,7 +493,7 @@ void focus_press(bool down)
 		ui_nav_activate();
 		return;
 	}
-	if (!focus_enabled() || game_held || press.phase)
+	if (!focus_enabled() || game_held || press.phase || woke())
 		return;
 	Btn b[MAX_BTNS];
 	int n, mode;

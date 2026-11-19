@@ -63,6 +63,10 @@ void focus_press(bool down);
  * lets go of presses */
 void focus_tick(void);
 
+/* Seconds the green outline and box stay up after the last focus key (Tab / arrows / F, pad Y / X /
+ * d-pad / A); 0 = always shown. A setting (focus_highlight_seconds). */
+extern int focus_highlight_seconds;
+
 /* Whether the focus is in use (the cockpit view is shown and the free camera is off) */
 bool focus_enabled(void);
 

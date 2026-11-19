@@ -33,6 +33,7 @@ extern "C"
 #include "gamepad.h"
 #include "gl/gl_camera.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_focus.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
 #include "gl/gl_mapscreen.h"
@@ -295,6 +296,9 @@ void page_settings()
 	ImGui::TextWrapped("Field of view (vertical)");
 	ImGui::SetNextItemWidth(-FLT_MIN);
 	ImGui::SliderInt("##fov", &cockpit_fov, 30, 120, "%d degrees");
+	ImGui::TextWrapped("Green focus box (Tab / arrows, pad Y / X / d-pad) hides this long after the last key (0 = always shown)");
+	ImGui::SetNextItemWidth(-FLT_MIN);
+	ImGui::SliderInt("##focushide", &focus_highlight_seconds, 0, 30, focus_highlight_seconds ? "hide after %d s" : "always shown");
 
 	ui_heading("Head tracking");
 	wrapped_checkbox("OpenTrack, UDP over network", &headtrack_enabled);

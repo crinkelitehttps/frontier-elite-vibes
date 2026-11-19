@@ -19,6 +19,7 @@
 #include "freecam.h"
 #include "scenery.h"
 #include "gl/gl_cockpit.h"
+#include "gl/gl_focus.h"
 #include "gl/gl_hands.h"
 #include "gl/gl_hud.h"
 #include "gl/gl_planet_tex.h"
@@ -88,6 +89,7 @@ typedef struct
 	int mine_radius;
 	int custom_systems;
 	int time_guard;
+	int focus_highlight;
 	int target_range_au;
 	int scenery_rear_limit;
 	int scenery_cap;
@@ -154,6 +156,7 @@ static const struct
 	{"mine_radius", offsetof(Settings, mine_radius)},
 	{"custom_systems", offsetof(Settings, custom_systems)},
 	{"time_guard_seconds", offsetof(Settings, time_guard)},
+	{"focus_highlight_seconds", offsetof(Settings, focus_highlight)},
 	{"target_range_au", offsetof(Settings, target_range_au)},
 	{"scenery_rear_limit", offsetof(Settings, scenery_rear_limit)},
 	{"scenery_cap", offsetof(Settings, scenery_cap)},
@@ -318,6 +321,7 @@ static Settings current(void)
 	s.mine_radius = mine_radius_m;
 	s.custom_systems = custom_systems_on;
 	s.time_guard = time_guard_seconds;
+	s.focus_highlight = focus_highlight_seconds;
 	s.target_range_au = target_range_au;
 	s.scenery_rear_limit = scenery_rear_limit;
 	s.scenery_cap = scenery_cap;
@@ -400,6 +404,8 @@ static void apply(const Settings *s)
 		mine_radius_m = s->mine_radius;
 	if (s->time_guard >= 0 && s->time_guard <= 120)
 		time_guard_seconds = s->time_guard;
+	if (s->focus_highlight >= 0 && s->focus_highlight <= 60)
+		focus_highlight_seconds = s->focus_highlight;
 	if (s->scenery_rear_limit >= 0 && s->scenery_rear_limit <= 15)
 		scenery_rear_limit = s->scenery_rear_limit;
 	if (s->scenery_cap >= 1 && s->scenery_cap <= 60)
