@@ -82,7 +82,12 @@ uses, gave sea at London). [inferred] That code 0 is the liquid on every planet 
   any flight mode (before 2026-11-03 the spawner's own gates, such as the 20 km limit and the orbit mode, decided that).
   Above the radius there is nothing to make, since the L-infinity distance includes altitude.
 - Near a starport (`893(a6)` bit 0) the game's spawner makes only cloud fields half the time and deletes anything that
-  falls within its base-clearance test (`774(a5)`); that is the original rule, kept.
+  falls within its base-clearance test (`774(a5)`); that is the original rule, kept. The test is made against the near base
+  (`892(a6)`), every axis under 2^27 mm (134 km), and only when a copy is made. Copies are checked again when drawn
+  (`Call_VirtNext`): a land copy within that clearance of any base on the planet (`280(obj)` bit 5, what `L4b15c` can make the
+  near base) is not drawn. Copies made higher up, before the base became the near one, or while `892` is 0 (docked, landed,
+  just launched), stood over the port and showed through a ground depot's hangar walls in the native scene (the game's
+  painter's order hides them behind the base). `GLF_SCEN_LOG=1` prints the bases found and the copies hidden.
 - The ray start is exact but the cast runs relative to the ship, so the hit differs by 10-20 m with where the ship was
   when the copy was made. A copy keeps its place until evicted.
 - Planets over 16000 cells (67,000 km) radius get none; under 4 cells neither.

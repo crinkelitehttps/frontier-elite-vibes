@@ -78,6 +78,7 @@ static int pending_cloud;
 
 static int draw_list[MAX_DRAW];
 static int ndraw, draw_at;
+static int nbases_seen, base_hidden; /* for GLF_SCEN_LOG: bases on the planet, copies not drawn near them */
 static uint32_t virt_cur;
 
 /* ---- helpers ------------------------------------------------------------ */
@@ -661,6 +662,26 @@ void Call_VirtNext(void)
 				pos_of(cam, c);
 				wind_set(cache_seed, cache_rp);
 				double lim = limit_mm() + CELL_MM;
+				/* The game's spawner keeps no land feature within the clearance of the near base (l61ecc: 892(a6),
+				   774(a5) distance exponent <= $e, every axis under 2^27 mm), deleting it, or making it a cloud
+				   field when landed there. Copies are tested once, when made; one made before the base became the
+				   near one (higher up, on the way down), or while 892 is 0 (docked, landed, just launched), stands
+				   over the port, and the native scene's depth shows it through the hangar's walls, where the game's
+				   painter's order hid it behind the base. So copies within that clearance of any base on this
+				   planet (280 bit 5: what can become the near base, L4b15c) are not drawn. */
+				enum { MAX_BASES = 16 };
+				double base[MAX_BASES][3];
+				int nbase = 0;
+				base_hidden = 0;
+				for (int sl = 1; sl < 115 && nbase < MAX_BASES; sl++)
+				{
+					if (!rdbyte(tab + (uint32_t)sl))
+						continue;
+					uint32_t bo = tab + (uint16_t)rdword(FE2_obj_offsets + 2 * (uint32_t)sl);
+					if ((uint8_t)rdbyte(bo + 68) == cache_slot && (rdbyte(bo + 280) & 0x20))
+						pos_of(bo, base[nbase++]);
+				}
+				nbases_seen = nbase;
 				static float dist[MAX_TMPL];
 				int all[MAX_TMPL], nall = 0;
 				for (int t = 0; t < MAX_TMPL; t++)
@@ -668,6 +689,17 @@ void Call_VirtNext(void)
 					double w[3];
 					if (tmpl[t].key)
 						world_pos(&tmpl[t], w);
+					if (tmpl[t].key && !tmpl[t].cloud)
+					{
+						bool near_base = false;
+						for (int q = 0; q < nbase && !near_base; q++)
+							near_base = linf(w, base[q]) < 134217728.0;
+						if (near_base)
+						{
+							base_hidden++;
+							continue;
+						}
+					}
 					if (tmpl[t].key && (dist[t] = (float)linf(w, c)) <= lim)
 						all[nall++] = t;
 				}
@@ -710,8 +742,8 @@ void Call_VirtNext(void)
 					int b = (int)(linf(w, cc) / 20e6);
 					bin[b > 7 ? 7 : b]++;
 				}
-				fprintf(stderr, "scenery: %d copies, %d to draw, %d pending; per 20 km: %d %d %d %d %d %d %d %d\n", ntmpl, ndraw,
-						npend - pend_at, bin[0], bin[1], bin[2], bin[3], bin[4], bin[5], bin[6], bin[7]);
+				fprintf(stderr, "scenery: %d copies, %d to draw, %d pending, %d bases, %d hidden near them; per 20 km: %d %d %d %d %d %d %d %d\n", ntmpl, ndraw,
+						npend - pend_at, nbases_seen, base_hidden, bin[0], bin[1], bin[2], bin[3], bin[4], bin[5], bin[6], bin[7]);
 			}
 	}
 	uint8_t buf[OBJ_BYTES];
