@@ -85,7 +85,10 @@ targeted (for example Mars High on a fresh start) keep `$1f` and switch at about
 **Fix:** replaced by `jsr Lframe_cand` (6 bytes). It does the same test, and
 additionally treats an occupied slot whose object is a starport body (type
 `94(a1) == 1` and bit 4 of `280(a1)`) as a candidate. Z flag out as for `btst`.
-The flag writes themselves are left alone.
+The flag writes themselves are left alone. Surface ports (bit 5 of `280(a1)`) are
+not candidates, as in the original (they are flagged `$0f`): with a ground port as
+the frame, `L3f460` tests only the parent and its other children, never the
+planet, so the HUD lost the altitude and the ship sank through the ground.
 
 ## 4. Altitude readout appears too late over stars and gas giants (`L6366c`)
 

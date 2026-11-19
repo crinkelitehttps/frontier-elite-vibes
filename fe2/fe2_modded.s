@@ -68281,6 +68281,8 @@ Lprox_log:
 * size). Z clear = candidate. Besides objects flagged bit 4, a starport body
 * (type 1, bit 4 of 280) is one too: the comms action L76990 and saved games
 * leave a station flagged $4f, which kept the HUD relative to the planet.
+* Surface ports (bit 5 of 280) stay out, as in the original (flag $0f): with
+* one as the frame, the planet is not tested, so no altitude and no ground.
 Lframe_cand:
 		btst	#$4,0(a4,d0.w)
 		bne.s	lframe_cand_ret
@@ -68289,6 +68291,8 @@ Lframe_cand:
 		movem.l	d0/a1,-(a7)
 		jsr	L44af8
 		cmpi.b	#$1,94(a1)
+		bne.s	lframe_cand_no2
+		btst	#$5,280(a1)
 		bne.s	lframe_cand_no2
 		btst	#$4,280(a1)
 		movem.l	(a7)+,d0/a1

@@ -2838,6 +2838,30 @@ struct Runner
 					c.pv[0] = c.org;
 				}
 		}
+		/* The cities' hill clusters stand under the city's ground. Model 104 (cities 51-54) puts its hills
+		 * (182, 183) and its far patch at its own y = -1, 131 or 262 m down at a city's scale; cities 46 and
+		 * 50 put model 103 (hills 155, 157, 158) at their y = -1 or -2, 131 to 524 m down. The game painted
+		 * the ground first and the hill over it, so a hill's buried part showed as more mound below the
+		 * horizon; in 3D, through the depth-less ground, it hung that far under the plane the city's
+		 * buildings stand on (a mound "in front of" a power station it was behind). Each cluster is lifted
+		 * so its anchor is on its parent's plane and its own plane on that. GLF_HILL_LIFT=0: not */
+		{
+			static const char *henv = getenv("GLF_HILL_LIFT");
+			static const bool hill_on = !henv || atoi(henv) != 0;
+			int cid = (w[0] >> 5) & 0x7ff;
+			if (hill_on && !wire && o.table == o.subtable && (cid == 103 || cid == 104))
+			{
+				float lift_parent = 0;
+				fe2::VertexEnv e = env(r);
+				if (auto raw = r.c->model.vertex_pos(fe2::s8(w[1]), parent_fn(r), 0, &e))
+					if (raw->y < 0)
+						lift_parent = -(float)raw->y * r.k;
+				float lift_own = cid == 104 ? c.k : 0; /* its anchors' y = -1 */
+				for (int j = 0; j < 3; j++)
+					c.org[j] += r.ax[1][j] * lift_parent + c.ax[1][j] * lift_own;
+				c.pv[0] = c.org;
+			}
+		}
 		c.shade0 = o.tint[3];
 		std::memset(c.t, 0, sizeof c.t);
 		c.t[0] = (uint16_t)(r.t[0] + 1);
