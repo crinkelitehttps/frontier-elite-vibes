@@ -483,5 +483,6 @@
 #define FE2_Lframe_soi                               0xab3c2 /* Lframe_soi */
 #define FE2_Lcsys_pad                                0xab3ee /* Lcsys_pad */
 #define FE2_Lgrav_pre                                0xab424 /* Lgrav_pre */
+#define FE2_Lelite_low                               0xab44a /* Lelite_low */
 
 #endif /* FE2_LABELS_H */

@@ -127,6 +127,15 @@ void Call_DumpRegs(void)
    behaviour); off lets the pilot fly a stable orbit */
 bool orbit_assist = true;
 
+/* the game's Elite controls roll and yaw together below 40 km (a banked
+   turn); on keeps them a pure roll there too (hook Lelite_low in fe2.s) */
+bool elite_roll_low = true;
+
+void Call_EliteLow(void)
+{
+	SetReg(REG_D0, elite_roll_low);
+}
+
 /* the game moves a ship by velocity * (time >> 7), so the motion is up to 10%
    short at 1x and the orbit changes with the time acceleration step; on moves
    it by the exact time (see Lpos_dt in fe2.s) */
@@ -653,6 +662,7 @@ HOSTCALL hcalls[] = {
 	[0xaf] = Call_GravExact,
 	[0xb0] = Call_Leapfrog,
 	[0xb1] = Call_ApLock,
+	[0xb2] = Call_EliteLow,
 };
 const int hcalls_count = sizeof(hcalls) / sizeof(hcalls[0]);
 

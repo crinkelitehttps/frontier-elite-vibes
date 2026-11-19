@@ -441,6 +441,7 @@
 #define FE2_Lframe_soi                               0x854d8 /* Lframe_soi */
 #define FE2_Lcsys_pad                                0x85504 /* Lcsys_pad */
 #define FE2_Lgrav_pre                                0x8553a /* Lgrav_pre */
+#define FE2_Lelite_low                               0x85560 /* Lelite_low */
 
 /* Same tables as the named ones in fe2_modded.s */
 #define FE2_elite_rating_points                      0x72f3a /* L7e87a */

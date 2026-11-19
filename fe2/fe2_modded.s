@@ -218,6 +218,8 @@ Call_GravExact	equ	$af
 Call_Leapfrog	equ	$b0
 * Orbit autopilot flying the ship (flyby, guidance): d0 = 1 and the player's controls are skipped, as in the game's own autopilot (src/orbit_guide.c).
 Call_ApLock	equ	$b1
+* Elite controls roll only below 40 km too (no banked turn): d0 = 1 (src/hostcall.c Call_EliteLow, glfrontier.cfg elite_roll_low).
+Call_EliteLow	equ	$b2
 Call_SubSteps	equ	$91
 Call_SubSkip	equ	$92
 Call_FlightLog	equ	$8e
@@ -41458,7 +41460,10 @@ L62606_PlayerControlUpdate:
 	l626fa:	btst	#$5,893(a6)
 		bne.s	l626f4
 		add.w	d0,136(a0)
-		cmpi.l	#$2625a00,692(a6)
+* Elite controls roll only near a planet too. Hook, same size. See
+* Lelite_low at the end of the file.
+		jsr	Lelite_low
+		nop
 		bls.s	l626f4
 		rts
 
@@ -69888,4 +69893,21 @@ Lgrav_pre:
 		move.b	68(a0),d0
 		rts
 lgp_done:	addq.l	#4,a7
+		rts
+
+******************************************************************************
+* The game's Elite controls turn the ship with roll and yaw together below
+* 40 km (a banked turn, unless over the port). With Call_EliteLow on, the
+* flags come back "higher" so the bls.s after the hook skips the yaw: a pure
+* roll as in space. Replaces "cmpi.l #$2625a00,692(a6)" in the player's
+* steering (after l626fa).
+******************************************************************************
+Lelite_low:
+		move.l	d0,-(a7)
+		hcall	#Call_EliteLow
+		tst.w	d0
+		movem.l	(a7)+,d0
+		bne.s	lelite_low_done
+		cmpi.l	#$2625a00,692(a6)
+lelite_low_done:
 		rts

@@ -235,6 +235,7 @@ void page_settings()
 
 	ui_heading("Flight");
 	wrapped_checkbox("Ship turns belly-down to a planet below 40 km", &orbit_assist);
+	wrapped_checkbox("Elite controls roll near planets too (off: banked turn below 40 km)", &elite_roll_low);
 	wrapped_checkbox("Exact motion at every time acceleration step (orbits stay put)", &exact_step);
 	wrapped_checkbox("Exact gravity (double precision, smoother orbits)", &exact_gravity);
 	wrapped_checkbox("Leapfrog time steps (smoother orbits at high time acceleration)", &leapfrog_gravity);

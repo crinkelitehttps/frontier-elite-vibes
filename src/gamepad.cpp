@@ -31,6 +31,7 @@ extern "C"
 #include "headtrack.h"
 #include "headlook.h"
 #include "host.h"
+#include "hostcall.h"
 #include "input.h"
 #include "keymap.h"
 #include "main.h"
@@ -700,12 +701,13 @@ void load_bindings()
  * a roll or yaw binding steers, the option is set to match and put back
  * afterwards. mode: 0 leave it, 1 roll, 2 yaw. */
 /* Below 40 km (away from the port) the game's Elite controls turn the ship
- * with roll and yaw together (L626ea), an arc: there a roll binding yaws
- * flat instead. A6+692 is the altitude in mm (0 landed or docked, $ffffffff
+ * with roll and yaw together (L626ea), an arc, unless elite_roll_low (hook
+ * Lelite_low) keeps them a pure roll: with that off a roll binding yaws flat
+ * there instead. A6+692 is the altitude in mm (0 landed or docked, $ffffffff
  * when there is no planet near). */
 bool roll_low()
 {
-	return (u32)rdlong(GAME_A6 + 692) <= 40000000u;
+	return !elite_roll_low && (u32)rdlong(GAME_A6 + 692) <= 40000000u;
 }
 
 void force_elite_controls(int mode)

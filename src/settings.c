@@ -76,6 +76,7 @@ typedef struct
 	int manual_page;
 	int manual_book;
 	int orbit_assist;
+	int elite_roll_low;
 	int exact_step;
 	int exact_gravity;
 	int leapfrog_gravity;
@@ -141,6 +142,7 @@ static const struct
 	{"manual_page", offsetof(Settings, manual_page)},
 	{"manual_book", offsetof(Settings, manual_book)},
 	{"orbit_assist", offsetof(Settings, orbit_assist)},
+	{"elite_roll_low", offsetof(Settings, elite_roll_low)},
 	{"exact_step", offsetof(Settings, exact_step)},
 	{"exact_gravity", offsetof(Settings, exact_gravity)},
 	{"leapfrog_gravity", offsetof(Settings, leapfrog_gravity)},
@@ -304,6 +306,7 @@ static Settings current(void)
 	s.manual_page = manual_page();
 	s.manual_book = manual_book;
 	s.orbit_assist = orbit_assist;
+	s.elite_roll_low = elite_roll_low;
 	s.exact_step = exact_step;
 	s.exact_gravity = exact_gravity;
 	s.leapfrog_gravity = leapfrog_gravity;
@@ -382,6 +385,7 @@ static void apply(const Settings *s)
 	if (s->vr_near >= 1 && s->vr_near <= 30)
 		vr_near_cm = s->vr_near;
 	orbit_assist = s->orbit_assist != 0;
+	elite_roll_low = s->elite_roll_low != 0;
 	exact_step = s->exact_step != 0;
 	exact_gravity = s->exact_gravity != 0;
 	leapfrog_gravity = s->leapfrog_gravity != 0;
