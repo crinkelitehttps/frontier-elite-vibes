@@ -925,6 +925,31 @@ extern "C" void Nu_NativeObject(void)
 		return;
 	capture(rec.obj[rec.n++], a6, addr, table, model);
 	exact_apply(a6, rec.obj[rec.n - 1]);
+	/* The object's own size exponent, 88(obj) (L39180: d7 -= 88(a4)): L390f2
+	 * brings the object 2^n nearer and leaves its model's scale, so on
+	 * screen it is 2^n times its model's size. The scenery's cloud fields
+	 * have 1 or 2: drawn there, the field and its clouds' shadows hung at a
+	 * half or a quarter of the eye's height over the ground, sliding over
+	 * the bases as the eye climbed. Put where it is, at its size (as L390f2
+	 * itself moves -208 and -192 when d0 < 0). GLF_OBJ_SIZE=0: the game's. */
+	if (table == (uint32_t)rdlong(FE2_game_data))
+	{
+		static const char *env = getenv("GLF_OBJ_SIZE");
+		static const bool on = !env || atoi(env) != 0;
+		int n = (int16_t)rdword(addr + 88);
+		if (on && n > 0 && n < 16)
+		{
+			Object &o = rec.obj[rec.n - 1];
+			const float f = std::ldexp(1.0f, n);
+			for (int j = 0; j < 3; j++)
+				o.pos[j] *= f;
+			o.scale += n;
+			static const bool lg = env && atoi(env) == 2;
+			static int ln;
+			if (lg && ln++ % 300 == 0)
+				log_printf("obj size: model %d 88(obj) %d\n", model, n);
+		}
+	}
 	/* filled, the native scene draws it: not the game's primitives too,
 	 * which the classic view paints under the native scene (over the
 	 * planets and the far bodies there) */
@@ -2785,6 +2810,34 @@ struct Runner
 			permute(r.ax, w[1], code, c.ax);
 		for (int i = 0; i < 3; i++)
 			c.m[i] = c.ax[i];
+		/* A cloud's shadow (model 206) is drawn 3 of its own units under
+		 * its origin (y = -3): with a cloud field's scale ~200 m under the
+		 * ground. Painted, as the game draws it, that didn't matter; in 3D
+		 * the shadow hung under the ground and, seen through it, slid over
+		 * the bases as the eye's height changed (low, it showed at a
+		 * fraction of its distance). Lifted so its lowest vertex lies at its
+		 * origin, on the field's ground plane. GLF_CLOUD_SHADOW_LIFT=0: not */
+		if (c.shadow)
+		{
+			static const char *lenv = getenv("GLF_CLOUD_SHADOW_LIFT");
+			static const bool lift_on = !lenv || atoi(lenv) != 0;
+			static std::unordered_map<const Code *, float> low_y;
+			auto it = low_y.find(child);
+			if (it == low_y.end())
+			{
+				float lo = 0;
+				for (int v = 0; v < child->model.num_verts; v++)
+					if (auto p = child->model.vertex_pos(v))
+						lo = std::min(lo, (float)p->y);
+				it = low_y.emplace(child, lo).first;
+			}
+			if (lift_on && it->second < 0)
+				for (int j = 0; j < 3; j++)
+				{
+					c.org[j] -= c.ax[1][j] * it->second * c.k;
+					c.pv[0] = c.org;
+				}
+		}
 		c.shade0 = o.tint[3];
 		std::memset(c.t, 0, sizeof c.t);
 		c.t[0] = (uint16_t)(r.t[0] + 1);
@@ -5466,16 +5519,58 @@ extern "C" void native_draw(void)
 	std::stable_sort(unders.begin(), unders.end(), [](const Under &a, const Under &b) { return a.key > b.key; });
 	/* All the underlays' cloud shadows (of every object) are drawn together,
 	 * once per pixel, at the first underlay node that has any */
+	/* ...or, by default (GLF_CLOUD_SHADOW_DEPTH=0 restores the painting),
+	 * each depth slice's cloud shadows at the end of the slice, depth tested
+	 * (not written) against its objects: painted, a shadow covered whatever
+	 * of the slice came before it in the order, and that order changes with
+	 * the viewpoint (a dome under a cloud shadowed from one height, clear
+	 * from another); tested, what stands in front of the shadow's ground
+	 * hides it. Nothing but the slices' objects writes depth (the planet's
+	 * ground doesn't), so the ground never hides it. */
+	static const char *csd_env = getenv("GLF_CLOUD_SHADOW_DEPTH");
+	const bool shadows_tested = !csd_env || atoi(csd_env) != 0;
 	std::vector<const Tri *> under_shadows;
 	bool under_shadows_mapped = true; /* all their objects at true size: the maps fit them */
-	for (const Under &u : unders)
-		for (const Tri &t : u.node->tris)
-			if (t.colour & 0x8000)
-			{
-				under_shadows.push_back(&t);
-				if (u.layers.l[0] < 0 && u.layers.l[1] < 0 && u.layers.l[2] < 0)
-					under_shadows_mapped = false;
-			}
+	if (!shadows_tested)
+		for (const Under &u : unders)
+			for (const Tri &t : u.node->tris)
+				if (t.colour & 0x8000)
+				{
+					under_shadows.push_back(&t);
+					if (u.layers.l[0] < 0 && u.layers.l[1] < 0 && u.layers.l[2] < 0)
+						under_shadows_mapped = false;
+				}
+	/* a slice's objects' cloud shadows, drawn once per pixel with its depth */
+	auto draw_slice_shadows = [&](size_t first, size_t last, GdDepth depth) {
+		std::vector<const Tri *> tris;
+		bool mapped = true;
+		for (size_t j = first; j < last; j++)
+		{
+			const Drawn *d = placed[j];
+			const ShadowLayers sl = receives(d);
+			for (const Node &n : d->nodes)
+				if (n.under)
+					for (const Tri &t : n.tris)
+						if (t.colour & 0x8000)
+						{
+							tris.push_back(&t);
+							if (sl.l[0] < 0 && sl.l[1] < 0 && sl.l[2] < 0)
+								mapped = false;
+						}
+		}
+		if (tris.empty())
+			return;
+		depth.write = false;
+		depth.depth_only = false;
+		gd_set_depth(&depth);
+		if (mapped)
+			gd_set_shadow(shadow_m0, shadow_m0 ? gl_shadow_all_layer(0) : -1, shadow_m1,
+						  shadow_m1 ? gl_shadow_all_layer(1) : -1, shadow_m2, shadow_m2 ? gl_shadow_all_layer(2) : -1);
+		else
+			gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
+		draw_shadow_group(tris);
+		gd_set_shadow(nullptr, -1, nullptr, -1, nullptr, -1);
+	};
 	bool shadows_drawn = false;
 	size_t next_under = 0;
 	auto draw_unders = [&](float beyond) {
@@ -5563,6 +5658,8 @@ extern "C" void native_draw(void)
 						gd_tri(t.p[0].data(), t.p[1].data(), t.p[2].data());
 				}
 		}
+		if (shadows_tested)
+			draw_slice_shadows(groups[g].first, groups[g].second, depth);
 	}
 	draw_unders(-1e30f);
 	gd_set_depth(nullptr);

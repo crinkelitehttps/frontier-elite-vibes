@@ -633,6 +633,25 @@ void Call_ScenMade(void)
 			if (pending_cloud)
 				turn_obj(tmpl[t].obj, true); /* into the wind frame */
 			bpos_get(tmpl[t].obj, tmpl[t].pos);
+			/* On the ground: the game's cast runs relative to the ship and lands about half the ship's height
+			   above the surface (a cloud field made from 300 m up hung at 130-200 m, its shadows on a plane above
+			   the bases' ground, sliding over them as the view changed). Moved along its up (from the planet's
+			   centre) to the planet's radius; GLF_SCEN_GROUND=0 keeps the game's */
+			static const char *genv = NULL;
+			static int gon = -1;
+			if (gon < 0)
+				gon = !(genv = getenv("GLF_SCEN_GROUND")) || atoi(genv) != 0;
+			double len = sqrt(tmpl[t].pos[0] * tmpl[t].pos[0] + tmpl[t].pos[1] * tmpl[t].pos[1] +
+							  tmpl[t].pos[2] * tmpl[t].pos[2]);
+			if (gon && len > 0 && cache_rp > 0 && fabs(len - cache_rp) < 20e6)
+			{
+				if (getenv("GLF_SCEN_LOG"))
+					fprintf(stderr, "scenery: copy %s moved %.1f m to the ground\n", pending_cloud ? "cloud" : "land",
+							(cache_rp - len) / 1000);
+				for (int a = 0; a < 3; a++)
+					tmpl[t].pos[a] *= cache_rp / len;
+				bpos_set(tmpl[t].obj, tmpl[t].pos);
+			}
 			ntmpl++;
 			break;
 		}

@@ -45,3 +45,47 @@ cloud shadows are drawn with `gd_set_shadow_blend` (blend mode 2): the flat shad
 triangle's point (every caster's layer, as the planet's ground does; only when all the underlays' objects are at
 true size) and lowers the alpha to `max(1 - (1 - a) / sh, 0)`, sh the map's darkening there. The ground then ends
 as dark as the darker of the two, never both. (2026-11-08)
+
+## Depth tested, per slice (2026-11-19)
+
+Painted at one point of the underlay order, a shadow covered whatever of its depth slice had been drawn before that
+point, and the order changes with the viewpoint: a dome under a cloud looked shadowed from one height and clear (the
+shadow "in front" of it) from another (saves Snap06/Snap07). Now each depth slice's cloud shadows are drawn at the end
+of the slice, depth tested but not written, so buildings, ships and clouds standing in front of the shadow's ground
+hide it from any viewpoint. Only the slices' objects write depth (the planet's ground doesn't), so the ground never
+hides a shadow. Still once per pixel within a slice (stencil), and still the shadow-map blend. A raised object is not
+darkened by the shadow (it is still a flat polygon on the field's plane). `GLF_CLOUD_SHADOW_DEPTH=0` restores the old
+painting for comparison.
+
+## The real cause: the field's size exponent (2026-11-19)
+
+The depth test was not enough (saves Snap10-12: a shadow on a dome's green base at one height, off it a few hundred
+metres higher). Measured: the bases sat 2 m under the planet's sphere at every height, but the cloud fields' origins
+hung at about half the eye's height over the ground (eye 35 m: fields at 0-9 m; eye 293 m: 126-201 m). The copies'
+stored positions were right; the drawing was not. The scenery's cloud fields carry a size exponent at 88(obj), 1 or 2:
+L390f2 subtracts it from the distance exponent (L39180) and so brings the object 2^n nearer while leaving its model's
+scale (-208(a6)) as it is, which on screen makes the field 2^n times its model's size. The native scene took the
+position as it came, so the whole field (clouds and shadows) was drawn uniformly shrunk toward the eye: about right on
+screen, but at half (or a quarter) of the distance in 3D, so its shadows lay on a plane above the bases' ground and slid
+over them with the viewpoint, and the depth slices and bends saw it in the wrong place.
+
+Now, after capture, an object with 88(obj) = n > 0 has its position multiplied by 2^n and its scale raised by n (as
+L390f2 itself moves -208 and -192 when d0 < 0), so it is drawn where it is at its true size. The distance tests of its
+model (`K << (detail + s)`) scale the same way, so clouds keep their detail at distance. `GLF_OBJ_SIZE=0` restores the
+old placement, `=2` logs which models have a size exponent (only model 99 in the saves checked).
+
+Also: the scenery copies (land and cloud) are moved along their up to the planet's radius when made; the game's cast,
+run relative to the ship, left them 2-30 m under it (`GLF_SCEN_GROUND=0` keeps the game's height, `GLF_SCEN_LOG=1`
+logs the moves).
+
+## The shadow under the ground (2026-11-19, the one that mattered)
+
+With the field in place the shadow still slid off a dome as the eye climbed (screenshots: shadow on the dome's green
+base from 45 m up, on bare ground beyond it from ~500 m, at the same place on the screen). Measured in planet
+coordinates: the field's origin 2 m under the sphere, the shadow's vertices **195 m** under it. The shadow model (206)
+draws its outline at y = -3 of its own units, and at a big field's scale a unit is ~65 m. The game paints the shadow,
+so its depth never showed; drawn in 3D it was a sheet 200 m under the ground, seen through the ground (which writes no
+depth), and a point of it showed where the eye's ray crossed the ground: at h / (h + 195 m) of its distance, so near
+the eye when low, farther out when high. Now the shadow sub-model is lifted (along its own up, in `call`) so its
+lowest vertex lies at its origin, on the field's ground plane: measured 1.6 m under the sphere, the same from 35 m and
+531 m up. `GLF_CLOUD_SHADOW_LIFT=0` turns it off.
